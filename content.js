@@ -50,6 +50,8 @@
     currentAd: undefined,
     startTime: null,
     skipTimer: null,
+    targetSkipReached: false,
+    hasSkippedStats: false,
     watching: false,
     overlayEl: null,
     countdownInterval: null,
@@ -319,59 +321,21 @@
     clearInterval(adState.countdownInterval);
   }
 
-  // ── Forçar skip ───────────────────────────────────────
-
-  function forceSkip() {
-    const skipped = clickSkipAdBtn();
-
-    if (!skipped) {
-      const video = document.querySelector("video");
-      if (video && video.duration && isFinite(video.duration)) {
-        video.currentTime = video.duration;
-        console.log("[YT Ad Skipper] ⏭️ Avançou vídeo até o final");
-      }
-    }
-
-    incrementStats();
-    removeOverlay();
-  }
-
   // ── Agendar skip ──────────────────────────────────────
 
   function scheduleSkip() {
     clearTimeout(adState.skipTimer);
     clearInterval(adState.countdownInterval);
 
+    adState.targetSkipReached = false;
+    
     if (config.skipDelay === 0) {
-      // Tentar pular instantaneamente — loop rápido
-      attemptSkipLoop(0);
+      adState.targetSkipReached = true;
     } else {
       adState.skipTimer = setTimeout(() => {
-        if (adState.active && !adState.watching) {
-          forceSkip();
-        }
+        adState.targetSkipReached = true;
       }, config.skipDelay * 1000);
     }
-  }
-
-  function attemptSkipLoop(attempts) {
-    if (!adState.active || adState.watching) return;
-    if (attempts > 60) return; // max 30s tentando
-
-    const skipped = clickSkipAdBtn();
-    if (skipped) {
-      incrementStats();
-      removeOverlay();
-      return;
-    }
-
-    // Se não achou o botão, tentar avançar o vídeo
-    const video = document.querySelector("video");
-    if (video && video.duration && isFinite(video.duration) && video.duration > 0.5) {
-      video.currentTime = video.duration - 0.1;
-    }
-
-    adState.skipTimer = setTimeout(() => attemptSkipLoop(attempts + 1), 500);
   }
 
   // ── Mute/unmute ───────────────────────────────────────
@@ -405,36 +369,51 @@
       adState.active = true;
       adState.currentAd = adPlaying;
       adState.watching = false;
+      adState.hasSkippedStats = false;
       adState.startTime = Date.now();
       console.log("[YT Ad Skipper] 🎯 Anúncio detectado:", adPlaying);
 
       muteVideo();
-
       if (config.showOverlay) createOverlay();
-
       scheduleSkip();
 
     } else if (adPlaying && adState.active && adPlaying !== adState.currentAd) {
       // ── Anúncio MUDOU (segundo anúncio) ───
       adState.currentAd = adPlaying;
       adState.watching = false;
+      adState.hasSkippedStats = false;
       console.log("[YT Ad Skipper] 🔄 Novo anúncio:", adPlaying);
 
       muteVideo();
-
       if (config.showOverlay) createOverlay();
-
       scheduleSkip();
 
     } else if (adPlaying && adState.active) {
       // ── Anúncio ainda ativo — tick ───
-      // Em modo instantâneo, continuar tentando
-      if (config.skipDelay === 0 && !adState.watching) {
-        clickSkipAdBtn();
+      if (adState.targetSkipReached && !adState.watching) {
+        const skipped = clickSkipAdBtn();
+        if (skipped) {
+          if (!adState.hasSkippedStats) { incrementStats(); adState.hasSkippedStats = true; }
+          removeOverlay();
+          adState.targetSkipReached = false;
+        } else {
+          // Se o botão não estiver lá ou falhar, força o fim avançando o tempo (muito mais seguro)
+          const video = document.querySelector("video");
+          if (video && isFinite(video.duration) && video.duration > 0.5) {
+            video.playbackRate = 16;
+            const targetTime = video.duration - 0.1;
+            if (video.currentTime < targetTime) {
+              video.currentTime = targetTime;
+            }
+          }
+        }
       }
-
     } else if (!adPlaying && adState.active) {
       // ── Anúncio ACABOU ───
+      if (adState.targetSkipReached && !adState.hasSkippedStats && !adState.watching) {
+          incrementStats();
+          adState.hasSkippedStats = true;
+      }
       adState.active = false;
       adState.currentAd = undefined;
       clearTimeout(adState.skipTimer);
