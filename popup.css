@@ -10,40 +10,10 @@
   box-sizing: border-box;
 }
 
-:root {
-  --bg-body: #0f0f0f;
-  --text-main: #f1f1f1;
-  --text-muted: #aaaaaa;
-  --bg-card: rgba(255, 255, 255, 0.05);
-  --border-card: rgba(255, 255, 255, 0.1);
-  --border-hover: rgba(255, 255, 255, 0.2);
-  --primary: #cc0000;
-  --primary-hover: #ff0000;
-  --track-bg: #27272a;
-  --knob-bg: #aaaaaa;
-  --knob-active: #ffffff;
-  --divider: rgba(255, 255, 255, 0.1);
-}
-
-body.light {
-  --bg-body: #ffffff;
-  --text-main: #0f0f0f;
-  --text-muted: #606060;
-  --bg-card: #f8f8f8;
-  --border-card: #e5e5e5;
-  --border-hover: #cccccc;
-  --primary: #cc0000;
-  --primary-hover: #ff0000;
-  --track-bg: #e5e5e5;
-  --knob-bg: #909090;
-  --knob-active: #ffffff;
-  --divider: rgba(0, 0, 0, 0.1);
-}
-
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  background: var(--bg-body);
-  color: var(--text-main);
+  background: #0d0d0f;
+  color: #e4e4e7;
   width: 320px;
   min-height: 100px;
   overflow-x: hidden;
@@ -63,7 +33,7 @@ body {
   align-items: center;
   gap: 10px;
   padding-bottom: 8px;
-  border-bottom: 1px solid var(--divider);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .header-icon {
@@ -74,21 +44,24 @@ body {
   align-items: center;
   justify-content: center;
   border-radius: 10px;
-  background: var(--primary);
-  color: white;
+  background: linear-gradient(135deg, #ff2d55, #ff6b35);
+  box-shadow: 0 0 20px rgba(255, 45, 85, 0.3);
 }
 
 .header h1 {
   font-size: 16px;
   font-weight: 700;
-  color: var(--text-main);
+  background: linear-gradient(135deg, #fff, #a0a0b0);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .version {
   margin-left: auto;
   font-size: 11px;
-  color: var(--text-muted);
-  background: var(--bg-card);
+  color: #52525b;
+  background: rgba(255, 255, 255, 0.04);
   padding: 3px 8px;
   border-radius: 20px;
   font-weight: 500;
@@ -97,19 +70,20 @@ body {
 /* ── Cards ─────────────────────────────────────── */
 
 .card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-card);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 12px;
   padding: 14px;
   transition: border-color 0.2s ease;
 }
 
 .card:hover {
-  border-color: var(--border-hover);
+  border-color: rgba(255, 255, 255, 0.1);
 }
 
 .master-card {
-  border-color: var(--primary);
+  background: linear-gradient(135deg, rgba(255, 45, 85, 0.08), rgba(255, 107, 53, 0.05));
+  border-color: rgba(255, 45, 85, 0.15);
 }
 
 .card-row {
@@ -133,7 +107,7 @@ body {
 .card-hint {
   margin-top: 6px;
   font-size: 10px;
-  color: var(--text-muted);
+  color: #52525b;
   font-weight: 400;
 }
 
@@ -153,7 +127,7 @@ body {
   gap: 6px;
   margin-top: 10px;
   padding-top: 10px;
-  border-top: 1px solid var(--divider);
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
 }
 
 .status-dot {
@@ -177,7 +151,7 @@ body {
 
 .status-text {
   font-size: 11px;
-  color: var(--text-muted);
+  color: #71717a;
   font-weight: 500;
 }
 
@@ -201,10 +175,10 @@ body {
   position: absolute;
   cursor: pointer;
   inset: 0;
-  background: var(--track-bg);
+  background: #27272a;
   border-radius: 24px;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  border: 1px solid var(--border-card);
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .toggle-slider::before {
@@ -214,19 +188,20 @@ body {
   width: 18px;
   left: 2px;
   bottom: 2px;
-  background: var(--knob-bg);
+  background: #71717a;
   border-radius: 50%;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .toggle input:checked + .toggle-slider {
-  background: var(--primary);
-  border-color: var(--primary);
+  background: linear-gradient(135deg, #ff2d55, #ff6b35);
+  border-color: rgba(255, 45, 85, 0.3);
+  box-shadow: 0 0 12px rgba(255, 45, 85, 0.2);
 }
 
 .toggle input:checked + .toggle-slider::before {
   transform: translateX(18px);
-  background: var(--knob-active);
+  background: #fff;
 }
 
 /* ── Slider ────────────────────────────────────── */
@@ -241,7 +216,7 @@ body {
   width: 100%;
   height: 4px;
   border-radius: 4px;
-  background: var(--track-bg);
+  background: #27272a;
   outline: none;
   transition: background 0.2s;
 }
@@ -252,8 +227,9 @@ body {
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: var(--primary);
+  background: linear-gradient(135deg, #ff2d55, #ff6b35);
   cursor: pointer;
+  box-shadow: 0 0 10px rgba(255, 45, 85, 0.4);
   transition: transform 0.2s;
 }
 
@@ -266,30 +242,19 @@ body {
   justify-content: space-between;
   margin-top: 6px;
   font-size: 10px;
-  color: var(--text-muted);
+  color: #52525b;
   font-weight: 500;
 }
 
 .speed-value {
   font-size: 14px;
   font-weight: 700;
-  color: var(--primary);
+  background: linear-gradient(135deg, #ff2d55, #ff6b35);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
   min-width: 32px;
   text-align: right;
-}
-
-/* ── Theme Select ──────────────────────────────── */
-
-.theme-select {
-  background: var(--bg-body);
-  color: var(--text-main);
-  border: 1px solid var(--border-card);
-  border-radius: 6px;
-  padding: 4px 8px;
-  font-family: inherit;
-  font-size: 11px;
-  outline: none;
-  cursor: pointer;
 }
 
 /* ── Section Titles ────────────────────────────── */
@@ -299,7 +264,7 @@ body {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 1.5px;
-  color: var(--text-muted);
+  color: #52525b;
   margin-top: 4px;
 }
 
@@ -321,19 +286,22 @@ body {
 .stat-number {
   font-size: 22px;
   font-weight: 700;
-  color: var(--text-main);
+  background: linear-gradient(135deg, #a78bfa, #818cf8);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .stat-label {
   font-size: 10px;
-  color: var(--text-muted);
+  color: #71717a;
   font-weight: 500;
 }
 
 .stat-divider {
   width: 1px;
   height: 36px;
-  background: var(--divider);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 /* ── Footer ────────────────────────────────────── */
@@ -346,8 +314,8 @@ body {
 
 .reset-btn {
   background: none;
-  border: 1px solid var(--border-card);
-  color: var(--text-muted);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  color: #71717a;
   font-size: 11px;
   font-weight: 500;
   padding: 6px 16px;
@@ -358,9 +326,9 @@ body {
 }
 
 .reset-btn:hover {
-  color: var(--text-main);
-  border-color: var(--border-hover);
-  background: var(--bg-card);
+  color: #e4e4e7;
+  border-color: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .reset-btn:active {

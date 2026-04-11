@@ -7,7 +7,6 @@ const DEFAULT_SETTINGS = {
   skipDelay: 0,
   muteAds: true,
   showOverlay: true,
-  theme: "dark",
   adsSkipped: 0,
   timeSaved: 0,
 };
@@ -25,7 +24,6 @@ const statusText = document.getElementById("status-text");
 const statSkipped = document.getElementById("stat-skipped");
 const statTime = document.getElementById("stat-time");
 const resetBtn = document.getElementById("reset-stats");
-const themeSelect = document.getElementById("theme-select");
 const container = document.querySelector(".popup-container");
 
 // ── Carregar configurações ───────────────────────
@@ -35,9 +33,7 @@ chrome.storage.local.get(DEFAULT_SETTINGS, (settings) => {
   toggleMute.checked = settings.muteAds;
   toggleOverlay.checked = settings.showOverlay;
   skipDelaySlider.value = settings.skipDelay;
-  themeSelect.value = settings.theme;
 
-  updateTheme(settings.theme);
   updateDelayDisplay(settings.skipDelay);
   updateStatusUI(settings.enabled);
   updateStats(settings.adsSkipped, settings.timeSaved);
@@ -65,12 +61,6 @@ skipDelaySlider.addEventListener("input", () => {
   chrome.storage.local.set({ skipDelay: delay });
 });
 
-themeSelect.addEventListener("change", () => {
-  const theme = themeSelect.value;
-  chrome.storage.local.set({ theme });
-  updateTheme(theme);
-});
-
 resetBtn.addEventListener("click", () => {
   if (!confirm("Tem certeza que deseja resetar todas as suas estatísticas de anúncios pulados?")) {
     return;
@@ -89,14 +79,6 @@ resetBtn.addEventListener("click", () => {
 });
 
 // ── UI Helpers ───────────────────────────────────
-
-function updateTheme(theme) {
-  if (theme === "light") {
-    document.body.classList.add("light");
-  } else {
-    document.body.classList.remove("light");
-  }
-}
 
 function updateDelayDisplay(delay) {
   delayDisplay.textContent = delay + "s";

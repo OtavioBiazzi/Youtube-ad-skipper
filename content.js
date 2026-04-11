@@ -41,7 +41,6 @@
     skipDelay: 0,
     muteAds: true,
     showOverlay: true,
-    theme: "dark",
   };
 
   const CHECK_INTERVAL = 200; // mesma velocidade da referência
@@ -63,13 +62,12 @@
   function loadSettings() {
     if (chrome?.storage?.local) {
       chrome.storage.local.get(
-        { enabled: true, skipDelay: 0, muteAds: true, showOverlay: true, theme: "dark" },
+        { enabled: true, skipDelay: 0, muteAds: true, showOverlay: true },
         (s) => {
           config.enabled = s.enabled;
           config.skipDelay = s.skipDelay;
           config.muteAds = s.muteAds;
           config.showOverlay = s.showOverlay;
-          config.theme = s.theme;
         }
       );
     }
@@ -83,7 +81,6 @@
       if (changes.skipDelay) config.skipDelay = changes.skipDelay.newValue;
       if (changes.muteAds) config.muteAds = changes.muteAds.newValue;
       if (changes.showOverlay) config.showOverlay = changes.showOverlay.newValue;
-      if (changes.theme) config.theme = changes.theme.newValue;
     });
   }
 
@@ -95,21 +92,16 @@
   }
 
   function getAdPlaying() {
-    // Procurar elementos específicos de anúncio, validando visibilidade real no DOM
-    const advertiserBtn = document.querySelector(".ytp-ad-visit-advertiser-button");
-    if (isVisible(advertiserBtn)) return advertiserBtn.getAttribute("aria-label") || "ad";
+    // 1. Garantia Absoluta: O YouTube sempre coloca 'ad-showing' no player de vídeo
+    // Se não estiver lá, isso garante que não ativaremos o script para anúncios de BANNER!
+    const player = document.querySelector(".html5-video-player");
+    if (!player || !player.classList.contains("ad-showing")) return undefined;
 
-    const advertiserLink = document.querySelector(".ytp-visit-advertiser-link");
-    if (isVisible(advertiserLink)) return advertiserLink.getAttribute("aria-label") || "ad";
-
+    // 2. Se for um anúncio de vídeo confirmado, pegamos a badge
     const adBadge = document.querySelector(".ytp-ad-badge");
     if (isVisible(adBadge) && adBadge.textContent) return adBadge.textContent;
 
-    // Fallback: classe ad-showing no player
-    const player = document.querySelector(".html5-video-player");
-    if (player && player.classList.contains("ad-showing")) return "ad-showing";
-
-    return undefined;
+    return "ad-showing";
   }
 
   // ── Clicar no botão de pular ──────────────────────────
@@ -176,12 +168,17 @@
   function incrementStats() {
     if (chrome?.storage?.local) {
       chrome.storage.local.get({ adsSkipped: 0, timeSaved: 0 }, (data) => {
-        const realTime = adState.startTime
-          ? Math.round((Date.now() - adState.startTime) / 1000)
-          : 0;
+        let saved = 0;
+        const video = document.querySelector("video");
+        if (video && isFinite(video.duration) && video.duration > 0) {
+           saved = Math.round(video.duration);
+        } else {
+           saved = adState.startTime ? Math.round((Date.now() - adState.startTime) / 1000) : 0;
+        }
+
         chrome.storage.local.set({
           adsSkipped: data.adsSkipped + 1,
-          timeSaved: data.timeSaved + realTime,
+          timeSaved: data.timeSaved + saved,
         });
       });
     }
@@ -196,64 +193,47 @@
     style.textContent = `
       #yt-adskip-overlay {
         position: absolute;
-        bottom: 60px;
-        right: 12px;
+        top: 24px;
+        right: 24px;
         z-index: 99999;
-        background: rgba(0, 0, 0, 0.75);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 6px;
-        padding: 10px 14px;
+        background: rgba(0, 0, 0, 0.65);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 4px;
+        padding: 8px 12px;
         display: flex;
         flex-direction: column;
-        gap: 6px;
-        font-family: 'Roboto', 'Segoe UI', Arial, sans-serif;
+        gap: 3px;
+        font-family: "Roboto", "Arial", sans-serif;
         color: #fff;
-        min-width: 180px;
-        pointer-events: all;
-      }
-      #yt-adskip-overlay.yt-adskip-light {
-        background: rgba(255, 255, 255, 0.9);
-        border: 1px solid rgba(0, 0, 0, 0.1);
-        color: #0f0f0f;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        min-width: 140px;
+        pointer-events: auto;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
       }
       
       #yt-adskip-overlay .adskip-title {
-        font-size: 11px; font-weight: 500;
-        display: flex; align-items: center; gap: 4px;
-        opacity: 0.8;
+        font-size: 13px; font-weight: 500; text-align: center;
+        opacity: 0.9; margin-bottom: 2px;
       }
+      
       #yt-adskip-overlay .adskip-countdown {
-        font-size: 14px; font-weight: 500; text-align: center; padding: 2px 0;
+        font-size: 16px; font-weight: 600; text-align: center;
       }
+      
       #yt-adskip-overlay .adskip-label {
-        font-size: 10px; text-align: center; opacity: 0.6;
+        font-size: 10px; text-align: center; opacity: 0.7; margin-bottom: 5px;
       }
-      #yt-adskip-overlay .adskip-buttons { display: flex; gap: 6px; margin-top: 4px; }
       
       #yt-adskip-overlay button {
-        flex: 1; border: none; border-radius: 18px; padding: 6px 12px;
+        border: none; border-radius: 4px; padding: 6px 12px;
         font-size: 12px; font-weight: 500; cursor: pointer;
-        font-family: inherit;
+        font-family: inherit; width: 100%;
+        background: rgba(255,255,255,0.15); color: #fff;
+        transition: background 0.2s;
       }
       
-      #yt-adskip-overlay .adskip-btn-skip {
-        background: #f1f1f1; color: #0f0f0f;
+      #yt-adskip-overlay button:hover {
+        background: rgba(255,255,255,0.25);
       }
-      #yt-adskip-overlay .adskip-btn-skip:hover { background: #d9d9d9; }
-      #yt-adskip-overlay.yt-adskip-light .adskip-btn-skip {
-        background: #0f0f0f; color: #fff;
-      }
-      #yt-adskip-overlay.yt-adskip-light .adskip-btn-skip:hover { background: #272727; }
-      
-      #yt-adskip-overlay .adskip-btn-watch {
-        background: rgba(255,255,255,0.1); color: #f1f1f1;
-      }
-      #yt-adskip-overlay .adskip-btn-watch:hover { background: rgba(255,255,255,0.2); }
-      #yt-adskip-overlay.yt-adskip-light .adskip-btn-watch {
-        background: rgba(0,0,0,0.05); color: #0f0f0f;
-      }
-      #yt-adskip-overlay.yt-adskip-light .adskip-btn-watch:hover { background: rgba(0,0,0,0.1); }
     `;
     document.head.appendChild(style);
   }
@@ -267,55 +247,35 @@
 
     const overlay = document.createElement("div");
     overlay.id = "yt-adskip-overlay";
-    if (config.theme === "light") {
-      overlay.classList.add("yt-adskip-light");
-    }
 
     const delay = config.skipDelay;
     const isInstant = delay === 0;
 
     overlay.innerHTML = `
-      <div class="adskip-title">⚡ Ad Skipper</div>
+      <div class="adskip-title">Auto Pular Anúncio</div>
       ${
         isInstant
-          ? '<div class="adskip-countdown">Pulando...</div><div class="adskip-label">instantâneo</div>'
-          : `<div class="adskip-countdown" id="adskip-timer">${delay}s</div><div class="adskip-label">pulando em</div>`
+          ? '<div class="adskip-countdown">Pulando...</div>'
+          : `<div class="adskip-countdown" id="adskip-timer">${delay}s</div>`
       }
-      <div class="adskip-buttons">
-        <button class="adskip-btn-skip" id="adskip-btn-skip">⏭ Pular Agora</button>
-        <button class="adskip-btn-watch" id="adskip-btn-watch">👁 Assistir</button>
-      </div>
+      <button class="adskip-btn-watch">Assistir Anúncio</button>
     `;
 
     player.style.position = "relative";
     player.appendChild(overlay);
     adState.overlayEl = overlay;
 
-    overlay.querySelector("#adskip-btn-skip").addEventListener("click", () => forceSkip());
-
-    overlay.querySelector("#adskip-btn-watch").addEventListener("click", () => {
-      adState.watching = true;
-      clearTimeout(adState.skipTimer);
-      clearInterval(adState.countdownInterval);
-
-      const video = document.querySelector("video");
-      if (video && video.__adSkipperMuted) {
-        video.muted = false;
-        video.__adSkipperMuted = false;
-      }
-
-      overlay.innerHTML = `
-        <div class="adskip-title">👁 Assistindo Anúncio</div>
-        <div class="adskip-label" style="color: #22c55e;">você escolheu assistir</div>
-        <div class="adskip-buttons">
-          <button class="adskip-btn-skip" id="adskip-btn-skip2">⏭ Mudei de ideia, pular</button>
-        </div>
-      `;
-      overlay.querySelector("#adskip-btn-skip2").addEventListener("click", () => {
-        adState.watching = false;
-        forceSkip();
+    // Assistir
+    const watchBtn = overlay.querySelector(".adskip-btn-watch");
+    if (watchBtn) {
+      watchBtn.addEventListener("click", () => {
+        adState.watching = true;
+        clearTimeout(adState.skipTimer);
+        clearInterval(adState.countdownInterval);
+        removeOverlay();
+        unmuteVideo();
       });
-    });
+    }
 
     if (!isInstant) {
       let remaining = delay;
