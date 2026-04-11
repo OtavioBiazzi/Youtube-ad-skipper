@@ -366,18 +366,20 @@
     } else if (adPlaying && adState.active) {
       // ── Anúncio ainda ativo — tick ───
       if (adState.targetSkipReached && !adState.watching) {
+        // Acelera o vídeo no máximo para estourar o limite de 5s do YouTube (se aplicável)
+        const video = document.querySelector("video");
+        if (video) video.playbackRate = 16;
+
         const skipped = clickSkipAdBtn();
         if (skipped) {
           if (!adState.hasSkippedStats) { incrementStats(); adState.hasSkippedStats = true; }
           removeOverlay();
           adState.targetSkipReached = false;
         } else {
-          // Se o botão não estiver lá ou falhar, força o fim avançando o tempo (muito mais seguro)
-          const video = document.querySelector("video");
-          if (video && isFinite(video.duration) && video.duration > 0.5) {
-            video.playbackRate = 16;
-            const targetTime = video.duration - 0.1;
-            if (video.currentTime < targetTime) {
+          // Avança para o fim do anúncio, mas trava em duration - 0.5 para não criar loop infinito
+          if (video && isFinite(video.duration) && video.duration > 0) {
+            const targetTime = video.duration - 0.5;
+            if (video.currentTime < targetTime - 1) {
               video.currentTime = targetTime;
             }
           }
