@@ -4,6 +4,16 @@ Uma extensão de navegador que **pula automaticamente os anúncios do YouTube**.
 
 > **Isso NÃO é um ad blocker** — a extensão apenas automatiza o processo de clicar no botão "Pular anúncio" do YouTube.
 
+<br>
+
+<div align="center">
+  <a href="https://github.com/OtavioBiazzi/Youtube-ad-skipper/archive/refs/heads/main.zip">
+    <img src="https://img.shields.io/badge/Baixar_Extens%C3%A3o_(.ZIP)-000000?style=for-the-badge&logo=github&logoColor=white" alt="Baixar Extensão" />
+  </a>
+</div>
+
+<br>
+
 ## ✨ Funcionalidades
 
 | Funcionalidade | Descrição |
@@ -27,16 +37,20 @@ Quando um anúncio aparece no YouTube:
 5. Se não encontrar o botão, **avança o vídeo até o final**
 6. **Restaura** o som e a velocidade normal
 
-## 🛠️ Instalação
+## 🛠️ Como Baixar e Instalar
 
 ### Chrome / Opera GX / Edge / Brave
 
-1. Baixe ou clone este repositório
-2. Abra `chrome://extensions/` (ou `opera://extensions/` no Opera GX)
-3. Ative o **"Modo do desenvolvedor"** (canto superior direito)
-4. Clique em **"Carregar sem compactação"** (ou "Load unpacked")
-5. Selecione a pasta do projeto
-6. Pronto! ⚡
+1. **[Clique aqui para baixar o .ZIP](https://github.com/OtavioBiazzi/Youtube-ad-skipper/archive/refs/heads/main.zip)** da extensão.
+2. **Extraia (descompacte)** o arquivo `.zip` baixado em uma pasta no seu computador.
+3. Abra o seu navegador e vá para a página de extensões:
+   - Chrome: `chrome://extensions/`
+   - Opera GX: `opera://extensions/`
+   - Edge: `edge://extensions/`
+4. Ative a opção **"Modo do desenvolvedor"** (geralmente no canto superior direito).
+5. Clique no botão **"Carregar sem compactação"** (ou *"Load unpacked"*).
+6. Selecione a **pasta que você extraiu** no passo 2.
+7. Pronto! A extensão já está instalada e ativa. ⚡
 
 ## ⚙️ Configurações
 
