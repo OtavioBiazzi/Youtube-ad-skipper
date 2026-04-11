@@ -7,6 +7,7 @@ const DEFAULT_SETTINGS = {
   skipDelay: 0,
   muteAds: true,
   showOverlay: true,
+  aggressiveSkip: false,
   adsSkipped: 0,
   timeSaved: 0,
 };
@@ -16,6 +17,7 @@ const DEFAULT_SETTINGS = {
 const toggleEnabled = document.getElementById("toggle-enabled");
 const toggleMute = document.getElementById("toggle-mute");
 const toggleOverlay = document.getElementById("toggle-overlay");
+const toggleAggressive = document.getElementById("toggle-aggressive");
 const skipDelaySlider = document.getElementById("skip-delay");
 const delayDisplay = document.getElementById("delay-display");
 const delayHint = document.getElementById("delay-hint");
@@ -32,6 +34,7 @@ chrome.storage.local.get(DEFAULT_SETTINGS, (settings) => {
   toggleEnabled.checked = settings.enabled;
   toggleMute.checked = settings.muteAds;
   toggleOverlay.checked = settings.showOverlay;
+  toggleAggressive.checked = settings.aggressiveSkip;
   skipDelaySlider.value = settings.skipDelay;
 
   updateDelayDisplay(settings.skipDelay);
@@ -53,6 +56,10 @@ toggleMute.addEventListener("change", () => {
 
 toggleOverlay.addEventListener("change", () => {
   chrome.storage.local.set({ showOverlay: toggleOverlay.checked });
+});
+
+toggleAggressive.addEventListener("change", () => {
+  chrome.storage.local.set({ aggressiveSkip: toggleAggressive.checked });
 });
 
 skipDelaySlider.addEventListener("input", () => {

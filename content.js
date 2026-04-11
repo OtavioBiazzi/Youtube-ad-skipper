@@ -41,6 +41,7 @@
     skipDelay: 0,
     muteAds: true,
     showOverlay: true,
+    aggressiveSkip: false,
   };
 
   const CHECK_INTERVAL = 200; // mesma velocidade da referência
@@ -62,12 +63,13 @@
   function loadSettings() {
     if (chrome?.storage?.local) {
       chrome.storage.local.get(
-        { enabled: true, skipDelay: 0, muteAds: true, showOverlay: true },
+        { enabled: true, skipDelay: 0, muteAds: true, showOverlay: true, aggressiveSkip: false },
         (s) => {
           config.enabled = s.enabled;
           config.skipDelay = s.skipDelay;
           config.muteAds = s.muteAds;
           config.showOverlay = s.showOverlay;
+          config.aggressiveSkip = s.aggressiveSkip;
         }
       );
     }
@@ -81,6 +83,7 @@
       if (changes.skipDelay) config.skipDelay = changes.skipDelay.newValue;
       if (changes.muteAds) config.muteAds = changes.muteAds.newValue;
       if (changes.showOverlay) config.showOverlay = changes.showOverlay.newValue;
+      if (changes.aggressiveSkip) config.aggressiveSkip = changes.aggressiveSkip.newValue;
     });
   }
 
@@ -351,9 +354,11 @@
     } else if (adPlaying && adState.active) {
       // ── Anúncio ainda ativo — tick ───
       if (adState.targetSkipReached && !adState.watching) {
-        // Acelera o vídeo no máximo para estourar o limite de 5s do YouTube (se aplicável)
+        // Acelera o vídeo no máximo para estourar o limite se Aggressive Mode estiver ligado
         const video = document.querySelector("video");
-        if (video) video.playbackRate = 16;
+        if (config.aggressiveSkip && video) {
+          video.playbackRate = 16;
+        }
 
         const skipped = clickSkipAdBtn();
         if (skipped) {
@@ -361,8 +366,8 @@
           removeOverlay();
           adState.targetSkipReached = false;
         } else {
-          // Avança para o fim do anúncio, mas trava em duration - 0.5 para não criar loop infinito
-          if (video && isFinite(video.duration) && video.duration > 0) {
+          // Avança para o fim do anúncio progressivamente se agressivo
+          if (config.aggressiveSkip && video && isFinite(video.duration) && video.duration > 0) {
             const targetTime = video.duration - 0.5;
             if (video.currentTime < targetTime - 1) {
               video.currentTime = targetTime;
