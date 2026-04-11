@@ -92,16 +92,8 @@
   }
 
   function getAdPlaying() {
-    // 1. Garantia Absoluta: O YouTube sempre coloca 'ad-showing' no player de vídeo
-    // Se não estiver lá, isso garante que não ativaremos o script para anúncios de BANNER!
     const player = document.querySelector(".html5-video-player");
-    if (!player || !player.classList.contains("ad-showing")) return undefined;
-
-    // 2. Se for um anúncio de vídeo confirmado, pegamos a badge
-    const adBadge = document.querySelector(".ytp-ad-badge");
-    if (isVisible(adBadge) && adBadge.textContent) return adBadge.textContent;
-
-    return "ad-showing";
+    return player && player.classList.contains("ad-showing");
   }
 
   // ── Clicar no botão de pular ──────────────────────────
@@ -278,13 +270,16 @@
     }
 
     if (!isInstant) {
-      let remaining = delay;
-      const timerEl = overlay.querySelector("#adskip-timer");
       adState.countdownInterval = setInterval(() => {
-        remaining--;
+        if (!adState.skipTargetTime) return;
+        let remaining = Math.ceil((adState.skipTargetTime - Date.now()) / 1000);
+        if (remaining < 0) remaining = 0;
+        
+        const timerEl = document.querySelector("#adskip-timer");
         if (timerEl) timerEl.textContent = remaining + "s";
+        
         if (remaining <= 0) clearInterval(adState.countdownInterval);
-      }, 1000);
+      }, 200);
     }
   }
 
@@ -305,8 +300,10 @@
     adState.targetSkipReached = false;
     
     if (config.skipDelay === 0) {
+      adState.skipTargetTime = Date.now();
       adState.targetSkipReached = true;
     } else {
+      adState.skipTargetTime = Date.now() + (config.skipDelay * 1000);
       adState.skipTimer = setTimeout(() => {
         adState.targetSkipReached = true;
       }, config.skipDelay * 1000);
@@ -342,26 +339,14 @@
     if (adPlaying && !adState.active) {
       // ── Anúncio COMEÇOU ───
       adState.active = true;
-      adState.currentAd = adPlaying;
       adState.watching = false;
       adState.hasSkippedStats = false;
       adState.startTime = Date.now();
-      console.log("[YT Ad Skipper] 🎯 Anúncio detectado:", adPlaying);
+      console.log("[YT Ad Skipper] 🎯 Anúncio de vídeo ativo");
 
       muteVideo();
-      if (config.showOverlay) createOverlay();
       scheduleSkip();
-
-    } else if (adPlaying && adState.active && adPlaying !== adState.currentAd) {
-      // ── Anúncio MUDOU (segundo anúncio) ───
-      adState.currentAd = adPlaying;
-      adState.watching = false;
-      adState.hasSkippedStats = false;
-      console.log("[YT Ad Skipper] 🔄 Novo anúncio:", adPlaying);
-
-      muteVideo();
       if (config.showOverlay) createOverlay();
-      scheduleSkip();
 
     } else if (adPlaying && adState.active) {
       // ── Anúncio ainda ativo — tick ───
