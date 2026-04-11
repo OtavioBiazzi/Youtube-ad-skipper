@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>YouTube Ad Skipper</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <!-- Header -->
+    <div class="header">
+      <div class="header-icon">⚡</div>
+      <h1>Ad Skipper</h1>
+      <span class="version">v2.0</span>
+    </div>
+
+    <!-- Master Toggle -->
+    <div class="card master-card">
+      <div class="card-row">
+        <div class="card-label">
+          <span class="card-icon">🛡️</span>
+          <span>Extensão Ativa</span>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="toggle-enabled" checked>
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div class="status-bar" id="status-bar">
+        <span class="status-dot active"></span>
+        <span class="status-text" id="status-text">Protegendo você</span>
+      </div>
+    </div>
+
+    <!-- Settings -->
+    <div class="section-title">Configurações</div>
+
+    <!-- Skip Delay -->
+    <div class="card">
+      <div class="card-row">
+        <div class="card-label">
+          <span class="card-icon">⏱️</span>
+          <span>Tempo para Pular</span>
+        </div>
+        <span class="speed-value" id="delay-display">0s</span>
+      </div>
+      <div class="delay-hint" id="delay-hint">Pula instantaneamente</div>
+      <div class="slider-row">
+        <input type="range" id="skip-delay" min="0" max="30" value="0" step="1" class="slider">
+        <div class="slider-labels">
+          <span>0s (instantâneo)</span>
+          <span>30s</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mute Ads -->
+    <div class="card">
+      <div class="card-row">
+        <div class="card-label">
+          <span class="card-icon">🔇</span>
+          <span>Mutar Anúncios</span>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="toggle-mute" checked>
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div class="card-hint">Silencia o anúncio até ser pulado</div>
+    </div>
+
+    <!-- Show Overlay -->
+    <div class="card">
+      <div class="card-row">
+        <div class="card-label">
+          <span class="card-icon">🎬</span>
+          <span>Mostrar Overlay</span>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="toggle-overlay" checked>
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div class="card-hint">Mostra opção de assistir ou pular o anúncio</div>
+    </div>
+
+    <!-- Stats -->
+    <div class="section-title">Estatísticas</div>
+    <div class="card stats-card">
+      <div class="stat-item">
+        <span class="stat-number" id="stat-skipped">0</span>
+        <span class="stat-label">Anúncios Pulados</span>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat-item">
+        <span class="stat-number" id="stat-time">0s</span>
+        <span class="stat-label">Tempo Salvo</span>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      <button id="reset-stats" class="reset-btn">Resetar Estatísticas</button>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
