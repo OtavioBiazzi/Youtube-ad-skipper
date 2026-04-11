@@ -41,6 +41,7 @@
     skipDelay: 0,
     muteAds: true,
     showOverlay: true,
+    theme: "dark",
   };
 
   const CHECK_INTERVAL = 200; // mesma velocidade da referência
@@ -62,12 +63,13 @@
   function loadSettings() {
     if (chrome?.storage?.local) {
       chrome.storage.local.get(
-        { enabled: true, skipDelay: 0, muteAds: true, showOverlay: true },
+        { enabled: true, skipDelay: 0, muteAds: true, showOverlay: true, theme: "dark" },
         (s) => {
           config.enabled = s.enabled;
           config.skipDelay = s.skipDelay;
           config.muteAds = s.muteAds;
           config.showOverlay = s.showOverlay;
+          config.theme = s.theme;
         }
       );
     }
@@ -81,21 +83,27 @@
       if (changes.skipDelay) config.skipDelay = changes.skipDelay.newValue;
       if (changes.muteAds) config.muteAds = changes.muteAds.newValue;
       if (changes.showOverlay) config.showOverlay = changes.showOverlay.newValue;
+      if (changes.theme) config.theme = changes.theme.newValue;
     });
   }
 
   // ── Detectar anúncio (método da referência) ───────────
 
+  function isVisible(el) {
+    if (!el) return false;
+    return !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
+  }
+
   function getAdPlaying() {
-    // Mesmo método do yt-ad-autoskipper: procurar elementos específicos de anúncio
+    // Procurar elementos específicos de anúncio, validando visibilidade real no DOM
     const advertiserBtn = document.querySelector(".ytp-ad-visit-advertiser-button");
-    if (advertiserBtn) return advertiserBtn.getAttribute("aria-label") || "ad";
+    if (isVisible(advertiserBtn)) return advertiserBtn.getAttribute("aria-label") || "ad";
 
     const advertiserLink = document.querySelector(".ytp-visit-advertiser-link");
-    if (advertiserLink) return advertiserLink.getAttribute("aria-label") || "ad";
+    if (isVisible(advertiserLink)) return advertiserLink.getAttribute("aria-label") || "ad";
 
     const adBadge = document.querySelector(".ytp-ad-badge");
-    if (adBadge && adBadge.textContent) return adBadge.textContent;
+    if (isVisible(adBadge) && adBadge.textContent) return adBadge.textContent;
 
     // Fallback: classe ad-showing no player
     const player = document.querySelector(".html5-video-player");
@@ -188,60 +196,64 @@
     style.textContent = `
       #yt-adskip-overlay {
         position: absolute;
-        top: 12px;
+        bottom: 60px;
         right: 12px;
         z-index: 99999;
-        background: rgba(0, 0, 0, 0.88);
-        backdrop-filter: blur(12px);
-        border: 1px solid rgba(255, 255, 255, 0.12);
-        border-radius: 12px;
-        padding: 12px 16px;
+        background: rgba(0, 0, 0, 0.75);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 6px;
+        padding: 10px 14px;
         display: flex;
         flex-direction: column;
-        gap: 8px;
-        font-family: 'Segoe UI', Inter, Arial, sans-serif;
+        gap: 6px;
+        font-family: 'Roboto', 'Segoe UI', Arial, sans-serif;
         color: #fff;
-        min-width: 200px;
-        animation: adskip-fadein 0.3s ease;
+        min-width: 180px;
         pointer-events: all;
       }
-      @keyframes adskip-fadein {
-        from { opacity: 0; transform: translateY(-10px); }
-        to { opacity: 1; transform: translateY(0); }
+      #yt-adskip-overlay.yt-adskip-light {
+        background: rgba(255, 255, 255, 0.9);
+        border: 1px solid rgba(0, 0, 0, 0.1);
+        color: #0f0f0f;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
       }
+      
       #yt-adskip-overlay .adskip-title {
-        font-size: 12px; font-weight: 600; color: #ff4d6a;
-        display: flex; align-items: center; gap: 6px;
+        font-size: 11px; font-weight: 500;
+        display: flex; align-items: center; gap: 4px;
+        opacity: 0.8;
       }
       #yt-adskip-overlay .adskip-countdown {
-        font-size: 20px; font-weight: 700; text-align: center; padding: 4px 0;
-        background: linear-gradient(135deg, #ff2d55, #ff6b35);
-        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-        background-clip: text;
+        font-size: 14px; font-weight: 500; text-align: center; padding: 2px 0;
       }
       #yt-adskip-overlay .adskip-label {
-        font-size: 10px; text-align: center; color: #888;
-        text-transform: uppercase; letter-spacing: 1px;
+        font-size: 10px; text-align: center; opacity: 0.6;
       }
-      #yt-adskip-overlay .adskip-buttons { display: flex; gap: 6px; }
+      #yt-adskip-overlay .adskip-buttons { display: flex; gap: 6px; margin-top: 4px; }
+      
       #yt-adskip-overlay button {
-        flex: 1; border: none; border-radius: 8px; padding: 8px 10px;
-        font-size: 11px; font-weight: 600; cursor: pointer;
-        transition: all 0.2s ease; font-family: inherit;
+        flex: 1; border: none; border-radius: 18px; padding: 6px 12px;
+        font-size: 12px; font-weight: 500; cursor: pointer;
+        font-family: inherit;
       }
+      
       #yt-adskip-overlay .adskip-btn-skip {
-        background: linear-gradient(135deg, #ff2d55, #ff6b35); color: #fff;
+        background: #f1f1f1; color: #0f0f0f;
       }
-      #yt-adskip-overlay .adskip-btn-skip:hover {
-        filter: brightness(1.15); transform: scale(1.03);
+      #yt-adskip-overlay .adskip-btn-skip:hover { background: #d9d9d9; }
+      #yt-adskip-overlay.yt-adskip-light .adskip-btn-skip {
+        background: #0f0f0f; color: #fff;
       }
+      #yt-adskip-overlay.yt-adskip-light .adskip-btn-skip:hover { background: #272727; }
+      
       #yt-adskip-overlay .adskip-btn-watch {
-        background: rgba(255,255,255,0.08); color: #ccc;
-        border: 1px solid rgba(255,255,255,0.1);
+        background: rgba(255,255,255,0.1); color: #f1f1f1;
       }
-      #yt-adskip-overlay .adskip-btn-watch:hover {
-        background: rgba(255,255,255,0.14); color: #fff;
+      #yt-adskip-overlay .adskip-btn-watch:hover { background: rgba(255,255,255,0.2); }
+      #yt-adskip-overlay.yt-adskip-light .adskip-btn-watch {
+        background: rgba(0,0,0,0.05); color: #0f0f0f;
       }
+      #yt-adskip-overlay.yt-adskip-light .adskip-btn-watch:hover { background: rgba(0,0,0,0.1); }
     `;
     document.head.appendChild(style);
   }
@@ -255,6 +267,9 @@
 
     const overlay = document.createElement("div");
     overlay.id = "yt-adskip-overlay";
+    if (config.theme === "light") {
+      overlay.classList.add("yt-adskip-light");
+    }
 
     const delay = config.skipDelay;
     const isInstant = delay === 0;
