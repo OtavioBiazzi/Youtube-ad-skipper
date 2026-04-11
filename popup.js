@@ -7,7 +7,7 @@ const DEFAULT_SETTINGS = {
   skipDelay: 0,
   muteAds: true,
   showOverlay: true,
-  aggressiveSkip: false,
+  aggressiveSkip: true,
   adsSkipped: 0,
   timeSaved: 0,
 };

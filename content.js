@@ -41,7 +41,7 @@
     skipDelay: 0,
     muteAds: true,
     showOverlay: true,
-    aggressiveSkip: false,
+    aggressiveSkip: true,
   };
 
   const CHECK_INTERVAL = 200; // mesma velocidade da referência
@@ -63,7 +63,7 @@
   function loadSettings() {
     if (chrome?.storage?.local) {
       chrome.storage.local.get(
-        { enabled: true, skipDelay: 0, muteAds: true, showOverlay: true, aggressiveSkip: false },
+        { enabled: true, skipDelay: 0, muteAds: true, showOverlay: true, aggressiveSkip: true },
         (s) => {
           config.enabled = s.enabled;
           config.skipDelay = s.skipDelay;
