@@ -38,7 +38,7 @@
 
   let config = {
     enabled: true,
-    skipDelay: 0,
+    skipDelay: 1,
     muteAds: true,
     showOverlay: true,
     aggressiveSkip: true,
@@ -63,7 +63,7 @@
   function loadSettings() {
     if (chrome?.storage?.local) {
       chrome.storage.local.get(
-        { enabled: true, skipDelay: 0, muteAds: true, showOverlay: true, aggressiveSkip: true },
+        { enabled: true, skipDelay: 1, muteAds: true, showOverlay: true, aggressiveSkip: true },
         (s) => {
           config.enabled = s.enabled;
           config.skipDelay = s.skipDelay;
@@ -244,15 +244,10 @@
     overlay.id = "yt-adskip-overlay";
 
     const delay = config.skipDelay;
-    const isInstant = delay === 0;
 
     overlay.innerHTML = `
       <div class="adskip-title">Auto Pular Anúncio</div>
-      ${
-        isInstant
-          ? '<div class="adskip-countdown">Pulando...</div>'
-          : `<div class="adskip-countdown" id="adskip-timer">${delay}s</div>`
-      }
+      <div class="adskip-countdown" id="adskip-timer">${delay}s</div>
       <button class="adskip-btn-watch">Assistir Anúncio</button>
     `;
 
@@ -272,18 +267,16 @@
       });
     }
 
-    if (!isInstant) {
-      adState.countdownInterval = setInterval(() => {
-        if (!adState.skipTargetTime) return;
-        let remaining = Math.ceil((adState.skipTargetTime - Date.now()) / 1000);
-        if (remaining < 0) remaining = 0;
-        
-        const timerEl = document.querySelector("#adskip-timer");
-        if (timerEl) timerEl.textContent = remaining + "s";
-        
-        if (remaining <= 0) clearInterval(adState.countdownInterval);
-      }, 200);
-    }
+    adState.countdownInterval = setInterval(() => {
+      if (!adState.skipTargetTime) return;
+      let remaining = Math.ceil((adState.skipTargetTime - Date.now()) / 1000);
+      if (remaining < 0) remaining = 0;
+      
+      const timerEl = document.querySelector("#adskip-timer");
+      if (timerEl) timerEl.textContent = remaining + "s";
+      
+      if (remaining <= 0) clearInterval(adState.countdownInterval);
+    }, 200);
   }
 
   function removeOverlay() {
@@ -302,15 +295,10 @@
 
     adState.targetSkipReached = false;
     
-    if (config.skipDelay === 0) {
-      adState.skipTargetTime = Date.now();
+    adState.skipTargetTime = Date.now() + (config.skipDelay * 1000);
+    adState.skipTimer = setTimeout(() => {
       adState.targetSkipReached = true;
-    } else {
-      adState.skipTargetTime = Date.now() + (config.skipDelay * 1000);
-      adState.skipTimer = setTimeout(() => {
-        adState.targetSkipReached = true;
-      }, config.skipDelay * 1000);
-    }
+    }, config.skipDelay * 1000);
   }
 
   // ── Mute/unmute ───────────────────────────────────────

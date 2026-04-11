@@ -4,7 +4,7 @@
 
 const DEFAULT_SETTINGS = {
   enabled: true,
-  skipDelay: 0,
+  skipDelay: 1,
   muteAds: true,
   showOverlay: true,
   aggressiveSkip: true,
@@ -90,10 +90,7 @@ resetBtn.addEventListener("click", () => {
 function updateDelayDisplay(delay) {
   delayDisplay.textContent = delay + "s";
 
-  if (delay === 0) {
-    delayHint.textContent = "Pula instantaneamente";
-    delayHint.style.color = "#22c55e";
-  } else if (delay <= 5) {
+  if (delay <= 5) {
     delayHint.textContent = `Espera ${delay}s e depois pula`;
     delayHint.style.color = "#eab308";
   } else {
