@@ -280,10 +280,8 @@
   }
 
   function removeOverlay() {
-    if (adState.overlayEl) {
-      adState.overlayEl.remove();
-      adState.overlayEl = null;
-    }
+    document.querySelectorAll("#yt-adskip-overlay").forEach(el => el.remove());
+    adState.overlayEl = null;
     clearInterval(adState.countdownInterval);
   }
 
@@ -375,6 +373,10 @@
       removeOverlay();
       unmuteVideo();
       console.log("[YT Ad Skipper] ✅ Anúncio finalizado");
+    } else if (!adPlaying && !adState.active) {
+      // Fallback: se algo bugar o DOM do Youtube, destrói agressivamente o popup se for tela limpa
+      const orphans = document.querySelectorAll("#yt-adskip-overlay");
+      if (orphans.length > 0) orphans.forEach(el => el.remove());
     }
   }
 
