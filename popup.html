@@ -4,125 +4,141 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>YouTube Ad Skipper</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
   <div class="popup-container">
+
     <!-- Header -->
-    <div class="header">
-      <div class="header-icon">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-          <path d="M13 3L4 14h7l-2 7 9-11h-7l2-7z" fill="#fff" stroke="#fff" stroke-width="1" stroke-linejoin="round"/>
+    <header class="header">
+      <div class="header-mark">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
         </svg>
       </div>
-      <h1>Ad Skipper</h1>
-      <span class="version">v3.0</span>
-    </div>
+      <h1 class="header-title">Ad Skipper</h1>
+      <span class="header-version">3.0</span>
+    </header>
 
     <!-- Master Toggle -->
-    <div class="card master-card">
-      <div class="card-row">
-        <div class="card-label">
-          <span class="card-icon">🛡️</span>
-          <span>Extensão Ativa</span>
+    <div class="block block--master">
+      <div class="block-row">
+        <div class="block-label">
+          <svg class="block-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          </svg>
+          <span>Extensao Ativa</span>
         </div>
-        <label class="toggle">
+        <label class="switch">
           <input type="checkbox" id="toggle-enabled" checked>
-          <span class="toggle-slider"></span>
+          <span class="switch-track"></span>
         </label>
       </div>
-      <div class="status-bar" id="status-bar">
-        <span class="status-dot active"></span>
-        <span class="status-text" id="status-text">Protegendo você</span>
+      <div class="status-row" id="status-bar">
+        <span class="status-pip active"></span>
+        <span class="status-label" id="status-text">Ativo</span>
       </div>
     </div>
 
-    <!-- Settings -->
-    <div class="section-title">Configurações</div>
+    <!-- Section: Config -->
+    <div class="section-label">Configuracoes</div>
 
     <!-- Skip Delay -->
-    <div class="card">
-      <div class="card-row">
-        <div class="card-label">
-          <span class="card-icon">⏱️</span>
+    <div class="block">
+      <div class="block-row">
+        <div class="block-label">
+          <svg class="block-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+          </svg>
           <span>Tempo para Pular</span>
         </div>
-        <span class="speed-value" id="delay-display">1s</span>
+        <span class="value-badge" id="delay-display">1s</span>
       </div>
-      <div class="delay-hint" id="delay-hint">Espera ~1s e depois pula</div>
-      <div class="slider-row">
-        <div class="slider-track-wrapper">
-          <input type="range" id="skip-delay" min="1" max="30" value="1" step="1" class="slider">
-        </div>
-        <div class="slider-labels">
+      <div class="hint" id="delay-hint">Espera ~1s e depois pula</div>
+      <div class="range-wrap">
+        <input type="range" id="skip-delay" min="1" max="30" value="1" step="1" class="range">
+        <div class="range-labels">
           <span>1s</span>
           <span>30s</span>
         </div>
       </div>
     </div>
 
-    <!-- Mute Ads -->
-    <div class="card">
-      <div class="card-row">
-        <div class="card-label">
-          <span class="card-icon">🔇</span>
-          <span>Mutar Anúncios</span>
+    <!-- Mute -->
+    <div class="block">
+      <div class="block-row">
+        <div class="block-label">
+          <svg class="block-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+            <line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>
+          </svg>
+          <span>Mutar Anuncios</span>
         </div>
-        <label class="toggle">
+        <label class="switch">
           <input type="checkbox" id="toggle-mute" checked>
-          <span class="toggle-slider"></span>
+          <span class="switch-track"></span>
         </label>
       </div>
-      <div class="card-hint">Silencia o anúncio até ser pulado</div>
+      <div class="hint">Silencia o audio ate ser pulado</div>
     </div>
 
-    <!-- Show Overlay -->
-    <div class="card">
-      <div class="card-row">
-        <div class="card-label">
-          <span class="card-icon">🎬</span>
+    <!-- Overlay -->
+    <div class="block">
+      <div class="block-row">
+        <div class="block-label">
+          <svg class="block-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+          </svg>
           <span>Mostrar Overlay</span>
         </div>
-        <label class="toggle">
+        <label class="switch">
           <input type="checkbox" id="toggle-overlay" checked>
-          <span class="toggle-slider"></span>
+          <span class="switch-track"></span>
         </label>
       </div>
-      <div class="card-hint">Mostra opção de assistir ou pular o anúncio</div>
+      <div class="hint">Exibe countdown e opcao de assistir</div>
     </div>
 
-    <!-- Advanced Section -->
-    <div class="section-title">Avançado</div>
+    <!-- Section: Advanced -->
+    <div class="section-label">Avancado</div>
 
-    <!-- Aggressive Skip -->
-    <div class="card">
-      <div class="card-row">
-        <div class="card-label">
-          <span class="card-icon">🚀</span>
-          <span>Forçar Pulo Exato</span>
+    <!-- Aggressive -->
+    <div class="block">
+      <div class="block-row">
+        <div class="block-label">
+          <svg class="block-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+          </svg>
+          <span>Forcar Pulo Exato</span>
         </div>
-        <label class="toggle">
+        <label class="switch">
           <input type="checkbox" id="toggle-aggressive" checked>
-          <span class="toggle-slider"></span>
+          <span class="switch-track"></span>
         </label>
       </div>
-      <div class="card-hint">
-        <b>Ativado:</b> Acelera anúncios se o botão "Pular" ainda não existir no tempo escolhido. <br>
-        <b>Desativado:</b> Fica aguardando silenciosamente o botão "Pular" aparecer pelo YouTube.
+      <div class="hint">
+        <strong>Ativado:</strong> Acelera anuncios se o botao Pular nao aparecer no tempo escolhido.<br>
+        <strong>Desativado:</strong> Aguarda o botao Pular aparecer normalmente.
       </div>
     </div>
 
-    <!-- Stealth Mode Info -->
-    <div class="card stealth-card">
-      <div class="card-row">
-        <div class="card-label">
-          <span class="card-icon">👻</span>
+    <!-- Stealth -->
+    <div class="block block--stealth">
+      <div class="block-row">
+        <div class="block-label">
+          <svg class="block-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+          </svg>
           <span>Modo Stealth</span>
         </div>
-        <span class="stealth-badge">ATIVO</span>
+        <span class="stealth-tag">ON</span>
       </div>
-      <div class="card-hint">Anti-detecção ativado. Delays humanizados e popup anti-adblock é fechado automaticamente.</div>
+      <div class="hint">Anti-deteccao ligado. Delays humanizados, popups anti-adblock fechados automaticamente.</div>
     </div>
+
   </div>
 
   <script src="popup.js"></script>

@@ -1,5 +1,5 @@
 // ══════════════════════════════════════════════════
-// YouTube Ad Skipper — Popup Logic v3
+// YouTube Ad Skipper — Popup Logic v3 | Taste Skill
 // ══════════════════════════════════════════════════
 
 const DEFAULT_SETTINGS = {
@@ -10,39 +10,39 @@ const DEFAULT_SETTINGS = {
   aggressiveSkip: true,
 };
 
-// ── Elementos ────────────────────────────────────
+// ── Elements ─────────────────────────────────────
 
-const toggleEnabled = document.getElementById("toggle-enabled");
-const toggleMute = document.getElementById("toggle-mute");
-const toggleOverlay = document.getElementById("toggle-overlay");
+const toggleEnabled    = document.getElementById("toggle-enabled");
+const toggleMute       = document.getElementById("toggle-mute");
+const toggleOverlay    = document.getElementById("toggle-overlay");
 const toggleAggressive = document.getElementById("toggle-aggressive");
-const skipDelaySlider = document.getElementById("skip-delay");
-const delayDisplay = document.getElementById("delay-display");
-const delayHint = document.getElementById("delay-hint");
-const statusDot = document.querySelector(".status-dot");
-const statusText = document.getElementById("status-text");
-const container = document.querySelector(".popup-container");
+const skipDelaySlider  = document.getElementById("skip-delay");
+const delayDisplay     = document.getElementById("delay-display");
+const delayHint        = document.getElementById("delay-hint");
+const statusPip        = document.querySelector(".status-pip");
+const statusLabel      = document.getElementById("status-text");
+const container        = document.querySelector(".popup-container");
 
-// ── Carregar configurações ───────────────────────
+// ── Load settings ────────────────────────────────
 
-chrome.storage.local.get(DEFAULT_SETTINGS, (settings) => {
-  toggleEnabled.checked = settings.enabled;
-  toggleMute.checked = settings.muteAds;
-  toggleOverlay.checked = settings.showOverlay;
-  toggleAggressive.checked = settings.aggressiveSkip;
-  skipDelaySlider.value = settings.skipDelay;
+chrome.storage.local.get(DEFAULT_SETTINGS, (s) => {
+  toggleEnabled.checked    = s.enabled;
+  toggleMute.checked       = s.muteAds;
+  toggleOverlay.checked    = s.showOverlay;
+  toggleAggressive.checked = s.aggressiveSkip;
+  skipDelaySlider.value    = s.skipDelay;
 
-  updateDelayDisplay(settings.skipDelay);
-  updateStatusUI(settings.enabled);
-  updateSliderTrack();
+  renderDelay(s.skipDelay);
+  renderStatus(s.enabled);
+  renderSliderTrack();
 });
 
-// ── Eventos ──────────────────────────────────────
+// ── Events ───────────────────────────────────────
 
 toggleEnabled.addEventListener("change", () => {
-  const enabled = toggleEnabled.checked;
-  chrome.storage.local.set({ enabled });
-  updateStatusUI(enabled);
+  const on = toggleEnabled.checked;
+  chrome.storage.local.set({ enabled: on });
+  renderStatus(on);
 });
 
 toggleMute.addEventListener("change", () => {
@@ -58,47 +58,48 @@ toggleAggressive.addEventListener("change", () => {
 });
 
 skipDelaySlider.addEventListener("input", () => {
-  const delay = parseInt(skipDelaySlider.value);
-  updateDelayDisplay(delay);
-  updateSliderTrack();
-  chrome.storage.local.set({ skipDelay: delay });
+  const v = parseInt(skipDelaySlider.value, 10);
+  renderDelay(v);
+  renderSliderTrack();
+  chrome.storage.local.set({ skipDelay: v });
 });
 
-// ── UI Helpers ───────────────────────────────────
+// ── Render helpers ───────────────────────────────
 
-function updateDelayDisplay(delay) {
-  delayDisplay.textContent = delay + "s";
+function renderDelay(seconds) {
+  delayDisplay.textContent = seconds + "s";
 
-  if (delay <= 3) {
-    delayHint.textContent = `Espera ~${delay}s e depois pula`;
-    delayHint.style.color = "#22c55e";
-  } else if (delay <= 10) {
-    delayHint.textContent = `Espera ~${delay}s e depois pula`;
-    delayHint.style.color = "#eab308";
+  // Dynamic hint color based on delay length
+  if (seconds <= 3) {
+    delayHint.textContent = "Espera ~" + seconds + "s e depois pula";
+    delayHint.style.color = "hsl(152, 55%, 42%)";      // green
+  } else if (seconds <= 10) {
+    delayHint.textContent = "Espera ~" + seconds + "s e depois pula";
+    delayHint.style.color = "hsl(45, 75%, 52%)";       // yellow
   } else {
-    delayHint.textContent = `Espera ~${delay}s e depois pula`;
-    delayHint.style.color = "#f97316";
+    delayHint.textContent = "Espera ~" + seconds + "s e depois pula";
+    delayHint.style.color = "hsl(25, 80%, 55%)";       // orange
   }
 }
 
-function updateSliderTrack() {
-  const min = parseInt(skipDelaySlider.min);
-  const max = parseInt(skipDelaySlider.max);
-  const val = parseInt(skipDelaySlider.value);
-  const progress = ((val - min) / (max - min)) * 100;
-  skipDelaySlider.style.setProperty('--slider-progress', progress + '%');
-  // Update the gradient background to show filled track
-  skipDelaySlider.style.background = `linear-gradient(90deg, #ff2d55 0%, #ff4d3a ${progress}%, #1e1e22 ${progress}%)`;
+function renderSliderTrack() {
+  const min = parseInt(skipDelaySlider.min, 10);
+  const max = parseInt(skipDelaySlider.max, 10);
+  const val = parseInt(skipDelaySlider.value, 10);
+  const pct = ((val - min) / (max - min)) * 100;
+  // Filled track via inline gradient
+  skipDelaySlider.style.background =
+    "linear-gradient(90deg, hsl(355,65%,52%) " + pct + "%, #1c1c1f " + pct + "%)";
 }
 
-function updateStatusUI(enabled) {
+function renderStatus(enabled) {
   if (enabled) {
-    statusDot.classList.add("active");
-    statusText.textContent = "Protegendo você";
+    statusPip.classList.add("active");
+    statusLabel.textContent = "Ativo";
     container.classList.remove("disabled");
   } else {
-    statusDot.classList.remove("active");
-    statusText.textContent = "Desativado";
+    statusPip.classList.remove("active");
+    statusLabel.textContent = "Desativado";
     container.classList.add("disabled");
   }
 }
