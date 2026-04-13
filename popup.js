@@ -8,6 +8,7 @@ const DEFAULT_SETTINGS = {
   muteAds: true,
   showOverlay: true,
   aggressiveSkip: true,
+  warningCount: 0,
 };
 
 // ── Elements ─────────────────────────────────────
@@ -19,9 +20,15 @@ const toggleAggressive = document.getElementById("toggle-aggressive");
 const skipDelaySlider  = document.getElementById("skip-delay");
 const delayDisplay     = document.getElementById("delay-display");
 const delayHint        = document.getElementById("delay-hint");
+const delayNote        = document.getElementById("delay-note");
+const blockDelay       = document.getElementById("block-delay");
 const statusPip        = document.querySelector(".status-pip");
 const statusLabel      = document.getElementById("status-text");
 const container        = document.querySelector(".popup-container");
+const warningRow       = document.getElementById("warning-row");
+const warningText      = document.getElementById("warning-text");
+
+let initialDelay = 1;
 
 // ── Load settings ────────────────────────────────
 
@@ -31,10 +38,13 @@ chrome.storage.local.get(DEFAULT_SETTINGS, (s) => {
   toggleOverlay.checked    = s.showOverlay;
   toggleAggressive.checked = s.aggressiveSkip;
   skipDelaySlider.value    = s.skipDelay;
+  initialDelay             = s.skipDelay;
 
   renderDelay(s.skipDelay);
   renderStatus(s.enabled);
   renderSliderTrack();
+  renderAggressiveState(s.aggressiveSkip);
+  renderWarnings(s.warningCount || 0);
 });
 
 // ── Events ───────────────────────────────────────
@@ -54,7 +64,9 @@ toggleOverlay.addEventListener("change", () => {
 });
 
 toggleAggressive.addEventListener("change", () => {
-  chrome.storage.local.set({ aggressiveSkip: toggleAggressive.checked });
+  const on = toggleAggressive.checked;
+  chrome.storage.local.set({ aggressiveSkip: on });
+  renderAggressiveState(on);
 });
 
 skipDelaySlider.addEventListener("input", () => {
@@ -62,6 +74,13 @@ skipDelaySlider.addEventListener("input", () => {
   renderDelay(v);
   renderSliderTrack();
   chrome.storage.local.set({ skipDelay: v });
+
+  // Mostrar aviso se o delay mudou e é diferente do original
+  if (v !== initialDelay) {
+    delayNote.style.display = "block";
+  } else {
+    delayNote.style.display = "none";
+  }
 });
 
 // ── Render helpers ───────────────────────────────
@@ -69,16 +88,15 @@ skipDelaySlider.addEventListener("input", () => {
 function renderDelay(seconds) {
   delayDisplay.textContent = seconds + "s";
 
-  // Dynamic hint color based on delay length
   if (seconds <= 3) {
     delayHint.textContent = "Espera ~" + seconds + "s e depois pula";
-    delayHint.style.color = "hsl(152, 55%, 42%)";      // green
+    delayHint.style.color = "hsl(152, 55%, 42%)";
   } else if (seconds <= 10) {
     delayHint.textContent = "Espera ~" + seconds + "s e depois pula";
-    delayHint.style.color = "hsl(45, 75%, 52%)";       // yellow
+    delayHint.style.color = "hsl(45, 75%, 52%)";
   } else {
     delayHint.textContent = "Espera ~" + seconds + "s e depois pula";
-    delayHint.style.color = "hsl(25, 80%, 55%)";       // orange
+    delayHint.style.color = "hsl(25, 80%, 55%)";
   }
 }
 
@@ -87,7 +105,6 @@ function renderSliderTrack() {
   const max = parseInt(skipDelaySlider.max, 10);
   const val = parseInt(skipDelaySlider.value, 10);
   const pct = ((val - min) / (max - min)) * 100;
-  // Filled track via inline gradient
   skipDelaySlider.style.background =
     "linear-gradient(90deg, hsl(355,65%,52%) " + pct + "%, #1c1c1f " + pct + "%)";
 }
@@ -103,3 +120,29 @@ function renderStatus(enabled) {
     container.classList.add("disabled");
   }
 }
+
+function renderAggressiveState(on) {
+  if (on) {
+    blockDelay.classList.remove("block--disabled");
+  } else {
+    blockDelay.classList.add("block--disabled");
+  }
+}
+
+function renderWarnings(count) {
+  if (count === 0) {
+    warningRow.classList.remove("warning-row--alert");
+    warningText.textContent = "Nenhum aviso do YouTube interceptado.";
+  } else {
+    warningRow.classList.add("warning-row--alert");
+    warningText.textContent = count + " aviso" + (count > 1 ? "s" : "") + " do YouTube interceptado" + (count > 1 ? "s" : "") + " e bloqueado" + (count > 1 ? "s" : "") + ".";
+  }
+}
+
+// ── Live sync ────────────────────────────────────
+
+chrome.storage.onChanged.addListener((changes) => {
+  if (changes.warningCount) {
+    renderWarnings(changes.warningCount.newValue || 0);
+  }
+});

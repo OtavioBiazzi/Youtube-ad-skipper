@@ -51,6 +51,8 @@
     watching: false,
     overlayEl: null,
     countdownInterval: null,
+    skipTargetTime: null,
+    warningCount: 0,   // conta quantas vezes o popup anti-adblock apareceu
   };
 
   // ── Humanização — jitter aleatório ────────────────────
@@ -66,13 +68,14 @@
   function loadSettings() {
     if (chrome?.storage?.local) {
       chrome.storage.local.get(
-        { enabled: true, skipDelay: 1, muteAds: true, showOverlay: true, aggressiveSkip: true },
+        { enabled: true, skipDelay: 1, muteAds: true, showOverlay: true, aggressiveSkip: true, warningCount: 0 },
         (s) => {
           config.enabled = s.enabled;
           config.skipDelay = s.skipDelay;
           config.muteAds = s.muteAds;
           config.showOverlay = s.showOverlay;
           config.aggressiveSkip = s.aggressiveSkip;
+          adState.warningCount = s.warningCount || 0;
         }
       );
     }
@@ -90,11 +93,22 @@
     });
   }
 
-  // ── Detectar anúncio ──────────────────────────────────
+  // ── Detectar anúncio (método combinado) ───────────────
+  // Usa AMBOS os métodos: classe no player + elementos de UI do anúncio
+  // Isso é mais robusto e menos dependente de uma única classe CSS
 
   function getAdPlaying() {
+    // Método 1: classe no player (original)
     const player = document.querySelector(".html5-video-player");
-    return player && player.classList.contains("ad-showing");
+    if (player && player.classList.contains("ad-showing")) return true;
+
+    // Método 2: elementos de UI do anúncio (como o yt-ad-autoskipper faz)
+    const adBadge = document.querySelector(".ytp-ad-badge") ||
+                    document.querySelector(".ytp-ad-visit-advertiser-button") ||
+                    document.querySelector(".ytp-visit-advertiser-link");
+    if (adBadge) return true;
+
+    return false;
   }
 
   // ── Clicar no botão de pular ──────────────────────────
@@ -157,25 +171,11 @@
   // Camada 2: MutationObserver — remove do DOM no instante que aparece (0ms)
   // Camada 3: Polling fallback — varredura a cada 200ms como rede de segurança
 
-  // Seletores dos elementos anti-adblock do YouTube
-  const _abSelectors = [
-    'ytd-enforcement-message-view-model',
-    'ytd-mealbar-promo-renderer[data-style="ENFORCEMENT"]',
-    '#enforcement-message-view-model',
-    'tp-yt-paper-dialog:has(ytd-enforcement-message-view-model)',
-    'ytd-popup-container tp-yt-paper-dialog:has(.ytd-enforcement-message-view-model)',
-  ];
-
-  // Tag names que o YouTube usa para o dialog de enforcement
   const _abTagNames = [
     'YTD-ENFORCEMENT-MESSAGE-VIEW-MODEL',
   ];
 
   // ── Camada 1: CSS Preemptivo ──────────────────────────
-  // Injeta CSS que esconde o dialog ANTES dele aparecer visualmente.
-  // Mesmo que demore 1 frame para o MutationObserver agir,
-  // o CSS garante que o user nunca vê o popup.
-
   function injectAntiAdblockCSS() {
     const id = 'ytp-css-patch-ab';
     if (document.getElementById(id)) return;
@@ -202,42 +202,35 @@
     (document.head || document.documentElement).appendChild(s);
   }
 
-  // Injetar CSS o mais cedo possível
   injectAntiAdblockCSS();
 
   // ── Camada 2: MutationObserver (instantâneo) ──────────
-  // Observa o DOM inteiro. Quando o YouTube adiciona o dialog,
-  // ele é removido antes do próximo frame de pintura.
-
   function nukeAdblockElement(el) {
     if (!el) return;
-    // Remover do DOM completamente
     el.remove();
-    // Se houver backdrop/overlay escuro atrás, remover também
     const backdrops = document.querySelectorAll('iron-overlay-backdrop, tp-yt-paper-dialog-backdrop');
     backdrops.forEach(b => b.remove());
-    // Restaurar scroll caso o YouTube tenha travado o body
     document.body.style.overflow = '';
     document.documentElement.style.overflow = '';
+
+    // Incrementar contador de avisos e salvar
+    adState.warningCount++;
+    if (chrome?.storage?.local) {
+      chrome.storage.local.set({ warningCount: adState.warningCount });
+    }
   }
 
   function checkAndNukeNode(node) {
     if (!node || node.nodeType !== 1) return;
 
-    // Check direto pelo tagName
     if (_abTagNames.includes(node.tagName)) {
       nukeAdblockElement(node);
       return;
     }
 
-    // Check se é um tp-yt-paper-dialog que contém enforcement
     if (node.tagName === 'TP-YT-PAPER-DIALOG') {
       const inner = node.querySelector('ytd-enforcement-message-view-model');
-      if (inner) {
-        nukeAdblockElement(node);
-        return;
-      }
-      // Check por texto
+      if (inner) { nukeAdblockElement(node); return; }
       const text = (node.textContent || '').toLowerCase();
       if (text.includes('bloqueador') || text.includes('ad blocker') ||
           text.includes('proibidos') || text.includes('not allowed')) {
@@ -246,15 +239,10 @@
       }
     }
 
-    // Check filhos (caso o elemento adicionado seja um container pai)
-    for (const sel of _abSelectors) {
-      try {
-        const found = node.querySelector(sel);
-        if (found) {
-          nukeAdblockElement(found.closest('tp-yt-paper-dialog') || found);
-          return;
-        }
-      } catch (e) { /* :has() pode não funcionar em querySelector em todos os browsers */ }
+    // Check filhos
+    const found = node.querySelector && node.querySelector('ytd-enforcement-message-view-model');
+    if (found) {
+      nukeAdblockElement(found.closest('tp-yt-paper-dialog') || found);
     }
   }
 
@@ -266,14 +254,12 @@
         }
       }
     });
-
     observer.observe(document.body || document.documentElement, {
       childList: true,
       subtree: true,
     });
   }
 
-  // Iniciar o observer assim que o body existir
   if (document.body) {
     startAdblockObserver();
   } else {
@@ -287,18 +273,13 @@
   }
 
   // ── Camada 3: Polling fallback ────────────────────────
-  // Rede de segurança caso o Observer não pegue algum caso edge
-
   function dismissAdblockWarning() {
-    // Tentar remover elementos de enforcement diretamente
     const enforcement = document.querySelector('ytd-enforcement-message-view-model');
     if (enforcement) {
       const dialog = enforcement.closest('tp-yt-paper-dialog') || enforcement;
       nukeAdblockElement(dialog);
       return true;
     }
-
-    // Procurar por texto nos dialogs abertos
     const dialogs = document.querySelectorAll('tp-yt-paper-dialog');
     for (const dialog of dialogs) {
       if (dialog.offsetParent === null && dialog.style.display === 'none') continue;
@@ -310,23 +291,19 @@
         return true;
       }
     }
-
-    // Fechar mealbar promos
     const mealbar = document.querySelector('ytd-mealbar-promo-renderer #dismiss-button');
     if (mealbar && mealbar.offsetParent !== null) {
       mealbar.click();
       return true;
     }
-
     return false;
   }
 
   // ── Overlay (com IDs ofuscados) ───────────────────────
-  // Usa nomes que parecem nativos do YouTube para não serem detectados
 
-  const OVERLAY_ID = "ytp-iv-player-content";     // parece nativo do YT
-  const TIMER_ID = "ytp-tooltip-duration";         // parece nativo do YT
-  const STYLE_ID = "ytp-style-corrections";        // parece nativo do YT
+  const OVERLAY_ID = "ytp-iv-player-content";
+  const TIMER_ID = "ytp-tooltip-duration";
+  const STYLE_ID = "ytp-style-corrections";
 
   function injectStyles() {
     if (document.getElementById(STYLE_ID)) return;
@@ -389,16 +366,15 @@
     const delay = config.skipDelay;
 
     overlay.innerHTML = `
-      <div class="ytp-ad-text">Auto Pular Anúncio</div>
+      <div class="ytp-ad-text">Auto Pular Anuncio</div>
       <div class="ytp-ad-timer-text" id="${TIMER_ID}">${delay}s</div>
-      <button class="ytp-ad-watch">Assistir Anúncio</button>
+      <button class="ytp-ad-watch">Assistir Anuncio</button>
     `;
 
     player.style.position = "relative";
     player.appendChild(overlay);
     adState.overlayEl = overlay;
 
-    // Assistir
     const watchBtn = overlay.querySelector(".ytp-ad-watch");
     if (watchBtn) {
       watchBtn.addEventListener("click", () => {
@@ -414,10 +390,8 @@
       if (!adState.skipTargetTime) return;
       let remaining = Math.ceil((adState.skipTargetTime - Date.now()) / 1000);
       if (remaining < 0) remaining = 0;
-
       const timerEl = document.getElementById(TIMER_ID);
       if (timerEl) timerEl.textContent = remaining + "s";
-
       if (remaining <= 0) clearInterval(adState.countdownInterval);
     }, 200);
   }
@@ -444,22 +418,31 @@
   }
 
   // ── Mute/unmute ───────────────────────────────────────
+  // Método do yt-ad-autoskipper: simula clique no botão de mute do YouTube
+  // em vez de manipular video.muted diretamente (menos detectável)
 
   function muteVideo() {
     if (!config.muteAds || adState.watching) return;
-    const video = document.querySelector("video");
-    if (video && !video.muted) {
-      video.muted = true;
-      video.__ytpMuted = true;
+    const muteBtn = document.querySelector(".ytp-mute-button");
+    const volumeSlider = document.querySelector(".ytp-volume-slider-handle");
+    const isMuted = volumeSlider ? parseInt(volumeSlider.style.left || "0") === 0 : false;
+
+    if (muteBtn && !isMuted) {
+      muteBtn.click();
+      adState._wasMuted = true;
     }
   }
 
   function unmuteVideo() {
-    const video = document.querySelector("video");
-    if (video && video.__ytpMuted) {
-      video.muted = false;
-      video.__ytpMuted = false;
+    if (!adState._wasMuted) return;
+    const muteBtn = document.querySelector(".ytp-mute-button");
+    const volumeSlider = document.querySelector(".ytp-volume-slider-handle");
+    const isMuted = volumeSlider ? parseInt(volumeSlider.style.left || "0") === 0 : false;
+
+    if (muteBtn && isMuted) {
+      muteBtn.click();
     }
+    adState._wasMuted = false;
   }
 
   // ── Main loop ─────────────────────────────────────────
@@ -485,7 +468,8 @@
     } else if (adPlaying && adState.active) {
       // ── Anúncio ainda ativo — tick ───
       if (adState.targetSkipReached && !adState.watching) {
-        // Acelera moderadamente (2x em vez de 16x para não disparar alertas)
+        // Modo agressivo: acelera moderadamente (2x)
+        // NÃO modifica currentTime (detectável)
         const video = document.querySelector("video");
         if (config.aggressiveSkip && video) {
           video.playbackRate = 2;
@@ -496,8 +480,6 @@
           removeOverlay();
           adState.targetSkipReached = false;
         }
-        // REMOVIDO: seek agressivo para o final do anúncio (video.currentTime = targetTime)
-        // Isso era muito detectável pelo YouTube
       }
     } else if (!adPlaying && adState.active) {
       // ── Anúncio ACABOU ───
@@ -507,13 +489,11 @@
       removeOverlay();
       unmuteVideo();
 
-      // Restaurar playbackRate normal
       const video = document.querySelector("video");
       if (video && video.playbackRate !== 1) {
         video.playbackRate = 1;
       }
     } else if (!adPlaying && !adState.active) {
-      // Fallback: limpar overlays órfãos
       const orphans = document.querySelectorAll("#" + OVERLAY_ID);
       if (orphans.length > 0) orphans.forEach(el => el.remove());
     }
