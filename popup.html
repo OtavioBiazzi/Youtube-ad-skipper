@@ -10,9 +10,13 @@
   <div class="popup-container">
     <!-- Header -->
     <div class="header">
-      <div class="header-icon">⚡</div>
+      <div class="header-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+          <path d="M13 3L4 14h7l-2 7 9-11h-7l2-7z" fill="#fff" stroke="#fff" stroke-width="1" stroke-linejoin="round"/>
+        </svg>
+      </div>
       <h1>Ad Skipper</h1>
-      <span class="version">v2.0</span>
+      <span class="version">v3.0</span>
     </div>
 
     <!-- Master Toggle -->
@@ -45,9 +49,11 @@
         </div>
         <span class="speed-value" id="delay-display">1s</span>
       </div>
-      <div class="delay-hint" id="delay-hint">Espera 1s e depois pula</div>
+      <div class="delay-hint" id="delay-hint">Espera ~1s e depois pula</div>
       <div class="slider-row">
-        <input type="range" id="skip-delay" min="1" max="30" value="1" step="1" class="slider">
+        <div class="slider-track-wrapper">
+          <input type="range" id="skip-delay" min="1" max="30" value="1" step="1" class="slider">
+        </div>
         <div class="slider-labels">
           <span>1s</span>
           <span>30s</span>
@@ -85,6 +91,9 @@
       <div class="card-hint">Mostra opção de assistir ou pular o anúncio</div>
     </div>
 
+    <!-- Advanced Section -->
+    <div class="section-title">Avançado</div>
+
     <!-- Aggressive Skip -->
     <div class="card">
       <div class="card-row">
@@ -103,23 +112,16 @@
       </div>
     </div>
 
-    <!-- Stats -->
-    <div class="section-title">Estatísticas</div>
-    <div class="card stats-card">
-      <div class="stat-item">
-        <span class="stat-number" id="stat-skipped">0</span>
-        <span class="stat-label">Anúncios Pulados</span>
+    <!-- Stealth Mode Info -->
+    <div class="card stealth-card">
+      <div class="card-row">
+        <div class="card-label">
+          <span class="card-icon">👻</span>
+          <span>Modo Stealth</span>
+        </div>
+        <span class="stealth-badge">ATIVO</span>
       </div>
-      <div class="stat-divider"></div>
-      <div class="stat-item">
-        <span class="stat-number" id="stat-time">0s</span>
-        <span class="stat-label">Tempo Salvo</span>
-      </div>
-    </div>
-
-    <!-- Footer -->
-    <div class="footer">
-      <button id="reset-stats" class="reset-btn">Resetar Estatísticas</button>
+      <div class="card-hint">Anti-detecção ativado. Delays humanizados e popup anti-adblock é fechado automaticamente.</div>
     </div>
   </div>
 

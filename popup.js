@@ -1,5 +1,5 @@
 // ══════════════════════════════════════════════════
-// YouTube Ad Skipper — Popup Logic v2
+// YouTube Ad Skipper — Popup Logic v3
 // ══════════════════════════════════════════════════
 
 const DEFAULT_SETTINGS = {
@@ -8,8 +8,6 @@ const DEFAULT_SETTINGS = {
   muteAds: true,
   showOverlay: true,
   aggressiveSkip: true,
-  adsSkipped: 0,
-  timeSaved: 0,
 };
 
 // ── Elementos ────────────────────────────────────
@@ -23,9 +21,6 @@ const delayDisplay = document.getElementById("delay-display");
 const delayHint = document.getElementById("delay-hint");
 const statusDot = document.querySelector(".status-dot");
 const statusText = document.getElementById("status-text");
-const statSkipped = document.getElementById("stat-skipped");
-const statTime = document.getElementById("stat-time");
-const resetBtn = document.getElementById("reset-stats");
 const container = document.querySelector(".popup-container");
 
 // ── Carregar configurações ───────────────────────
@@ -39,7 +34,7 @@ chrome.storage.local.get(DEFAULT_SETTINGS, (settings) => {
 
   updateDelayDisplay(settings.skipDelay);
   updateStatusUI(settings.enabled);
-  updateStats(settings.adsSkipped, settings.timeSaved);
+  updateSliderTrack();
 });
 
 // ── Eventos ──────────────────────────────────────
@@ -65,24 +60,8 @@ toggleAggressive.addEventListener("change", () => {
 skipDelaySlider.addEventListener("input", () => {
   const delay = parseInt(skipDelaySlider.value);
   updateDelayDisplay(delay);
+  updateSliderTrack();
   chrome.storage.local.set({ skipDelay: delay });
-});
-
-resetBtn.addEventListener("click", () => {
-  if (!confirm("Tem certeza que deseja resetar todas as suas estatísticas de anúncios pulados?")) {
-    return;
-  }
-  chrome.storage.local.set({ adsSkipped: 0, timeSaved: 0 });
-  updateStats(0, 0);
-
-  resetBtn.textContent = "✓ Resetado!";
-  resetBtn.style.color = "#22c55e";
-  resetBtn.style.borderColor = "rgba(34, 197, 94, 0.3)";
-  setTimeout(() => {
-    resetBtn.textContent = "Resetar Estatísticas";
-    resetBtn.style.color = "";
-    resetBtn.style.borderColor = "";
-  }, 1500);
 });
 
 // ── UI Helpers ───────────────────────────────────
@@ -90,13 +69,26 @@ resetBtn.addEventListener("click", () => {
 function updateDelayDisplay(delay) {
   delayDisplay.textContent = delay + "s";
 
-  if (delay <= 5) {
-    delayHint.textContent = `Espera ${delay}s e depois pula`;
+  if (delay <= 3) {
+    delayHint.textContent = `Espera ~${delay}s e depois pula`;
+    delayHint.style.color = "#22c55e";
+  } else if (delay <= 10) {
+    delayHint.textContent = `Espera ~${delay}s e depois pula`;
     delayHint.style.color = "#eab308";
   } else {
-    delayHint.textContent = `Espera ${delay}s e depois pula`;
+    delayHint.textContent = `Espera ~${delay}s e depois pula`;
     delayHint.style.color = "#f97316";
   }
+}
+
+function updateSliderTrack() {
+  const min = parseInt(skipDelaySlider.min);
+  const max = parseInt(skipDelaySlider.max);
+  const val = parseInt(skipDelaySlider.value);
+  const progress = ((val - min) / (max - min)) * 100;
+  skipDelaySlider.style.setProperty('--slider-progress', progress + '%');
+  // Update the gradient background to show filled track
+  skipDelaySlider.style.background = `linear-gradient(90deg, #ff2d55 0%, #ff4d3a ${progress}%, #1e1e22 ${progress}%)`;
 }
 
 function updateStatusUI(enabled) {
@@ -110,27 +102,3 @@ function updateStatusUI(enabled) {
     container.classList.add("disabled");
   }
 }
-
-function updateStats(skipped, timeSaved) {
-  statSkipped.textContent = skipped;
-  statTime.textContent = formatTime(timeSaved);
-}
-
-function formatTime(totalSeconds) {
-  if (totalSeconds < 60) return Math.round(totalSeconds) + "s";
-  if (totalSeconds < 3600) {
-    const min = Math.floor(totalSeconds / 60);
-    const sec = Math.round(totalSeconds % 60);
-    return min + "m " + sec + "s";
-  }
-  const hrs = Math.floor(totalSeconds / 3600);
-  const min = Math.round((totalSeconds % 3600) / 60);
-  return hrs + "h " + min + "m";
-}
-
-// ── Sync em tempo real ───────────────────────────
-
-chrome.storage.onChanged.addListener((changes) => {
-  if (changes.adsSkipped) statSkipped.textContent = changes.adsSkipped.newValue;
-  if (changes.timeSaved) statTime.textContent = formatTime(changes.timeSaved.newValue);
-});

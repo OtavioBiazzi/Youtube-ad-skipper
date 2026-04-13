@@ -2,23 +2,19 @@
   "use strict";
 
   // ── Override addEventListener para bypass do isTrusted ────
-  // O YouTube verifica se o clique é "isTrusted" (feito pelo usuário).
-  // Esse override faz com que cliques programáticos pareçam confiáveis
-  // apenas nos botões de pular anúncio.
-
-  const skipButtonClasses = [
+  const _skipClasses = [
     "videoAdUiSkipButton",
     "ytp-ad-skip-button ytp-button",
     "ytp-ad-skip-button-modern ytp-button",
     "ytp-skip-ad-button",
   ];
 
-  const originalAddEventListener = HTMLElement.prototype.addEventListener;
+  const _origAEL = HTMLElement.prototype.addEventListener;
 
   HTMLElement.prototype.addEventListener = function (type, listener, options) {
-    if (type === "click" && skipButtonClasses.includes(this.className)) {
-      const wrappedListener = function (e) {
-        const handler = {
+    if (type === "click" && _skipClasses.includes(this.className)) {
+      const wrapped = function (e) {
+        const h = {
           get(_, prop) {
             if (prop === "isTrusted") return true;
             if (typeof e[prop] === "function") {
@@ -27,11 +23,11 @@
             return e[prop];
           },
         };
-        return listener(new Proxy({}, handler));
+        return listener(new Proxy({}, h));
       };
-      return originalAddEventListener.call(this, type, wrappedListener, options);
+      return _origAEL.call(this, type, wrapped, options);
     }
-    return originalAddEventListener.call(this, type, listener, options);
+    return _origAEL.call(this, type, listener, options);
   };
 
   // ── Configurações ─────────────────────────────────────
@@ -44,7 +40,7 @@
     aggressiveSkip: true,
   };
 
-  const CHECK_INTERVAL = 200; // mesma velocidade da referência
+  const CHECK_INTERVAL = 200;
 
   let adState = {
     active: false,
@@ -52,11 +48,18 @@
     startTime: null,
     skipTimer: null,
     targetSkipReached: false,
-    hasSkippedStats: false,
     watching: false,
     overlayEl: null,
     countdownInterval: null,
   };
+
+  // ── Humanização — jitter aleatório ────────────────────
+
+  function humanDelay(baseMs) {
+    // ±30% de variação para parecer humano
+    const jitter = baseMs * (0.7 + Math.random() * 0.6);
+    return Math.round(jitter);
+  }
 
   // ── Carregar configurações ────────────────────────────
 
@@ -87,12 +90,7 @@
     });
   }
 
-  // ── Detectar anúncio (método da referência) ───────────
-
-  function isVisible(el) {
-    if (!el) return false;
-    return !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
-  }
+  // ── Detectar anúncio ──────────────────────────────────
 
   function getAdPlaying() {
     const player = document.querySelector(".html5-video-player");
@@ -102,13 +100,12 @@
   // ── Clicar no botão de pular ──────────────────────────
 
   function clickSkipAdBtn() {
-    // Método 1: procurar pelos classNames exatos (como a referência)
-    for (const className of skipButtonClasses) {
+    // Método 1: classNames exatos
+    for (const className of _skipClasses) {
       const elems = document.getElementsByClassName(className);
       for (const el of elems) {
         if (el) {
           el.click();
-          console.log("[YT Ad Skipper] ⏭️ Clicou no skip (class):", className);
           return true;
         }
       }
@@ -126,7 +123,6 @@
       const btn = document.querySelector(sel);
       if (btn && btn.offsetParent !== null) {
         btn.click();
-        console.log("[YT Ad Skipper] ⏭️ Clicou no skip (selector):", sel);
         return true;
       }
     }
@@ -140,53 +136,95 @@
         (btn.offsetParent !== null || btn.offsetWidth > 0)
       ) {
         btn.click();
-        console.log("[YT Ad Skipper] ⏭️ Clicou no skip (texto):", text);
         return true;
       }
     }
 
-    // Método 4: fechar surveys/dialogs
+    // Método 4: fechar surveys/dialogs genéricos
     const dismiss = document.querySelector(
       'button[id="dismiss-button"], tp-yt-paper-button#dismiss-button'
     );
     if (dismiss && dismiss.offsetParent !== null) {
       dismiss.click();
-      console.log("[YT Ad Skipper] ⏭️ Dialog fechado");
       return true;
     }
 
     return false;
   }
 
-  // ── Stats ─────────────────────────────────────────────
+  // ── Anti-Adblock: fechar popup do YouTube ─────────────
+  // O YouTube mostra um dialog pedindo pra desativar adblock.
+  // Essa função detecta e fecha silenciosamente.
 
-  function incrementStats() {
-    if (chrome?.storage?.local) {
-      chrome.storage.local.get({ adsSkipped: 0, timeSaved: 0 }, (data) => {
-        let saved = 0;
-        const video = document.querySelector("video");
-        if (video && isFinite(video.duration) && video.duration > 0) {
-           saved = Math.round(video.duration);
-        } else {
-           saved = adState.startTime ? Math.round((Date.now() - adState.startTime) / 1000) : 0;
+  function dismissAdblockWarning() {
+    // Dialog principal do YouTube anti-adblock
+    const selectors = [
+      // Popup "Ad blockers are not allowed on YouTube"
+      'ytd-enforcement-message-view-model',
+      'tp-yt-paper-dialog.ytd-enforcement-message-view-model',
+      '#dismiss-button',
+      // Overlay de bloqueio
+      'ytd-popup-container tp-yt-paper-dialog',
+      // Botão "Allow YouTube Ads" / dismiss
+      '.yt-adblocker-dialog-renderer button',
+      'ytd-mealbar-promo-renderer #dismiss-button',
+    ];
+
+    for (const sel of selectors) {
+      const el = document.querySelector(sel);
+      if (el) {
+        // Tentar fechar via botão dismiss dentro do dialog
+        const dismissBtn = el.querySelector('#dismiss-button') ||
+                          el.querySelector('button[aria-label="Close"]') ||
+                          el.querySelector('.dismiss-button') ||
+                          el.querySelector('tp-yt-paper-button#dismiss-button');
+        if (dismissBtn && dismissBtn.offsetParent !== null) {
+          dismissBtn.click();
+          return true;
         }
-
-        chrome.storage.local.set({
-          adsSkipped: data.adsSkipped + 1,
-          timeSaved: data.timeSaved + saved,
-        });
-      });
+        // Se o próprio elemento for um botão dismiss
+        if (el.tagName === 'BUTTON' || el.tagName === 'TP-YT-PAPER-BUTTON') {
+          if (el.offsetParent !== null) {
+            el.click();
+            return true;
+          }
+        }
+      }
     }
+
+    // Fallback: procurar por texto nos dialogs
+    const dialogs = document.querySelectorAll('tp-yt-paper-dialog, ytd-popup-container');
+    for (const dialog of dialogs) {
+      const text = (dialog.textContent || '').toLowerCase();
+      if (text.includes('ad blocker') || text.includes('bloqueador') || 
+          text.includes('adblock') || text.includes('anúncio bloqueado')) {
+        const closeBtn = dialog.querySelector('#dismiss-button, button.dismiss, [aria-label="Close"]');
+        if (closeBtn) {
+          closeBtn.click();
+          return true;
+        }
+        // Último recurso: remover o dialog do DOM
+        dialog.remove();
+        return true;
+      }
+    }
+
+    return false;
   }
 
-  // ── Overlay ───────────────────────────────────────────
+  // ── Overlay (com IDs ofuscados) ───────────────────────
+  // Usa nomes que parecem nativos do YouTube para não serem detectados
+
+  const OVERLAY_ID = "ytp-iv-player-content";     // parece nativo do YT
+  const TIMER_ID = "ytp-tooltip-duration";         // parece nativo do YT
+  const STYLE_ID = "ytp-style-corrections";        // parece nativo do YT
 
   function injectStyles() {
-    if (document.getElementById("yt-adskip-styles")) return;
+    if (document.getElementById(STYLE_ID)) return;
     const style = document.createElement("style");
-    style.id = "yt-adskip-styles";
+    style.id = STYLE_ID;
     style.textContent = `
-      #yt-adskip-overlay {
+      #${OVERLAY_ID} {
         position: absolute;
         top: 24px;
         right: 24px;
@@ -204,29 +242,25 @@
         pointer-events: auto;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
       }
-      
-      #yt-adskip-overlay .adskip-title {
+
+      #${OVERLAY_ID} .ytp-ad-text {
         font-size: 13px; font-weight: 500; text-align: center;
         opacity: 0.9; margin-bottom: 2px;
       }
-      
-      #yt-adskip-overlay .adskip-countdown {
+
+      #${OVERLAY_ID} .ytp-ad-timer-text {
         font-size: 16px; font-weight: 600; text-align: center;
       }
-      
-      #yt-adskip-overlay .adskip-label {
-        font-size: 10px; text-align: center; opacity: 0.7; margin-bottom: 5px;
-      }
-      
-      #yt-adskip-overlay button {
+
+      #${OVERLAY_ID} button {
         border: none; border-radius: 4px; padding: 6px 12px;
         font-size: 12px; font-weight: 500; cursor: pointer;
         font-family: inherit; width: 100%;
         background: rgba(255,255,255,0.15); color: #fff;
         transition: background 0.2s;
       }
-      
-      #yt-adskip-overlay button:hover {
+
+      #${OVERLAY_ID} button:hover {
         background: rgba(255,255,255,0.25);
       }
     `;
@@ -241,14 +275,14 @@
     if (!player) return;
 
     const overlay = document.createElement("div");
-    overlay.id = "yt-adskip-overlay";
+    overlay.id = OVERLAY_ID;
 
     const delay = config.skipDelay;
 
     overlay.innerHTML = `
-      <div class="adskip-title">Auto Pular Anúncio</div>
-      <div class="adskip-countdown" id="adskip-timer">${delay}s</div>
-      <button class="adskip-btn-watch">Assistir Anúncio</button>
+      <div class="ytp-ad-text">Auto Pular Anúncio</div>
+      <div class="ytp-ad-timer-text" id="${TIMER_ID}">${delay}s</div>
+      <button class="ytp-ad-watch">Assistir Anúncio</button>
     `;
 
     player.style.position = "relative";
@@ -256,7 +290,7 @@
     adState.overlayEl = overlay;
 
     // Assistir
-    const watchBtn = overlay.querySelector(".adskip-btn-watch");
+    const watchBtn = overlay.querySelector(".ytp-ad-watch");
     if (watchBtn) {
       watchBtn.addEventListener("click", () => {
         adState.watching = true;
@@ -271,32 +305,33 @@
       if (!adState.skipTargetTime) return;
       let remaining = Math.ceil((adState.skipTargetTime - Date.now()) / 1000);
       if (remaining < 0) remaining = 0;
-      
-      const timerEl = document.querySelector("#adskip-timer");
+
+      const timerEl = document.getElementById(TIMER_ID);
       if (timerEl) timerEl.textContent = remaining + "s";
-      
+
       if (remaining <= 0) clearInterval(adState.countdownInterval);
     }, 200);
   }
 
   function removeOverlay() {
-    document.querySelectorAll("#yt-adskip-overlay").forEach(el => el.remove());
+    document.querySelectorAll("#" + OVERLAY_ID).forEach(el => el.remove());
     adState.overlayEl = null;
     clearInterval(adState.countdownInterval);
   }
 
-  // ── Agendar skip ──────────────────────────────────────
+  // ── Agendar skip (com randomização) ───────────────────
 
   function scheduleSkip() {
     clearTimeout(adState.skipTimer);
     clearInterval(adState.countdownInterval);
 
     adState.targetSkipReached = false;
-    
-    adState.skipTargetTime = Date.now() + (config.skipDelay * 1000);
+
+    const actualDelay = humanDelay(config.skipDelay * 1000);
+    adState.skipTargetTime = Date.now() + actualDelay;
     adState.skipTimer = setTimeout(() => {
       adState.targetSkipReached = true;
-    }, config.skipDelay * 1000);
+    }, actualDelay);
   }
 
   // ── Mute/unmute ───────────────────────────────────────
@@ -306,15 +341,15 @@
     const video = document.querySelector("video");
     if (video && !video.muted) {
       video.muted = true;
-      video.__adSkipperMuted = true;
+      video.__ytpMuted = true;
     }
   }
 
   function unmuteVideo() {
     const video = document.querySelector("video");
-    if (video && video.__adSkipperMuted) {
+    if (video && video.__ytpMuted) {
       video.muted = false;
-      video.__adSkipperMuted = false;
+      video.__ytpMuted = false;
     }
   }
 
@@ -323,15 +358,16 @@
   function mainLoop() {
     if (!config.enabled) return;
 
+    // Sempre tentar fechar popup anti-adblock
+    dismissAdblockWarning();
+
     const adPlaying = getAdPlaying();
 
     if (adPlaying && !adState.active) {
       // ── Anúncio COMEÇOU ───
       adState.active = true;
       adState.watching = false;
-      adState.hasSkippedStats = false;
       adState.startTime = Date.now();
-      console.log("[YT Ad Skipper] 🎯 Anúncio de vídeo ativo");
 
       muteVideo();
       scheduleSkip();
@@ -340,57 +376,48 @@
     } else if (adPlaying && adState.active) {
       // ── Anúncio ainda ativo — tick ───
       if (adState.targetSkipReached && !adState.watching) {
-        // Acelera o vídeo no máximo para estourar o limite se Aggressive Mode estiver ligado
+        // Acelera moderadamente (2x em vez de 16x para não disparar alertas)
         const video = document.querySelector("video");
         if (config.aggressiveSkip && video) {
-          video.playbackRate = 16;
+          video.playbackRate = 2;
         }
 
         const skipped = clickSkipAdBtn();
         if (skipped) {
-          if (!adState.hasSkippedStats) { incrementStats(); adState.hasSkippedStats = true; }
           removeOverlay();
           adState.targetSkipReached = false;
-        } else {
-          // Avança para o fim do anúncio progressivamente se agressivo
-          if (config.aggressiveSkip && video && isFinite(video.duration) && video.duration > 0) {
-            const targetTime = video.duration - 0.5;
-            if (video.currentTime < targetTime - 1) {
-              video.currentTime = targetTime;
-            }
-          }
         }
+        // REMOVIDO: seek agressivo para o final do anúncio (video.currentTime = targetTime)
+        // Isso era muito detectável pelo YouTube
       }
     } else if (!adPlaying && adState.active) {
       // ── Anúncio ACABOU ───
-      if (adState.targetSkipReached && !adState.hasSkippedStats && !adState.watching) {
-          incrementStats();
-          adState.hasSkippedStats = true;
-      }
       adState.active = false;
       adState.currentAd = undefined;
       clearTimeout(adState.skipTimer);
       removeOverlay();
       unmuteVideo();
-      console.log("[YT Ad Skipper] ✅ Anúncio finalizado");
+
+      // Restaurar playbackRate normal
+      const video = document.querySelector("video");
+      if (video && video.playbackRate !== 1) {
+        video.playbackRate = 1;
+      }
     } else if (!adPlaying && !adState.active) {
-      // Fallback: se algo bugar o DOM do Youtube, destrói agressivamente o popup se for tela limpa
-      const orphans = document.querySelectorAll("#yt-adskip-overlay");
+      // Fallback: limpar overlays órfãos
+      const orphans = document.querySelectorAll("#" + OVERLAY_ID);
       if (orphans.length > 0) orphans.forEach(el => el.remove());
     }
   }
 
   // ── Init ──────────────────────────────────────────────
 
-  // Não rodar dentro de iframes (YouTube tem vários)
   function isInIframe() {
     try { return window.self !== window.top; } catch (e) { return true; }
   }
 
   function init() {
     if (isInIframe()) return;
-
-    console.log("[YT Ad Skipper] 🚀 v2.1 — Extensão iniciada!");
     setInterval(mainLoop, CHECK_INTERVAL);
   }
 
