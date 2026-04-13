@@ -20,13 +20,20 @@ const toggleAggressive = document.getElementById("toggle-aggressive");
 const skipDelaySlider  = document.getElementById("skip-delay");
 const delayDisplay     = document.getElementById("delay-display");
 const delayHint        = document.getElementById("delay-hint");
-const globalNote       = document.getElementById("global-note");
 const blockDelay       = document.getElementById("block-delay");
 const statusPip        = document.querySelector(".status-pip");
 const statusLabel      = document.getElementById("status-text");
 const container        = document.querySelector(".popup-container");
 const warningRow       = document.getElementById("warning-row");
 const warningText      = document.getElementById("warning-text");
+
+const notes = {
+  enabled: document.getElementById("note-enabled"),
+  skipDelay: document.getElementById("note-delay"),
+  muteAds: document.getElementById("note-mute"),
+  showOverlay: document.getElementById("note-overlay"),
+  aggressiveSkip: document.getElementById("note-aggressive")
+};
 
 let initialState = {};
 
@@ -101,18 +108,10 @@ function checkChanges() {
     aggressiveSkip: toggleAggressive.checked
   };
 
-  let changed = false;
   for (const key in current) {
-    if (current[key] !== initialState[key]) {
-      changed = true;
-      break;
+    if (notes[key]) {
+      notes[key].style.display = current[key] !== initialState[key] ? "block" : "none";
     }
-  }
-
-  if (changed) {
-    globalNote.style.display = "block";
-  } else {
-    globalNote.style.display = "none";
   }
 }
 
