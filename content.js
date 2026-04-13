@@ -121,7 +121,7 @@
     for (const className of _skipClasses) {
       const elems = document.getElementsByClassName(className);
       for (const el of elems) {
-        if (el) {
+        if (el && (el.offsetParent !== null || el.offsetWidth > 0)) {
           el.click();
           return true;
         }
