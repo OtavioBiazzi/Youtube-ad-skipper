@@ -20,7 +20,7 @@ const toggleAggressive = document.getElementById("toggle-aggressive");
 const skipDelaySlider  = document.getElementById("skip-delay");
 const delayDisplay     = document.getElementById("delay-display");
 const delayHint        = document.getElementById("delay-hint");
-const delayNote        = document.getElementById("delay-note");
+const globalNote       = document.getElementById("global-note");
 const blockDelay       = document.getElementById("block-delay");
 const statusPip        = document.querySelector(".status-pip");
 const statusLabel      = document.getElementById("status-text");
@@ -28,7 +28,7 @@ const container        = document.querySelector(".popup-container");
 const warningRow       = document.getElementById("warning-row");
 const warningText      = document.getElementById("warning-text");
 
-let initialDelay = 1;
+let initialState = {};
 
 // ── Load settings ────────────────────────────────
 
@@ -38,7 +38,14 @@ chrome.storage.local.get(DEFAULT_SETTINGS, (s) => {
   toggleOverlay.checked    = s.showOverlay;
   toggleAggressive.checked = s.aggressiveSkip;
   skipDelaySlider.value    = s.skipDelay;
-  initialDelay             = s.skipDelay;
+
+  initialState = {
+    enabled: s.enabled,
+    skipDelay: s.skipDelay,
+    muteAds: s.muteAds,
+    showOverlay: s.showOverlay,
+    aggressiveSkip: s.aggressiveSkip
+  };
 
   renderDelay(s.skipDelay);
   renderStatus(s.enabled);
@@ -53,20 +60,24 @@ toggleEnabled.addEventListener("change", () => {
   const on = toggleEnabled.checked;
   chrome.storage.local.set({ enabled: on });
   renderStatus(on);
+  checkChanges();
 });
 
 toggleMute.addEventListener("change", () => {
   chrome.storage.local.set({ muteAds: toggleMute.checked });
+  checkChanges();
 });
 
 toggleOverlay.addEventListener("change", () => {
   chrome.storage.local.set({ showOverlay: toggleOverlay.checked });
+  checkChanges();
 });
 
 toggleAggressive.addEventListener("change", () => {
   const on = toggleAggressive.checked;
   chrome.storage.local.set({ aggressiveSkip: on });
   renderAggressiveState(on);
+  checkChanges();
 });
 
 skipDelaySlider.addEventListener("input", () => {
@@ -74,16 +85,36 @@ skipDelaySlider.addEventListener("input", () => {
   renderDelay(v);
   renderSliderTrack();
   chrome.storage.local.set({ skipDelay: v });
-
-  // Mostrar aviso se o delay mudou e é diferente do original
-  if (v !== initialDelay) {
-    delayNote.style.display = "block";
-  } else {
-    delayNote.style.display = "none";
-  }
+  checkChanges();
 });
 
 // ── Render helpers ───────────────────────────────
+
+function checkChanges() {
+  if (!initialState || Object.keys(initialState).length === 0) return;
+
+  const current = {
+    enabled: toggleEnabled.checked,
+    skipDelay: parseInt(skipDelaySlider.value, 10),
+    muteAds: toggleMute.checked,
+    showOverlay: toggleOverlay.checked,
+    aggressiveSkip: toggleAggressive.checked
+  };
+
+  let changed = false;
+  for (const key in current) {
+    if (current[key] !== initialState[key]) {
+      changed = true;
+      break;
+    }
+  }
+
+  if (changed) {
+    globalNote.style.display = "block";
+  } else {
+    globalNote.style.display = "none";
+  }
+}
 
 function renderDelay(seconds) {
   delayDisplay.textContent = seconds + "s";
