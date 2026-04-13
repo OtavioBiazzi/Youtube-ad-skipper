@@ -98,15 +98,18 @@
   // Isso é mais robusto e menos dependente de uma única classe CSS
 
   function getAdPlaying() {
-    // Método 1: classe no player (original)
+    // Método 1: classe no player (original e mais confiável)
     const player = document.querySelector(".html5-video-player");
     if (player && player.classList.contains("ad-showing")) return true;
 
-    // Método 2: elementos de UI do anúncio (como o yt-ad-autoskipper faz)
-    const adBadge = document.querySelector(".ytp-ad-badge") ||
-                    document.querySelector(".ytp-ad-visit-advertiser-button") ||
-                    document.querySelector(".ytp-visit-advertiser-link");
-    if (adBadge) return true;
+    // Método 2: elementos de UI do anúncio com verificação real de visibilidade
+    const badges = document.querySelectorAll(".ytp-ad-badge, .ytp-ad-visit-advertiser-button, .ytp-visit-advertiser-link");
+    for (const badge of badges) {
+      // Se possui dimensões reais, está visível na tela
+      if (badge && (badge.offsetWidth > 0 || badge.offsetHeight > 0)) {
+        return true;
+      }
+    }
 
     return false;
   }
