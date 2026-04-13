@@ -152,61 +152,170 @@
     return false;
   }
 
-  // ── Anti-Adblock: fechar popup do YouTube ─────────────
-  // O YouTube mostra um dialog pedindo pra desativar adblock.
-  // Essa função detecta e fecha silenciosamente.
+  // ── Anti-Adblock: SISTEMA TRIPLO ────────────────────────
+  // Camada 1: CSS injection — esconde o dialog ANTES de renderizar
+  // Camada 2: MutationObserver — remove do DOM no instante que aparece (0ms)
+  // Camada 3: Polling fallback — varredura a cada 200ms como rede de segurança
 
-  function dismissAdblockWarning() {
-    // Dialog principal do YouTube anti-adblock
-    const selectors = [
-      // Popup "Ad blockers are not allowed on YouTube"
-      'ytd-enforcement-message-view-model',
-      'tp-yt-paper-dialog.ytd-enforcement-message-view-model',
-      '#dismiss-button',
-      // Overlay de bloqueio
-      'ytd-popup-container tp-yt-paper-dialog',
-      // Botão "Allow YouTube Ads" / dismiss
-      '.yt-adblocker-dialog-renderer button',
-      'ytd-mealbar-promo-renderer #dismiss-button',
-    ];
+  // Seletores dos elementos anti-adblock do YouTube
+  const _abSelectors = [
+    'ytd-enforcement-message-view-model',
+    'ytd-mealbar-promo-renderer[data-style="ENFORCEMENT"]',
+    '#enforcement-message-view-model',
+    'tp-yt-paper-dialog:has(ytd-enforcement-message-view-model)',
+    'ytd-popup-container tp-yt-paper-dialog:has(.ytd-enforcement-message-view-model)',
+  ];
 
-    for (const sel of selectors) {
-      const el = document.querySelector(sel);
-      if (el) {
-        // Tentar fechar via botão dismiss dentro do dialog
-        const dismissBtn = el.querySelector('#dismiss-button') ||
-                          el.querySelector('button[aria-label="Close"]') ||
-                          el.querySelector('.dismiss-button') ||
-                          el.querySelector('tp-yt-paper-button#dismiss-button');
-        if (dismissBtn && dismissBtn.offsetParent !== null) {
-          dismissBtn.click();
-          return true;
-        }
-        // Se o próprio elemento for um botão dismiss
-        if (el.tagName === 'BUTTON' || el.tagName === 'TP-YT-PAPER-BUTTON') {
-          if (el.offsetParent !== null) {
-            el.click();
-            return true;
-          }
-        }
+  // Tag names que o YouTube usa para o dialog de enforcement
+  const _abTagNames = [
+    'YTD-ENFORCEMENT-MESSAGE-VIEW-MODEL',
+  ];
+
+  // ── Camada 1: CSS Preemptivo ──────────────────────────
+  // Injeta CSS que esconde o dialog ANTES dele aparecer visualmente.
+  // Mesmo que demore 1 frame para o MutationObserver agir,
+  // o CSS garante que o user nunca vê o popup.
+
+  function injectAntiAdblockCSS() {
+    const id = 'ytp-css-patch-ab';
+    if (document.getElementById(id)) return;
+    const s = document.createElement('style');
+    s.id = id;
+    s.textContent = `
+      ytd-enforcement-message-view-model,
+      tp-yt-paper-dialog:has(ytd-enforcement-message-view-model),
+      tp-yt-paper-dialog.ytd-enforcement-message-view-model,
+      ytd-popup-container tp-yt-paper-dialog:has(#enforcement-message-view-model),
+      iron-overlay-backdrop {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+        width: 0 !important;
+        height: 0 !important;
+        overflow: hidden !important;
+        position: fixed !important;
+        top: -9999px !important;
+        left: -9999px !important;
+      }
+    `;
+    (document.head || document.documentElement).appendChild(s);
+  }
+
+  // Injetar CSS o mais cedo possível
+  injectAntiAdblockCSS();
+
+  // ── Camada 2: MutationObserver (instantâneo) ──────────
+  // Observa o DOM inteiro. Quando o YouTube adiciona o dialog,
+  // ele é removido antes do próximo frame de pintura.
+
+  function nukeAdblockElement(el) {
+    if (!el) return;
+    // Remover do DOM completamente
+    el.remove();
+    // Se houver backdrop/overlay escuro atrás, remover também
+    const backdrops = document.querySelectorAll('iron-overlay-backdrop, tp-yt-paper-dialog-backdrop');
+    backdrops.forEach(b => b.remove());
+    // Restaurar scroll caso o YouTube tenha travado o body
+    document.body.style.overflow = '';
+    document.documentElement.style.overflow = '';
+  }
+
+  function checkAndNukeNode(node) {
+    if (!node || node.nodeType !== 1) return;
+
+    // Check direto pelo tagName
+    if (_abTagNames.includes(node.tagName)) {
+      nukeAdblockElement(node);
+      return;
+    }
+
+    // Check se é um tp-yt-paper-dialog que contém enforcement
+    if (node.tagName === 'TP-YT-PAPER-DIALOG') {
+      const inner = node.querySelector('ytd-enforcement-message-view-model');
+      if (inner) {
+        nukeAdblockElement(node);
+        return;
+      }
+      // Check por texto
+      const text = (node.textContent || '').toLowerCase();
+      if (text.includes('bloqueador') || text.includes('ad blocker') ||
+          text.includes('proibidos') || text.includes('not allowed')) {
+        nukeAdblockElement(node);
+        return;
       }
     }
 
-    // Fallback: procurar por texto nos dialogs
-    const dialogs = document.querySelectorAll('tp-yt-paper-dialog, ytd-popup-container');
-    for (const dialog of dialogs) {
-      const text = (dialog.textContent || '').toLowerCase();
-      if (text.includes('ad blocker') || text.includes('bloqueador') || 
-          text.includes('adblock') || text.includes('anúncio bloqueado')) {
-        const closeBtn = dialog.querySelector('#dismiss-button, button.dismiss, [aria-label="Close"]');
-        if (closeBtn) {
-          closeBtn.click();
-          return true;
+    // Check filhos (caso o elemento adicionado seja um container pai)
+    for (const sel of _abSelectors) {
+      try {
+        const found = node.querySelector(sel);
+        if (found) {
+          nukeAdblockElement(found.closest('tp-yt-paper-dialog') || found);
+          return;
         }
-        // Último recurso: remover o dialog do DOM
-        dialog.remove();
+      } catch (e) { /* :has() pode não funcionar em querySelector em todos os browsers */ }
+    }
+  }
+
+  function startAdblockObserver() {
+    const observer = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        for (const node of mutation.addedNodes) {
+          checkAndNukeNode(node);
+        }
+      }
+    });
+
+    observer.observe(document.body || document.documentElement, {
+      childList: true,
+      subtree: true,
+    });
+  }
+
+  // Iniciar o observer assim que o body existir
+  if (document.body) {
+    startAdblockObserver();
+  } else {
+    const bodyWait = new MutationObserver(() => {
+      if (document.body) {
+        bodyWait.disconnect();
+        startAdblockObserver();
+      }
+    });
+    bodyWait.observe(document.documentElement, { childList: true });
+  }
+
+  // ── Camada 3: Polling fallback ────────────────────────
+  // Rede de segurança caso o Observer não pegue algum caso edge
+
+  function dismissAdblockWarning() {
+    // Tentar remover elementos de enforcement diretamente
+    const enforcement = document.querySelector('ytd-enforcement-message-view-model');
+    if (enforcement) {
+      const dialog = enforcement.closest('tp-yt-paper-dialog') || enforcement;
+      nukeAdblockElement(dialog);
+      return true;
+    }
+
+    // Procurar por texto nos dialogs abertos
+    const dialogs = document.querySelectorAll('tp-yt-paper-dialog');
+    for (const dialog of dialogs) {
+      if (dialog.offsetParent === null && dialog.style.display === 'none') continue;
+      const text = (dialog.textContent || '').toLowerCase();
+      if (text.includes('bloqueador') || text.includes('ad blocker') ||
+          text.includes('proibidos') || text.includes('not allowed') ||
+          text.includes('adblock')) {
+        nukeAdblockElement(dialog);
         return true;
       }
+    }
+
+    // Fechar mealbar promos
+    const mealbar = document.querySelector('ytd-mealbar-promo-renderer #dismiss-button');
+    if (mealbar && mealbar.offsetParent !== null) {
+      mealbar.click();
+      return true;
     }
 
     return false;
