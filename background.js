@@ -4,12 +4,12 @@ const ICONS = {
     "128": "icon128.png"
   },
   passive: {
-    "48": "icon48_passive.png",
-    "128": "icon128_passive.png"
+    "48": "icon48_stealth.png",
+    "128": "icon128_stealth.png"
   },
   disabled: {
-    "48": "icon48_disabled.png",
-    "128": "icon128_disabled.png"
+    "48": "icon48_off.png",
+    "128": "icon128_off.png"
   }
 };
 
