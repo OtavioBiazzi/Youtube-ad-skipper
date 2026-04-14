@@ -9,6 +9,7 @@ const DEFAULT_SETTINGS = {
   showOverlay: true,
   aggressiveSkip: true,
   warningCount: 0,
+  theme: "dark",
 };
 
 // ── Elements ─────────────────────────────────────
@@ -45,6 +46,8 @@ chrome.storage.local.get(DEFAULT_SETTINGS, (s) => {
   toggleOverlay.checked    = s.showOverlay;
   toggleAggressive.checked = s.aggressiveSkip;
   skipDelaySlider.value    = s.skipDelay;
+  
+  document.body.classList.toggle("light-theme", s.theme === "light");
 
   initialState = {
     enabled: s.enabled,
@@ -174,6 +177,9 @@ function renderWarnings(count) {
 chrome.storage.onChanged.addListener((changes) => {
   if (changes.warningCount) {
     renderWarnings(changes.warningCount.newValue || 0);
+  }
+  if (changes.theme) {
+    document.body.classList.toggle("light-theme", changes.theme.newValue === "light");
   }
 });
 

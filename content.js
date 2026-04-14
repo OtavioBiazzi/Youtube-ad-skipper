@@ -21,6 +21,7 @@
     muteAds: true,
     showOverlay: true,
     aggressiveSkip: true,
+    theme: "dark",
   };
 
   const CHECK_INTERVAL = 200;
@@ -65,13 +66,14 @@
   function loadSettings() {
     if (chrome?.storage?.local) {
       chrome.storage.local.get(
-        { enabled: true, skipDelay: 1, muteAds: true, showOverlay: true, aggressiveSkip: true, warningCount: 0 },
+        { enabled: true, skipDelay: 1, muteAds: true, showOverlay: true, aggressiveSkip: true, warningCount: 0, theme: "dark" },
         (s) => {
           config.enabled = s.enabled;
           config.skipDelay = s.skipDelay;
           config.muteAds = s.muteAds;
           config.showOverlay = s.showOverlay;
           config.aggressiveSkip = s.aggressiveSkip;
+          config.theme = s.theme;
           adState.warningCount = s.warningCount || 0;
         }
       );
@@ -87,6 +89,7 @@
       if (changes.muteAds) config.muteAds = changes.muteAds.newValue;
       if (changes.showOverlay) config.showOverlay = changes.showOverlay.newValue;
       if (changes.aggressiveSkip) config.aggressiveSkip = changes.aggressiveSkip.newValue;
+      if (changes.theme) config.theme = changes.theme.newValue;
     });
   }
 
@@ -351,6 +354,23 @@
       #${OVERLAY_ID} button:hover {
         background: rgba(255,255,255,0.25);
       }
+
+      /* Light Theme Variations */
+      #${OVERLAY_ID}.light-theme {
+        background: rgba(255, 255, 255, 0.95);
+        border: 1px solid rgba(0, 0, 0, 0.1);
+        color: #0f0f0f;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      }
+      
+      #${OVERLAY_ID}.light-theme button {
+        background: rgba(0, 0, 0, 0.05);
+        color: #0f0f0f;
+      }
+      
+      #${OVERLAY_ID}.light-theme button:hover {
+        background: rgba(0, 0, 0, 0.1);
+      }
     `;
     document.head.appendChild(style);
   }
@@ -364,6 +384,9 @@
 
     const overlay = document.createElement("div");
     overlay.id = OVERLAY_ID;
+    if (config.theme === "light") {
+      overlay.classList.add("light-theme");
+    }
 
     const delay = config.skipDelay;
 

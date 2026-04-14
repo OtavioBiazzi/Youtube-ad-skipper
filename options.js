@@ -9,6 +9,7 @@ const DEFAULT = {
   showOverlay: true,
   aggressiveSkip: true,
   warningCount: 0,
+  theme: "dark",
 };
 
 // ── Elements ─────────────────────────────────────
@@ -28,6 +29,7 @@ const warningText   = document.getElementById("warning-text");
 const versionTag    = document.getElementById("version-tag");
 const btnReset      = document.getElementById("btn-reset");
 const aggressiveHint = document.getElementById("aggressive-hint");
+const themeBtns     = document.querySelectorAll(".theme-btn");
 
 // ── Load ─────────────────────────────────────────
 
@@ -43,6 +45,7 @@ chrome.storage.local.get(DEFAULT, (s) => {
   renderMode(s.aggressiveSkip);
   renderWarnings(s.warningCount || 0);
   renderSlider();
+  renderTheme(s.theme);
 });
 
 // Get version from manifest
@@ -79,6 +82,13 @@ optDelay.addEventListener("input", () => {
   chrome.storage.local.set({ skipDelay: v });
   renderDelay(v);
   renderSlider();
+});
+
+themeBtns.forEach(btn => {
+  btn.addEventListener("click", () => {
+    const theme = btn.dataset.theme;
+    chrome.storage.local.set({ theme });
+  });
 });
 
 btnReset.addEventListener("click", () => {
@@ -123,6 +133,17 @@ function renderMode(aggressive) {
   statMode.style.color = aggressive ? "hsl(355, 65%, 52%)" : "hsl(200, 70%, 55%)";
 }
 
+function renderTheme(theme) {
+  document.body.classList.toggle("light-theme", theme === "light");
+  themeBtns.forEach(btn => {
+    if (btn.dataset.theme === theme) {
+      btn.classList.add("active");
+    } else {
+      btn.classList.remove("active");
+    }
+  });
+}
+
 function renderWarnings(count) {
   statWarnings.textContent = count;
 
@@ -141,4 +162,5 @@ chrome.storage.onChanged.addListener((changes) => {
   if (changes.warningCount) renderWarnings(changes.warningCount.newValue || 0);
   if (changes.enabled) renderStatus(changes.enabled.newValue);
   if (changes.aggressiveSkip) renderMode(changes.aggressiveSkip.newValue);
+  if (changes.theme) renderTheme(changes.theme.newValue);
 });

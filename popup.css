@@ -41,6 +41,25 @@
   --radius-sm:  8px;
   --font:       'Outfit', system-ui, -apple-system, sans-serif;
   --mono:       'JetBrains Mono', ui-monospace, monospace;
+}
+
+body.light-theme {
+  --bg:         #fafafa;
+  --surface:    rgba(0, 0, 0, 0.03);
+  --border:     rgba(0, 0, 0, 0.08);
+  --border-h:   rgba(0, 0, 0, 0.15);
+  --text-1:     #18181b;
+  --text-2:     #52525b;
+  --text-3:     #a1a1aa;
+  --accent:     hsl(355, 75%, 45%);
+  --accent-dim: hsl(355, 65%, 40%);
+  --accent-bg:  hsla(355, 65%, 52%, 0.1);
+  --accent-border: hsla(355, 65%, 52%, 0.2);
+  --green:      hsl(152, 65%, 35%);
+  --green-bg:   hsla(152, 55%, 42%, 0.1);
+  --green-border: hsla(152, 55%, 42%, 0.2);
+  --glass-inner: 0 0 0 1px rgba(0,0,0,0.05) inset;
+}
 
   /* Liquid glass inner refraction */
   --glass-inner-border: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
