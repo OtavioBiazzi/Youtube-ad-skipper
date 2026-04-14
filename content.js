@@ -409,9 +409,21 @@
   function scheduleSkip() {
     clearTimeout(adState.skipTimer);
     clearInterval(adState.countdownInterval);
-
     adState.targetSkipReached = false;
 
+    // Leitura FRESCA do storage para garantir que o valor
+    // do slider é respeitado, mesmo sem F5.
+    if (chrome?.storage?.local) {
+      chrome.storage.local.get({ skipDelay: 1 }, (s) => {
+        config.skipDelay = s.skipDelay;
+        _startSkipTimer();
+      });
+    } else {
+      _startSkipTimer();
+    }
+  }
+
+  function _startSkipTimer() {
     const actualDelay = humanDelay(config.skipDelay * 1000);
     adState.skipTargetTime = Date.now() + actualDelay;
     adState.skipTimer = setTimeout(() => {
@@ -489,6 +501,7 @@
       adState.active = false;
       adState.currentAd = undefined;
       adState._speedRamp = 0;
+      adState.targetSkipReached = false;
       clearTimeout(adState.skipTimer);
       removeOverlay();
       unmuteVideo();
