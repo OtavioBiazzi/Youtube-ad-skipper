@@ -432,3 +432,26 @@ body {
   font-style: italic;
   margin-top: 8px;
 }
+
+/* ── Settings Gear Button ─────────────────────── */
+
+.header-settings {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  width: 32px; height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: all 0.25s;
+  margin-left: 8px;
+}
+
+.header-settings:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: hsla(355, 65%, 52%, 0.1);
+  transform: rotate(45deg);
+}

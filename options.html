@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Ad Skipper — Configurações</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="page">
+
+    <!-- ═══ Header ═══ -->
+    <header class="header">
+      <div class="header-left">
+        <div class="header-mark">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+          </svg>
+        </div>
+        <div>
+          <h1 class="header-title">Ad Skipper</h1>
+          <span class="header-sub">Painel de Configurações</span>
+        </div>
+      </div>
+      <span class="header-version" id="version-tag">v3.2</span>
+    </header>
+
+    <!-- ═══ Grid Layout ═══ -->
+    <div class="grid">
+
+      <!-- ── Card: Status Geral ── -->
+      <div class="card card--wide">
+        <div class="card-header">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          <span>Status Geral</span>
+        </div>
+        <div class="card-body">
+          <div class="stat-row">
+            <div class="stat">
+              <span class="stat-value" id="stat-warnings">0</span>
+              <span class="stat-label">Avisos Bloqueados</span>
+            </div>
+            <div class="stat">
+              <span class="stat-value" id="stat-status">Ativo</span>
+              <span class="stat-label">Estado da Extensão</span>
+            </div>
+            <div class="stat">
+              <span class="stat-value" id="stat-mode">Agressivo</span>
+              <span class="stat-label">Modo de Operação</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Card: Extensão ── -->
+      <div class="card">
+        <div class="card-header">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.32 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          <span>Controle Principal</span>
+        </div>
+        <div class="card-body">
+          <div class="opt-row">
+            <div class="opt-info">
+              <span class="opt-title">Extensão Ativa</span>
+              <span class="opt-desc">Liga ou desliga toda a extensão</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="opt-enabled" checked>
+              <span class="switch-track"></span>
+            </label>
+          </div>
+          <hr class="divider">
+          <div class="opt-row">
+            <div class="opt-info">
+              <span class="opt-title">Mutar Anúncios</span>
+              <span class="opt-desc">Silencia o áudio dos anúncios automaticamente</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="opt-mute" checked>
+              <span class="switch-track"></span>
+            </label>
+          </div>
+          <hr class="divider">
+          <div class="opt-row">
+            <div class="opt-info">
+              <span class="opt-title">Mostrar Overlay</span>
+              <span class="opt-desc">Exibe o countdown e o botão "Assistir Anúncio" no vídeo</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="opt-overlay" checked>
+              <span class="switch-track"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Card: Tempo para Pular ── -->
+      <div class="card">
+        <div class="card-header">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <span>Tempo para Pular</span>
+        </div>
+        <div class="card-body">
+          <div class="delay-display">
+            <span class="delay-value" id="opt-delay-value">1</span>
+            <span class="delay-unit">segundos</span>
+          </div>
+          <div class="range-wrap">
+            <input type="range" id="opt-delay" min="1" max="30" value="1" step="1" class="range">
+            <div class="range-labels"><span>1s</span><span>15s</span><span>30s</span></div>
+          </div>
+          <div class="hint" id="opt-delay-hint">Espera ~1s e depois pula o anúncio.</div>
+        </div>
+      </div>
+
+      <!-- ── Card: Modo Avançado ── -->
+      <div class="card">
+        <div class="card-header">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+          <span>Forçar Pulo Exato</span>
+        </div>
+        <div class="card-body">
+          <div class="opt-row">
+            <div class="opt-info">
+              <span class="opt-title">Modo Agressivo</span>
+              <span class="opt-desc">Quando ativado, a extensão usa métodos avançados para pular o anúncio no tempo exato que você configurar, mesmo que o YouTube tente bloquear o botão nos primeiros 5 segundos.</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="opt-aggressive" checked>
+              <span class="switch-track"></span>
+            </label>
+          </div>
+          <div class="hint hint--warn" id="aggressive-hint">
+            <strong>⚡ Ativo:</strong> Usa a API interna do YouTube (seekTo) para pular instantaneamente.<br>
+            <strong>🛡️ Desativado:</strong> Aguarda o botão de pular aparecer naturalmente (~5s).
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Card: Stealth ── -->
+      <div class="card">
+        <div class="card-header">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          <span>Modo Stealth</span>
+          <span class="tag tag--on">SEMPRE ON</span>
+        </div>
+        <div class="card-body">
+          <div class="process-list">
+            <div class="process">
+              <span class="process-pip pip--green"></span>
+              <span class="process-name">Bypass isTrusted</span>
+              <span class="process-status">Ativo</span>
+            </div>
+            <div class="process">
+              <span class="process-pip pip--green"></span>
+              <span class="process-name">Anti-Adblock CSS</span>
+              <span class="process-status">Ativo</span>
+            </div>
+            <div class="process">
+              <span class="process-pip pip--green"></span>
+              <span class="process-name">MutationObserver</span>
+              <span class="process-status">Ativo</span>
+            </div>
+            <div class="process">
+              <span class="process-pip pip--green"></span>
+              <span class="process-name">Polling Fallback</span>
+              <span class="process-status">200ms</span>
+            </div>
+            <div class="process">
+              <span class="process-pip pip--green"></span>
+              <span class="process-name">Mute Nativo</span>
+              <span class="process-status">Ativo</span>
+            </div>
+            <div class="process">
+              <span class="process-pip pip--green"></span>
+              <span class="process-name">Jitter Gaussiano</span>
+              <span class="process-status">Ativo</span>
+            </div>
+            <div class="process">
+              <span class="process-pip pip--green"></span>
+              <span class="process-name">CSS ID Dinâmico</span>
+              <span class="process-status">Ativo</span>
+            </div>
+          </div>
+          <div class="warning-box" id="warning-box">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <span id="warning-text">Nenhum aviso do YouTube interceptado.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Card: Sobre ── -->
+      <div class="card card--wide">
+        <div class="card-header">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+          <span>Sobre</span>
+        </div>
+        <div class="card-body">
+          <p class="about-text">
+            <strong>YouTube Ad Skipper</strong> automatiza o clique no botão "Pular Anúncio" usando técnicas stealth que simulam interação humana real.
+            Não é um ad-blocker — apenas automatiza o que você faria manualmente.
+          </p>
+          <div class="about-links">
+            <a href="https://github.com/OtavioBiazzi/Youtube-ad-skipper" target="_blank" class="about-link">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+              GitHub
+            </a>
+            <button class="about-link btn-reset" id="btn-reset">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+              Resetar Tudo
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /grid -->
+  </div><!-- /page -->
+
+  <script src="options.js"></script>
+</body>
+</html>

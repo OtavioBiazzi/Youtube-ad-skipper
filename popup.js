@@ -176,3 +176,9 @@ chrome.storage.onChanged.addListener((changes) => {
     renderWarnings(changes.warningCount.newValue || 0);
   }
 });
+
+// ── Open settings page ──────────────────────────
+
+document.getElementById("btn-open-settings").addEventListener("click", () => {
+  chrome.runtime.openOptionsPage();
+});
