@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  // ── Override addEventListener para bypass do isTrusted ────
+  // ── Classes do botão de pular (usadas para detecção) ────
   const _skipClasses = [
     "videoAdUiSkipButton",
     "ytp-ad-skip-button ytp-button",
@@ -9,26 +9,9 @@
     "ytp-skip-ad-button",
   ];
 
-  const _origAEL = HTMLElement.prototype.addEventListener;
-
-  HTMLElement.prototype.addEventListener = function (type, listener, options) {
-    if (type === "click" && _skipClasses.includes(this.className)) {
-      const wrapped = function (e) {
-        const h = {
-          get(_, prop) {
-            if (prop === "isTrusted") return true;
-            if (typeof e[prop] === "function") {
-              return function (...args) { return e[prop](...args); };
-            }
-            return e[prop];
-          },
-        };
-        return listener(new Proxy({}, h));
-      };
-      return _origAEL.call(this, type, wrapped, options);
-    }
-    return _origAEL.call(this, type, listener, options);
-  };
+  // NOTA: O bypass de isTrusted fica APENAS no override.js (world: MAIN).
+  // Colocar aqui no content script (mundo isolado) não afeta o YouTube
+  // e ainda cria uma assinatura detectável por fingerprinting de prototypes.
 
   // ── Configurações ─────────────────────────────────────
 
@@ -55,12 +38,26 @@
     warningCount: 0,   // conta quantas vezes o popup anti-adblock apareceu
   };
 
-  // ── Humanização — jitter aleatório ────────────────────
+  // ── Humanização — jitter Gaussiano ────────────────────
+  // Humanos reais têm tempo de reação que segue uma curva
+  // normal (Gaussiana), não linear. Isso é muito mais
+  // difícil de detectar como comportamento automático.
+
+  function gaussianRandom() {
+    // Box-Muller transform para gerar distribuição normal
+    let u = 0, v = 0;
+    while (u === 0) u = Math.random();
+    while (v === 0) v = Math.random();
+    return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+  }
 
   function humanDelay(baseMs) {
-    // ±30% de variação para parecer humano
-    const jitter = baseMs * (0.7 + Math.random() * 0.6);
-    return Math.round(jitter);
+    // Centro no baseMs, desvio padrão de 15% do base
+    // Resultado: 85% das vezes fica entre ±15% do valor configurado
+    const stdDev = baseMs * 0.15;
+    const delay = baseMs + gaussianRandom() * stdDev;
+    // Mínimo de 300ms (ninguém reage em menos que isso)
+    return Math.max(300, Math.round(delay));
   }
 
   // ── Carregar configurações ────────────────────────────
@@ -179,11 +176,13 @@
   ];
 
   // ── Camada 1: CSS Preemptivo ──────────────────────────
+  // ID dinâmico para evitar fingerprinting por ID fixo
+  const _cssId = 'ytp-' + Math.random().toString(36).slice(2, 10);
+
   function injectAntiAdblockCSS() {
-    const id = 'ytp-css-patch-ab';
-    if (document.getElementById(id)) return;
+    if (document.getElementById(_cssId)) return;
     const s = document.createElement('style');
-    s.id = id;
+    s.id = _cssId;
     s.textContent = `
       ytd-enforcement-message-view-model,
       tp-yt-paper-dialog:has(ytd-enforcement-message-view-model),
@@ -463,6 +462,7 @@
       adState.active = true;
       adState.watching = false;
       adState.startTime = Date.now();
+      adState._speedRamp = 0; // contador para aceleração progressiva
 
       muteVideo();
       scheduleSkip();
@@ -475,18 +475,10 @@
         // 1. Tentar clicar no botão nativamente (Stealth) se estiver visível
         const skipped = clickSkipAdBtn();
         
-        // 2. Se falhar (ex: botão bloqueado nos primeiros 5s do Youtube) e o "Forçar Pulo" estiver ON
-        if (!skipped) {
-          const video = document.querySelector("video");
-          if (config.aggressiveSkip && video) {
-            // Acelera de forma absurda (Força Bruta Indetectável em playbackRate)
-            video.playbackRate = 16.0;
-            // Se o vídeo for um ad unskippable longo, pula pro final pra forçar encerramento
-            if (video.duration > 0 && video.currentTime < video.duration - 1) {
-              video.currentTime = video.duration - 0.5;
-            }
-          }
-        } else {
+        if (!skipped && config.aggressiveSkip) {
+          // 2. Forçar Pulo: Estratégia de 3 camadas (da mais stealth pra menos)
+          forceSkipAd();
+        } else if (skipped) {
           // Se pulou na maciota (clique)
           removeOverlay();
           adState.targetSkipReached = false;
@@ -496,6 +488,7 @@
       // ── Anúncio ACABOU ───
       adState.active = false;
       adState.currentAd = undefined;
+      adState._speedRamp = 0;
       clearTimeout(adState.skipTimer);
       removeOverlay();
       unmuteVideo();
@@ -507,6 +500,54 @@
     } else if (!adPlaying && !adState.active) {
       const orphans = document.querySelectorAll("#" + OVERLAY_ID);
       if (orphans.length > 0) orphans.forEach(el => el.remove());
+    }
+  }
+
+  // ── Forçar pulo do anúncio (3 camadas stealth) ──────────
+  //
+  // Camada A: YouTube Player API (.seekTo) — usa o método interno que o
+  //           próprio YouTube usa quando VOCÊ arrasta a barra de progresso.
+  //           É o mais indetectável porque é o mesmo código nativo.
+  //
+  // Camada B: Aceleração Progressiva — em vez de pular pra 16x de uma vez
+  //           (que grita "robô"), sobe a velocidade aos poucos: 2→4→8.
+  //           Velocidade 2x é algo que o próprio usuário pode configurar
+  //           no YouTube, então é invisível. 4x e 8x são mais rápidas
+  //           mas ainda dentro do que extensões de velocidade fazem.
+  //
+  // Camada C: Seek direto — só se as outras falharem, pula pro final.
+
+  function forceSkipAd() {
+    const video = document.querySelector("video");
+    if (!video || !video.duration || video.duration <= 0) return;
+
+    // ── Camada A: YouTube Player API ──
+    const player = document.querySelector("#movie_player");
+    if (player && typeof player.seekTo === "function") {
+      // Pula pro último segundo do ad usando a API nativa do YouTube
+      player.seekTo(video.duration - 0.1, true);
+      return;
+    }
+
+    // ── Camada B: Aceleração Progressiva ──
+    // Sobe a velocidade gradualmente a cada tick (200ms)
+    adState._speedRamp = (adState._speedRamp || 0) + 1;
+
+    if (adState._speedRamp <= 2) {
+      // Primeiros 400ms: velocidade 2x (normal humano)
+      video.playbackRate = 2;
+    } else if (adState._speedRamp <= 4) {
+      // 400-800ms: velocidade 4x
+      video.playbackRate = 4;
+    } else {
+      // Depois de 800ms tentando: velocidade 8x
+      video.playbackRate = 8;
+    }
+
+    // ── Camada C: Seek se o ad for muito longo (>15s restando) ──
+    // Se depois de 1.2 segundos acelerando ainda sobra muito ad...
+    if (adState._speedRamp > 6 && video.currentTime < video.duration - 2) {
+      video.currentTime = video.duration - 0.1;
     }
   }
 
