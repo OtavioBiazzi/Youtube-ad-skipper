@@ -1,13 +1,16 @@
 const ICONS = {
   active: {
+    "16": "icon16.png",
     "48": "icon48.png",
     "128": "icon128.png"
   },
   passive: {
+    "16": "icon16_stealth.png",
     "48": "icon48_stealth.png",
     "128": "icon128_stealth.png"
   },
   disabled: {
+    "16": "icon16_off.png",
     "48": "icon48_off.png",
     "128": "icon128_off.png"
   }
