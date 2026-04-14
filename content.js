@@ -471,15 +471,23 @@
     } else if (adPlaying && adState.active) {
       // ── Anúncio ainda ativo — tick ───
       if (adState.targetSkipReached && !adState.watching) {
-        // Modo agressivo: acelera moderadamente (2x)
-        // NÃO modifica currentTime (detectável)
-        const video = document.querySelector("video");
-        if (config.aggressiveSkip && video) {
-          video.playbackRate = 2;
-        }
-
+        
+        // 1. Tentar clicar no botão nativamente (Stealth) se estiver visível
         const skipped = clickSkipAdBtn();
-        if (skipped) {
+        
+        // 2. Se falhar (ex: botão bloqueado nos primeiros 5s do Youtube) e o "Forçar Pulo" estiver ON
+        if (!skipped) {
+          const video = document.querySelector("video");
+          if (config.aggressiveSkip && video) {
+            // Acelera de forma absurda (Força Bruta Indetectável em playbackRate)
+            video.playbackRate = 16.0;
+            // Se o vídeo for um ad unskippable longo, pula pro final pra forçar encerramento
+            if (video.duration > 0 && video.currentTime < video.duration - 1) {
+              video.currentTime = video.duration - 0.5;
+            }
+          }
+        } else {
+          // Se pulou na maciota (clique)
           removeOverlay();
           adState.targetSkipReached = false;
         }
