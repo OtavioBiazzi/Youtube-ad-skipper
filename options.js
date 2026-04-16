@@ -19,7 +19,7 @@ const optMute       = document.getElementById("opt-mute");
 const optOverlay    = document.getElementById("opt-overlay");
 const optAggressive = document.getElementById("opt-aggressive");
 const optDelay      = document.getElementById("opt-delay");
-const optTheme      = document.getElementById("opt-theme");
+const themeToggle    = document.getElementById("theme-toggle");
 const delayValue    = document.getElementById("opt-delay-value");
 const delayHint     = document.getElementById("opt-delay-hint");
 const statWarnings  = document.getElementById("stat-warnings");
@@ -39,7 +39,6 @@ chrome.storage.local.get(DEFAULT, (s) => {
   optOverlay.checked    = s.showOverlay;
   optAggressive.checked = s.aggressiveSkip;
   optDelay.value        = s.skipDelay;
-  optTheme.checked      = s.theme === 'light';
 
   applyTheme(s.theme);
   renderDelay(s.skipDelay);
@@ -64,8 +63,9 @@ optEnabled.addEventListener("change", () => {
   renderStatus(on);
 });
 
-optTheme.addEventListener("change", () => {
-  const theme = optTheme.checked ? 'light' : 'dark';
+themeToggle.addEventListener("click", () => {
+  const isLight = document.body.classList.contains('theme-light');
+  const theme = isLight ? 'dark' : 'light';
   chrome.storage.local.set({ theme });
   applyTheme(theme);
 });

@@ -45,6 +45,11 @@ body {
   color: var(--text);
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
+  transition: background-color 0.4s ease, color 0.4s ease;
+}
+
+body * {
+  transition: background-color 0.4s ease, border-color 0.4s ease, color 0.4s ease, box-shadow 0.4s ease;
 }
 
 /* ── Page Container ── */
@@ -91,6 +96,12 @@ body {
   font-weight: 400;
 }
 
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .header-version {
   font-family: "JetBrains Mono", monospace;
   font-size: 12px;
@@ -99,6 +110,60 @@ body {
   border: 1px solid var(--border);
   padding: 4px 10px;
   border-radius: 20px;
+}
+
+/* ── Theme Toggle Button ── */
+.theme-toggle {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  width: 40px; height: 40px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.theme-toggle:hover {
+  background: var(--surface-2);
+  border-color: var(--accent);
+  color: var(--accent);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px var(--accent-dim);
+}
+
+.theme-toggle .sun-icon,
+.theme-toggle .moon-icon {
+  position: absolute;
+  transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.5s ease;
+}
+
+/* Dark mode state (Default) */
+.theme-toggle .sun-icon {
+  opacity: 1;
+  transform: scale(1) rotate(0);
+}
+.theme-toggle .moon-icon {
+  opacity: 0;
+  transform: scale(0) rotate(-90deg);
+}
+
+/* Light mode state */
+body.theme-light .theme-toggle .sun-icon {
+  opacity: 0;
+  transform: scale(0) rotate(90deg);
+}
+body.theme-light .theme-toggle .moon-icon {
+  opacity: 1;
+  transform: scale(1) rotate(0);
+}
+
+body.theme-light .theme-toggle:hover {
+  box-shadow: 0 4px 12px hsla(340, 75%, 55%, 0.2);
 }
 
 /* ── Grid ── */
