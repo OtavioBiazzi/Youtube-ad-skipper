@@ -458,7 +458,7 @@
 
   // ── Whitelist de canais ───────────────────────────────
 
-  function getCurrentChannelName() {
+  function getCurrentChannel() {
     const sels = [
       '#channel-name yt-formatted-string a',
       '#channel-name a',
@@ -469,19 +469,35 @@
     ];
     for (const s of sels) {
       const el = document.querySelector(s);
-      if (el && el.textContent.trim()) return el.textContent.trim();
+      if (el && el.textContent.trim()) {
+        return {
+          name: el.textContent.trim().toLowerCase(),
+          link: (el.href || "").toLowerCase()
+        };
+      }
     }
     return null;
   }
 
   function isChannelWhitelisted() {
     if (!config.whitelist || config.whitelist.length === 0) return false;
-    const ch = getCurrentChannelName();
+    const ch = getCurrentChannel();
     if (!ch) return false;
-    const lower = ch.toLowerCase();
-    return config.whitelist.some(w =>
-      lower.includes(w.toLowerCase()) || w.toLowerCase().includes(lower)
-    );
+    
+    return config.whitelist.some(w => {
+      const wLower = w.toLowerCase().trim();
+      if (!wLower) return false;
+      
+      // Match by name
+      if (ch.name.includes(wLower) || wLower.includes(ch.name)) return true;
+      
+      // Match by link 
+      if (ch.link && wLower.length > 3) {
+        if (ch.link.includes(wLower) || wLower.includes(ch.link)) return true;
+      }
+      
+      return false;
+    });
   }
 
   // ── Toast notification ────────────────────────────────

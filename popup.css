@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════
-   YouTube Ad Skipper — Popup v3.3  |  Taste Skill
+   YouTube Ad Skipper — Popup v3  |  Taste Skill
    ══════════════════════════════════════════════════
    Font: Outfit (ban Inter)
    Accent: Desaturated Rose hsl(355 65% 52%)
@@ -47,6 +47,22 @@
   --glass-inner-light:  inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
+body.theme-light {
+  --bg:         #ffffff;
+  --surface:    rgba(0, 0, 0, 0.02);
+  --border:     rgba(0, 0, 0, 0.06);
+  --border-h:   rgba(0, 0, 0, 0.10);
+  --text-1:     #18181b;
+  --text-2:     #52525b;
+  --text-3:     #a1a1aa;
+  --accent:     hsl(355, 65%, 52%);
+  --accent-dim: hsl(355, 50%, 42%);
+  --accent-bg:  hsla(355, 65%, 52%, 0.08);
+  --accent-border: hsla(355, 65%, 52%, 0.14);
+  --glass-inner-border: inset 0 0 0 1px rgba(0, 0, 0, 0.03);
+  --glass-inner-light:  inset 0 1px 0 rgba(0, 0, 0, 0.02);
+}
+
 /* ── Body ─────────────────────────────────────── */
 
 body {
@@ -77,7 +93,6 @@ body {
   gap: 10px;
   padding-bottom: 14px;
   border-bottom: 1px solid var(--border);
-  animation: fadeInUp 0.35s ease-out backwards;
 }
 
 .header-mark {
@@ -114,34 +129,6 @@ body {
   border: 1px solid var(--border);
 }
 
-/* ── Settings Button ─────────────────────────── */
-
-.header-settings {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text-3);
-  cursor: pointer;
-  transition: all 0.25s ease;
-  flex-shrink: 0;
-}
-
-.header-settings:hover {
-  color: var(--text-1);
-  border-color: var(--border-h);
-  background: rgba(255, 255, 255, 0.06);
-  transform: rotate(45deg);
-}
-
-.header-settings:active {
-  transform: rotate(45deg) scale(0.92);
-}
-
 /* ── Block (card replacement via liquid glass) ── */
 
 .block {
@@ -153,8 +140,6 @@ body {
   /* Liquid Glass refraction */
   box-shadow: var(--glass-inner-border),
               var(--glass-inner-light);
-  /* Entrance animation */
-  animation: fadeInUp 0.35s ease-out backwards;
 }
 
 .block:hover {
@@ -280,7 +265,6 @@ body {
   margin-top: 6px;
   margin-bottom: -2px;
   padding-left: 2px;
-  animation: fadeInUp 0.35s ease-out backwards;
 }
 
 /* ── Value Badge (delay display) ──────────────── */
@@ -414,6 +398,12 @@ body {
 
 /* ── Disabled states for specific blocks ────── */
 
+.block.block--disabled {
+  opacity: 0.4;
+  pointer-events: none;
+  filter: grayscale(0.8);
+}
+
 .popup-container.disabled .block:not(.block--master) {
   opacity: 0.28;
   pointer-events: none;
@@ -459,67 +449,25 @@ body {
   margin-top: 8px;
 }
 
-/* ── Footer ───────────────────────────────────── */
+/* ── Settings Gear Button ─────────────────────── */
 
-.popup-footer {
+.header-settings {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  width: 32px; height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  margin-top: 4px;
-  padding-top: 10px;
-  border-top: 1px solid var(--border);
-  animation: fadeInUp 0.35s ease-out 0.25s backwards;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: all 0.25s;
+  margin-left: 8px;
 }
 
-.footer-link {
-  font-size: 10px;
-  font-weight: 500;
-  color: var(--text-3);
-  text-decoration: none;
-  transition: color 0.2s ease;
-}
-
-.footer-link:hover {
-  color: var(--text-1);
-}
-
-.footer-dot {
-  color: var(--text-3);
-  font-size: 10px;
-  opacity: 0.4;
-}
-
-/* ── Entrance Animation ──────────────────────── */
-
-@keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* Stagger animation delays */
-.popup-container > .block:nth-of-type(1) { animation-delay: 0.03s; }
-.popup-container > .block:nth-of-type(2) { animation-delay: 0.06s; }
-.popup-container > .block:nth-of-type(3) { animation-delay: 0.09s; }
-.popup-container > .block:nth-of-type(4) { animation-delay: 0.12s; }
-.popup-container > .block:nth-of-type(5) { animation-delay: 0.15s; }
-.popup-container > .block:nth-of-type(6) { animation-delay: 0.18s; }
-.popup-container > .section-label:nth-of-type(1) { animation-delay: 0.04s; }
-.popup-container > .section-label:nth-of-type(2) { animation-delay: 0.13s; }
-
-/* ── Flash feedback on change ────────────────── */
-
-@keyframes flashConfirm {
-  0%   { border-color: var(--accent); box-shadow: 0 0 0 2px hsla(355, 65%, 52%, 0.12); }
-  100% { border-color: var(--border); box-shadow: none; }
-}
-
-.block.flash {
-  animation: flashConfirm 0.5s ease forwards;
+.header-settings:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: hsla(355, 65%, 52%, 0.1);
+  transform: rotate(45deg);
 }
