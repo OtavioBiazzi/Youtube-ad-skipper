@@ -78,7 +78,8 @@ chrome.storage.local.get(DEFAULT, (s) => {
   renderSlider();
   
   // Stats
-  const today = new Date().toISOString().split("T")[0];
+  const now = new Date();
+  const today = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
   const todayCount = s.todayDate === today ? (s.adsSkippedToday || 0) : 0;
   
   animateCounter(statTotal, s.totalAdsSkipped || 0);
@@ -266,10 +267,10 @@ function renderMode(aggressive) {
 function renderListMode(mode) {
   if (!listModeLabel) return;
   if (mode === 'blacklist') {
-    listModeLabel.textContent = "Pular APENAS nestes";
+    listModeLabel.textContent = "Blacklist";
     listModeLabel.style.color = "var(--green)";
   } else {
-    listModeLabel.textContent = "Ignorar nestes (Apoiar)";
+    listModeLabel.textContent = "Whitelist";
     listModeLabel.style.color = "var(--accent)";
   }
 }
