@@ -9,7 +9,7 @@ const DEFAULT = {
   showOverlay: true,
   aggressiveSkip: true,
   warningCount: 0,
-  theme: "dark",
+  theme: 'dark',
 };
 
 // ── Elements ─────────────────────────────────────
@@ -19,6 +19,7 @@ const optMute       = document.getElementById("opt-mute");
 const optOverlay    = document.getElementById("opt-overlay");
 const optAggressive = document.getElementById("opt-aggressive");
 const optDelay      = document.getElementById("opt-delay");
+const optTheme      = document.getElementById("opt-theme");
 const delayValue    = document.getElementById("opt-delay-value");
 const delayHint     = document.getElementById("opt-delay-hint");
 const statWarnings  = document.getElementById("stat-warnings");
@@ -29,7 +30,6 @@ const warningText   = document.getElementById("warning-text");
 const versionTag    = document.getElementById("version-tag");
 const btnReset      = document.getElementById("btn-reset");
 const aggressiveHint = document.getElementById("aggressive-hint");
-const themeBtns     = document.querySelectorAll(".theme-btn");
 
 // ── Load ─────────────────────────────────────────
 
@@ -39,13 +39,14 @@ chrome.storage.local.get(DEFAULT, (s) => {
   optOverlay.checked    = s.showOverlay;
   optAggressive.checked = s.aggressiveSkip;
   optDelay.value        = s.skipDelay;
+  optTheme.checked      = s.theme === 'light';
 
+  applyTheme(s.theme);
   renderDelay(s.skipDelay);
   renderStatus(s.enabled);
   renderMode(s.aggressiveSkip);
   renderWarnings(s.warningCount || 0);
   renderSlider();
-  renderTheme(s.theme);
 });
 
 // Get version from manifest
@@ -62,6 +63,20 @@ optEnabled.addEventListener("change", () => {
   chrome.storage.local.set({ enabled: on });
   renderStatus(on);
 });
+
+optTheme.addEventListener("change", () => {
+  const theme = optTheme.checked ? 'light' : 'dark';
+  chrome.storage.local.set({ theme });
+  applyTheme(theme);
+});
+
+function applyTheme(theme) {
+  if (theme === 'light') {
+    document.body.classList.add('theme-light');
+  } else {
+    document.body.classList.remove('theme-light');
+  }
+}
 
 optMute.addEventListener("change", () => {
   chrome.storage.local.set({ muteAds: optMute.checked });
@@ -82,13 +97,6 @@ optDelay.addEventListener("input", () => {
   chrome.storage.local.set({ skipDelay: v });
   renderDelay(v);
   renderSlider();
-});
-
-themeBtns.forEach(btn => {
-  btn.addEventListener("click", () => {
-    const theme = btn.dataset.theme;
-    chrome.storage.local.set({ theme });
-  });
 });
 
 btnReset.addEventListener("click", () => {
@@ -133,17 +141,6 @@ function renderMode(aggressive) {
   statMode.style.color = aggressive ? "hsl(355, 65%, 52%)" : "hsl(200, 70%, 55%)";
 }
 
-function renderTheme(theme) {
-  document.body.classList.toggle("light-theme", theme === "light");
-  themeBtns.forEach(btn => {
-    if (btn.dataset.theme === theme) {
-      btn.classList.add("active");
-    } else {
-      btn.classList.remove("active");
-    }
-  });
-}
-
 function renderWarnings(count) {
   statWarnings.textContent = count;
 
@@ -162,5 +159,4 @@ chrome.storage.onChanged.addListener((changes) => {
   if (changes.warningCount) renderWarnings(changes.warningCount.newValue || 0);
   if (changes.enabled) renderStatus(changes.enabled.newValue);
   if (changes.aggressiveSkip) renderMode(changes.aggressiveSkip.newValue);
-  if (changes.theme) renderTheme(changes.theme.newValue);
 });

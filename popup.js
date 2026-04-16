@@ -9,7 +9,7 @@ const DEFAULT_SETTINGS = {
   showOverlay: true,
   aggressiveSkip: true,
   warningCount: 0,
-  theme: "dark",
+  theme: 'dark',
 };
 
 // ── Elements ─────────────────────────────────────
@@ -46,17 +46,17 @@ chrome.storage.local.get(DEFAULT_SETTINGS, (s) => {
   toggleOverlay.checked    = s.showOverlay;
   toggleAggressive.checked = s.aggressiveSkip;
   skipDelaySlider.value    = s.skipDelay;
-  
-  document.body.classList.toggle("light-theme", s.theme === "light");
 
   initialState = {
     enabled: s.enabled,
     skipDelay: s.skipDelay,
     muteAds: s.muteAds,
     showOverlay: s.showOverlay,
-    aggressiveSkip: s.aggressiveSkip
+    aggressiveSkip: s.aggressiveSkip,
+    theme: s.theme
   };
 
+  applyTheme(s.theme);
   renderDelay(s.skipDelay);
   renderStatus(s.enabled);
   renderSliderTrack();
@@ -97,6 +97,14 @@ skipDelaySlider.addEventListener("input", () => {
   chrome.storage.local.set({ skipDelay: v });
   checkChanges();
 });
+
+function applyTheme(theme) {
+  if (theme === 'light') {
+    document.body.classList.add('theme-light');
+  } else {
+    document.body.classList.remove('theme-light');
+  }
+}
 
 // ── Render helpers ───────────────────────────────
 
@@ -179,7 +187,7 @@ chrome.storage.onChanged.addListener((changes) => {
     renderWarnings(changes.warningCount.newValue || 0);
   }
   if (changes.theme) {
-    document.body.classList.toggle("light-theme", changes.theme.newValue === "light");
+    applyTheme(changes.theme.newValue);
   }
 });
 

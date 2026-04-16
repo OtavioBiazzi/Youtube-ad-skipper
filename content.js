@@ -21,7 +21,7 @@
     muteAds: true,
     showOverlay: true,
     aggressiveSkip: true,
-    theme: "dark",
+    theme: 'dark',
   };
 
   const CHECK_INTERVAL = 200;
@@ -66,7 +66,7 @@
   function loadSettings() {
     if (chrome?.storage?.local) {
       chrome.storage.local.get(
-        { enabled: true, skipDelay: 1, muteAds: true, showOverlay: true, aggressiveSkip: true, warningCount: 0, theme: "dark" },
+        { enabled: true, skipDelay: 1, muteAds: true, showOverlay: true, aggressiveSkip: true, warningCount: 0, theme: 'dark' },
         (s) => {
           config.enabled = s.enabled;
           config.skipDelay = s.skipDelay;
@@ -89,7 +89,18 @@
       if (changes.muteAds) config.muteAds = changes.muteAds.newValue;
       if (changes.showOverlay) config.showOverlay = changes.showOverlay.newValue;
       if (changes.aggressiveSkip) config.aggressiveSkip = changes.aggressiveSkip.newValue;
-      if (changes.theme) config.theme = changes.theme.newValue;
+      if (changes.theme) {
+        config.theme = changes.theme.newValue;
+        // Se o overlay já existir, atualiza a classe dele
+        const overlay = document.getElementById(OVERLAY_ID);
+        if (overlay) {
+          if (config.theme === 'light') {
+            overlay.classList.add('theme-light');
+          } else {
+            overlay.classList.remove('theme-light');
+          }
+        }
+      }
     });
   }
 
@@ -355,20 +366,21 @@
         background: rgba(255,255,255,0.25);
       }
 
-      /* Light Theme Variations */
-      #${OVERLAY_ID}.light-theme {
+      /* Tema Claro */
+      #${OVERLAY_ID}.theme-light {
         background: rgba(255, 255, 255, 0.95);
         border: 1px solid rgba(0, 0, 0, 0.1);
-        color: #0f0f0f;
+        color: #18181b;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
       }
-      
-      #${OVERLAY_ID}.light-theme button {
+
+      #${OVERLAY_ID}.theme-light button {
         background: rgba(0, 0, 0, 0.05);
-        color: #0f0f0f;
+        color: #18181b;
+        border: 1px solid rgba(0, 0, 0, 0.05);
       }
-      
-      #${OVERLAY_ID}.light-theme button:hover {
+
+      #${OVERLAY_ID}.theme-light button:hover {
         background: rgba(0, 0, 0, 0.1);
       }
     `;
@@ -384,8 +396,8 @@
 
     const overlay = document.createElement("div");
     overlay.id = OVERLAY_ID;
-    if (config.theme === "light") {
-      overlay.classList.add("light-theme");
+    if (config.theme === 'light') {
+      overlay.classList.add('theme-light');
     }
 
     const delay = config.skipDelay;
