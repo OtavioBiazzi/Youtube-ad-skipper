@@ -55,10 +55,13 @@ const optInstant  = document.getElementById("opt-instant");
 const f5Banner    = document.getElementById("f5-banner");
 
 let currentWhitelist = [];
+let initialState = null;
 
 // ── Load ─────────────────────────────────────────
 
 chrome.storage.local.get(DEFAULT, (s) => {
+  initialState = JSON.parse(JSON.stringify(s));
+
   optEnabled.checked    = s.enabled;
   optMute.checked       = s.muteAds;
   optOverlay.checked    = s.showOverlay;
@@ -306,11 +309,24 @@ function renderWarnings(count) {
 
 // ── Live Sync ────────────────────────────────────
 
-function triggerRestartWarning(changes) {
-  const needsReload = ['enabled', 'skipDelay', 'muteAds', 'showOverlay', 'aggressiveSkip', 'listMode', 'whitelist', 'instantSkip'];
-  if (needsReload.some(key => changes[key])) {
-    f5Banner.style.display = "block";
-  }
+function checkRestartWarning() {
+  if (!initialState) return;
+  chrome.storage.local.get(DEFAULT, (current) => {
+    const needsReload = ['enabled', 'skipDelay', 'muteAds', 'showOverlay', 'aggressiveSkip', 'listMode', 'instantSkip'];
+    let changed = false;
+    
+    for (const key of needsReload) {
+      if (current[key] !== initialState[key]) { changed = true; break; }
+    }
+    
+    if (!changed && JSON.stringify(current.whitelist) !== JSON.stringify(initialState.whitelist)) {
+      changed = true;
+    }
+    
+    if (f5Banner) {
+      f5Banner.style.display = changed ? "block" : "none";
+    }
+  });
 }
 
 chrome.storage.onChanged.addListener((changes) => {
@@ -328,5 +344,5 @@ chrome.storage.onChanged.addListener((changes) => {
     renderWhitelist();
   }
   
-  triggerRestartWarning(changes);
+  checkRestartWarning();
 });
