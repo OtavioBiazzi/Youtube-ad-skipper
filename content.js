@@ -480,11 +480,14 @@
   }
 
   function isChannelWhitelisted() {
-    if (!config.whitelist || config.whitelist.length === 0) return false;
+    if (!config.whitelist || config.whitelist.length === 0) {
+      return config.listMode === 'blacklist' ? true : false;
+    }
+    
     const ch = getCurrentChannel();
     if (!ch) return false;
     
-    return config.whitelist.some(w => {
+    const matched = config.whitelist.some(w => {
       const wLower = w.toLowerCase().trim();
       if (!wLower) return false;
       
@@ -498,6 +501,18 @@
       
       return false;
     });
+
+    if (config.listMode === 'blacklist') {
+      // Modo Blacklist (Pular só nestes)
+      // Se deu match, queremos pular (aborta whitelist protection -> return false)
+      // Se NÃO deu match, NÃO queremos pular (ativa protection -> return true)
+      return !matched;
+    } else {
+      // Modo Whitelist (Apoiar estes, pular no resto)
+      // Se deu match, queremos apoiar (ativa protection -> return true)
+      // Se NÃO deu match, queremos pular (aborta protection -> return false)
+      return matched;
+    }
   }
 
   // ── Toast notification ────────────────────────────────

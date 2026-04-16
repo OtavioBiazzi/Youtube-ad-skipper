@@ -14,6 +14,7 @@ const DEFAULT = {
   adsSkippedToday: 0,
   todayDate: null,
   whitelist: [],
+  listMode: 'whitelist',
   showToast: false,
   shortcutEnabled: false,
   instantSkip: false,
@@ -26,12 +27,14 @@ const optMute       = document.getElementById("opt-mute");
 const optOverlay    = document.getElementById("opt-overlay");
 const optAggressive = document.getElementById("opt-aggressive");
 const optDelay      = document.getElementById("opt-delay");
-const themeToggle    = document.getElementById("theme-toggle");
+const themeToggle   = document.getElementById("theme-toggle");
 const delayValue    = document.getElementById("opt-delay-value");
 const delayHint     = document.getElementById("opt-delay-hint");
 const statTotal     = document.getElementById("stat-total");
 const statToday     = document.getElementById("stat-today");
 const statWarnings  = document.getElementById("stat-warnings");
+const stealthBadge  = document.getElementById("stealth-mode-badge");
+
 const warningBox    = document.getElementById("warning-box");
 const warningText   = document.getElementById("warning-text");
 const versionTag    = document.getElementById("version-tag");
@@ -43,9 +46,13 @@ const whitelistAddBtn = document.getElementById("whitelist-add");
 const whitelistList   = document.getElementById("whitelist-list");
 const whitelistEmpty  = document.getElementById("whitelist-empty");
 
+const optListMode = document.getElementById("opt-list-mode");
+const listModeLabel = document.getElementById("list-mode-label");
+
 const optToast    = document.getElementById("opt-toast");
 const optShortcut = document.getElementById("opt-shortcut");
 const optInstant  = document.getElementById("opt-instant");
+const f5Banner    = document.getElementById("f5-banner");
 
 let currentWhitelist = [];
 
@@ -61,10 +68,13 @@ chrome.storage.local.get(DEFAULT, (s) => {
   optToast.checked      = !!s.showToast;
   optShortcut.checked   = !!s.shortcutEnabled;
   optInstant.checked    = !!s.instantSkip;
+  optListMode.checked   = s.listMode === 'blacklist';
 
   applyTheme(s.theme);
   renderDelay(s.skipDelay);
   renderWarnings(s.warningCount || 0);
+  renderMode(s.aggressiveSkip);
+  renderListMode(s.listMode || 'whitelist');
   renderSlider();
   
   // Stats
@@ -128,6 +138,12 @@ optDelay.addEventListener("input", () => {
   chrome.storage.local.set({ skipDelay: v });
   renderDelay(v);
   renderSlider();
+});
+
+optListMode.addEventListener("change", () => {
+  const mode = optListMode.checked ? 'blacklist' : 'whitelist';
+  chrome.storage.local.set({ listMode: mode });
+  renderListMode(mode);
 });
 
 optToast.addEventListener("change", () => {
@@ -239,6 +255,25 @@ function renderSlider() {
   optDelay.style.background = "linear-gradient(90deg, hsl(355,65%,52%) " + pct + "%, #1c1c1f " + pct + "%)";
 }
 
+function renderMode(aggressive) {
+  if (stealthBadge) {
+    stealthBadge.textContent = aggressive ? "AGRESSIVO" : "SEGURO/FURTIVO";
+    stealthBadge.style.background = aggressive ? "var(--accent-dim)" : "var(--green-dim)";
+    stealthBadge.style.color = aggressive ? "var(--accent)" : "var(--green)";
+  }
+}
+
+function renderListMode(mode) {
+  if (!listModeLabel) return;
+  if (mode === 'blacklist') {
+    listModeLabel.textContent = "Pular APENAS nestes";
+    listModeLabel.style.color = "var(--green)";
+  } else {
+    listModeLabel.textContent = "Ignorar nestes (Apoiar)";
+    listModeLabel.style.color = "var(--accent)";
+  }
+}
+
 function animateCounter(el, target) {
   if (!el) return;
   if (target === 0) { el.textContent = "0"; return; }
@@ -270,8 +305,16 @@ function renderWarnings(count) {
 
 // ── Live Sync ────────────────────────────────────
 
+function triggerRestartWarning(changes) {
+  const needsReload = ['enabled', 'skipDelay', 'muteAds', 'showOverlay', 'aggressiveSkip', 'listMode', 'whitelist', 'instantSkip'];
+  if (needsReload.some(key => changes[key])) {
+    f5Banner.style.display = "block";
+  }
+}
+
 chrome.storage.onChanged.addListener((changes) => {
   if (changes.warningCount) renderWarnings(changes.warningCount.newValue || 0);
+  if (changes.aggressiveSkip) renderMode(changes.aggressiveSkip.newValue);
   
   if (changes.totalAdsSkipped) {
     animateCounter(statTotal, changes.totalAdsSkipped.newValue || 0);
@@ -283,4 +326,6 @@ chrome.storage.onChanged.addListener((changes) => {
     currentWhitelist = Array.isArray(changes.whitelist.newValue) ? [...changes.whitelist.newValue] : [];
     renderWhitelist();
   }
+  
+  triggerRestartWarning(changes);
 });
