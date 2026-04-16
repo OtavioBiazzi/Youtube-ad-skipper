@@ -1,12 +1,18 @@
 // ══════════════════════════════════════════════════
-// YouTube Ad Skipper — Options Page Logic | Taste Skill
+// YouTube Ad Skipper — Options Logic | Taste Skill
 // ══════════════════════════════════════════════════
 
 const DEFAULT = {
+  enabled: true,
+  skipDelay: 1,
+  muteAds: true,
+  showOverlay: true,
+  aggressiveSkip: true,
+  warningCount: 0,
+  theme: 'dark',
   totalAdsSkipped: 0,
   adsSkippedToday: 0,
   todayDate: null,
-  warningCount: 0,
   whitelist: [],
   showToast: false,
   shortcutEnabled: false,
@@ -15,67 +21,142 @@ const DEFAULT = {
 
 // ── Elements ─────────────────────────────────────
 
-const statTotal    = document.getElementById("stat-total");
-const statToday    = document.getElementById("stat-today");
-const statWarnings = document.getElementById("stat-warnings");
-const whitelistInput = document.getElementById("whitelist-input");
+const optEnabled    = document.getElementById("opt-enabled");
+const optMute       = document.getElementById("opt-mute");
+const optOverlay    = document.getElementById("opt-overlay");
+const optAggressive = document.getElementById("opt-aggressive");
+const optDelay      = document.getElementById("opt-delay");
+const themeToggle    = document.getElementById("theme-toggle");
+const delayValue    = document.getElementById("opt-delay-value");
+const delayHint     = document.getElementById("opt-delay-hint");
+const statTotal     = document.getElementById("stat-total");
+const statToday     = document.getElementById("stat-today");
+const statWarnings  = document.getElementById("stat-warnings");
+const warningBox    = document.getElementById("warning-box");
+const warningText   = document.getElementById("warning-text");
+const versionTag    = document.getElementById("version-tag");
+const btnReset      = document.getElementById("btn-reset");
+const aggressiveHint = document.getElementById("aggressive-hint");
+
+const whitelistInput  = document.getElementById("whitelist-input");
 const whitelistAddBtn = document.getElementById("whitelist-add");
-const whitelistList  = document.getElementById("whitelist-list");
-const whitelistEmpty = document.getElementById("whitelist-empty");
-const toggleToast    = document.getElementById("toggle-toast");
-const toggleShortcut = document.getElementById("toggle-shortcut");
-const toggleInstant  = document.getElementById("toggle-instant");
-const btnReset       = document.getElementById("btn-reset");
+const whitelistList   = document.getElementById("whitelist-list");
+const whitelistEmpty  = document.getElementById("whitelist-empty");
+
+const optToast    = document.getElementById("opt-toast");
+const optShortcut = document.getElementById("opt-shortcut");
+const optInstant  = document.getElementById("opt-instant");
 
 let currentWhitelist = [];
 
 // ── Load ─────────────────────────────────────────
 
 chrome.storage.local.get(DEFAULT, (s) => {
+  optEnabled.checked    = s.enabled;
+  optMute.checked       = s.muteAds;
+  optOverlay.checked    = s.showOverlay;
+  optAggressive.checked = s.aggressiveSkip;
+  optDelay.value        = s.skipDelay;
+  
+  optToast.checked      = !!s.showToast;
+  optShortcut.checked   = !!s.shortcutEnabled;
+  optInstant.checked    = !!s.instantSkip;
+
+  applyTheme(s.theme);
+  renderDelay(s.skipDelay);
+  renderWarnings(s.warningCount || 0);
+  renderSlider();
+  
   // Stats
   const today = new Date().toISOString().split("T")[0];
   const todayCount = s.todayDate === today ? (s.adsSkippedToday || 0) : 0;
-
+  
   animateCounter(statTotal, s.totalAdsSkipped || 0);
   animateCounter(statToday, todayCount);
-  animateCounter(statWarnings, s.warningCount || 0);
-
+  
   // Whitelist
   currentWhitelist = Array.isArray(s.whitelist) ? [...s.whitelist] : [];
   renderWhitelist();
-
-  // Toggles
-  toggleToast.checked    = !!s.showToast;
-  toggleShortcut.checked = !!s.shortcutEnabled;
-  toggleInstant.checked  = !!s.instantSkip;
 });
 
-// ── Animated counter ─────────────────────────────
+// Get version from manifest
+fetch(chrome.runtime.getURL("manifest.json"))
+  .then(r => r.json())
+  .then(m => {
+    versionTag.textContent = "v" + m.version;
+  });
 
-function animateCounter(el, target) {
-  if (target === 0) { el.textContent = "0"; return; }
-  const duration = 600;
-  const start = performance.now();
+// ── Events ───────────────────────────────────────
 
-  function tick(now) {
-    const elapsed = now - start;
-    const progress = Math.min(elapsed / duration, 1);
-    // Ease out cubic
-    const eased = 1 - Math.pow(1 - progress, 3);
-    el.textContent = Math.round(eased * target).toLocaleString("pt-BR");
-    if (progress < 1) requestAnimationFrame(tick);
+optEnabled.addEventListener("change", () => {
+  const on = optEnabled.checked;
+  chrome.storage.local.set({ enabled: on });
+  renderStatus(on);
+});
+
+themeToggle.addEventListener("click", () => {
+  const isLight = document.body.classList.contains('theme-light');
+  const theme = isLight ? 'dark' : 'light';
+  chrome.storage.local.set({ theme });
+  applyTheme(theme);
+});
+
+function applyTheme(theme) {
+  if (theme === 'light') {
+    document.body.classList.add('theme-light');
+  } else {
+    document.body.classList.remove('theme-light');
   }
-
-  requestAnimationFrame(tick);
 }
 
-// ── Whitelist ────────────────────────────────────
+optMute.addEventListener("change", () => {
+  chrome.storage.local.set({ muteAds: optMute.checked });
+});
+
+optOverlay.addEventListener("change", () => {
+  chrome.storage.local.set({ showOverlay: optOverlay.checked });
+});
+
+optAggressive.addEventListener("change", () => {
+  const on = optAggressive.checked;
+  chrome.storage.local.set({ aggressiveSkip: on });
+  renderMode(on);
+});
+
+optDelay.addEventListener("input", () => {
+  const v = parseInt(optDelay.value, 10);
+  chrome.storage.local.set({ skipDelay: v });
+  renderDelay(v);
+  renderSlider();
+});
+
+optToast.addEventListener("change", () => {
+  chrome.storage.local.set({ showToast: optToast.checked });
+});
+
+optShortcut.addEventListener("change", () => {
+  chrome.storage.local.set({ shortcutEnabled: optShortcut.checked });
+});
+
+optInstant.addEventListener("change", () => {
+  chrome.storage.local.set({ instantSkip: optInstant.checked });
+});
+
+btnReset.addEventListener("click", () => {
+  if (confirm("Isso vai resetar todas as configurações e zerar o contador de anúncios e avisos. Continuar?")) {
+    chrome.storage.local.set(DEFAULT, () => {
+      location.reload();
+    });
+  }
+});
+
+// ── Whitelist Logic ───────────────────────────────
 
 function renderWhitelist() {
   whitelistList.innerHTML = "";
 
   if (currentWhitelist.length === 0) {
-    whitelistEmpty.style.display = "flex";
+    whitelistEmpty.style.display = "block";
     return;
   }
 
@@ -85,23 +166,12 @@ function renderWhitelist() {
     const item = document.createElement("div");
     item.className = "whitelist-item";
     item.innerHTML = `
-      <div class="whitelist-item-name">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-          <circle cx="12" cy="7" r="4"/>
-        </svg>
-        <span>${escapeHtml(name)}</span>
-      </div>
-      <button class="whitelist-remove" data-index="${i}" title="Remover">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-        </svg>
-      </button>
+      <span>${escapeHtml(name)}</span>
+      <button class="whitelist-remove" data-index="${i}" title="Remover">✕</button>
     `;
     whitelistList.appendChild(item);
   });
 
-  // Attach remove handlers
   whitelistList.querySelectorAll(".whitelist-remove").forEach((btn) => {
     btn.addEventListener("click", () => {
       const idx = parseInt(btn.dataset.index, 10);
@@ -116,7 +186,6 @@ function addWhitelistEntry() {
   const name = whitelistInput.value.trim();
   if (!name) return;
 
-  // Avoid duplicates (case-insensitive)
   if (currentWhitelist.some(w => w.toLowerCase() === name.toLowerCase())) {
     whitelistInput.value = "";
     flashBorder(whitelistInput, "var(--orange)");
@@ -134,62 +203,6 @@ whitelistInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") addWhitelistEntry();
 });
 
-// ── Toggle handlers ──────────────────────────────
-
-toggleToast.addEventListener("change", () => {
-  chrome.storage.local.set({ showToast: toggleToast.checked });
-});
-
-toggleShortcut.addEventListener("change", () => {
-  chrome.storage.local.set({ shortcutEnabled: toggleShortcut.checked });
-});
-
-toggleInstant.addEventListener("change", () => {
-  chrome.storage.local.set({ instantSkip: toggleInstant.checked });
-});
-
-// ── Reset Stats ──────────────────────────────────
-
-btnReset.addEventListener("click", () => {
-  chrome.storage.local.set({
-    totalAdsSkipped: 0,
-    adsSkippedToday: 0,
-    todayDate: null,
-    warningCount: 0,
-  });
-
-  statTotal.textContent = "0";
-  statToday.textContent = "0";
-  statWarnings.textContent = "0";
-
-  btnReset.textContent = "Resetado ✓";
-  btnReset.classList.add("confirmed");
-  setTimeout(() => {
-    btnReset.textContent = "Resetar";
-    btnReset.classList.remove("confirmed");
-  }, 2000);
-});
-
-// ── Live sync ────────────────────────────────────
-
-chrome.storage.onChanged.addListener((changes) => {
-  if (changes.totalAdsSkipped) {
-    animateCounter(statTotal, changes.totalAdsSkipped.newValue || 0);
-  }
-  if (changes.adsSkippedToday) {
-    animateCounter(statToday, changes.adsSkippedToday.newValue || 0);
-  }
-  if (changes.warningCount) {
-    animateCounter(statWarnings, changes.warningCount.newValue || 0);
-  }
-  if (changes.whitelist) {
-    currentWhitelist = Array.isArray(changes.whitelist.newValue) ? [...changes.whitelist.newValue] : [];
-    renderWhitelist();
-  }
-});
-
-// ── Utils ────────────────────────────────────────
-
 function escapeHtml(str) {
   const div = document.createElement("div");
   div.textContent = str;
@@ -201,3 +214,73 @@ function flashBorder(el, color) {
   el.style.borderColor = color;
   setTimeout(() => { el.style.borderColor = orig; }, 600);
 }
+
+// ── Render ────────────────────────────────────────
+
+function renderDelay(v) {
+  delayValue.textContent = v;
+  if (v <= 3) {
+    delayHint.textContent = "Espera ~" + v + "s e depois pula o anúncio.";
+    delayHint.style.color = "hsl(152, 55%, 42%)";
+  } else if (v <= 10) {
+    delayHint.textContent = "Espera ~" + v + "s e depois pula o anúncio.";
+    delayHint.style.color = "hsl(45, 75%, 52%)";
+  } else {
+    delayHint.textContent = "Espera ~" + v + "s e depois pula o anúncio. Delay alto pode causar experiência lenta.";
+    delayHint.style.color = "hsl(25, 80%, 55%)";
+  }
+}
+
+function renderSlider() {
+  const min = parseInt(optDelay.min, 10);
+  const max = parseInt(optDelay.max, 10);
+  const val = parseInt(optDelay.value, 10);
+  const pct = ((val - min) / (max - min)) * 100;
+  optDelay.style.background = "linear-gradient(90deg, hsl(355,65%,52%) " + pct + "%, #1c1c1f " + pct + "%)";
+}
+
+function animateCounter(el, target) {
+  if (!el) return;
+  if (target === 0) { el.textContent = "0"; return; }
+  const duration = 600;
+  const start = performance.now();
+
+  function tick(now) {
+    const elapsed = now - start;
+    const progress = Math.min(elapsed / duration, 1);
+    const eased = 1 - Math.pow(1 - progress, 3);
+    el.textContent = Math.round(eased * target).toLocaleString("pt-BR");
+    if (progress < 1) requestAnimationFrame(tick);
+  }
+
+  requestAnimationFrame(tick);
+}
+
+function renderWarnings(count) {
+  statWarnings.textContent = count;
+
+  if (count === 0) {
+    warningBox.classList.remove("warning-box--alert");
+    warningText.textContent = "Nenhum aviso do YouTube interceptado.";
+  } else {
+    warningBox.classList.add("warning-box--alert");
+    warningText.textContent = count + " aviso" + (count > 1 ? "s" : "") + " do YouTube interceptado" + (count > 1 ? "s" : "") + " e bloqueado" + (count > 1 ? "s" : "") + ".";
+  }
+}
+
+// ── Live Sync ────────────────────────────────────
+
+chrome.storage.onChanged.addListener((changes) => {
+  if (changes.warningCount) renderWarnings(changes.warningCount.newValue || 0);
+  
+  if (changes.totalAdsSkipped) {
+    animateCounter(statTotal, changes.totalAdsSkipped.newValue || 0);
+  }
+  if (changes.adsSkippedToday) {
+    animateCounter(statToday, changes.adsSkippedToday.newValue || 0);
+  }
+  if (changes.whitelist) {
+    currentWhitelist = Array.isArray(changes.whitelist.newValue) ? [...changes.whitelist.newValue] : [];
+    renderWhitelist();
+  }
+});
