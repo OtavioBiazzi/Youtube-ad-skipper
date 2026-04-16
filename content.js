@@ -1,17 +1,12 @@
 (function () {
   "use strict";
 
-  // ── Classes do botão de pular (usadas para detecção) ────
   const _skipClasses = [
     "videoAdUiSkipButton",
     "ytp-ad-skip-button ytp-button",
     "ytp-ad-skip-button-modern ytp-button",
     "ytp-skip-ad-button",
   ];
-
-  // NOTA: O bypass de isTrusted fica APENAS no override.js (world: MAIN).
-  // Colocar aqui no content script (mundo isolado) não afeta o YouTube
-  // e ainda cria uma assinatura detectável por fingerprinting de prototypes.
 
   // ── Configurações ─────────────────────────────────────
 
@@ -21,86 +16,89 @@
     muteAds: true,
     showOverlay: true,
     aggressiveSkip: true,
-    theme: 'dark',
+    instantSkip: false,
+    showToast: false,
+    shortcutEnabled: false,
+    whitelist: [],
   };
 
-  const CHECK_INTERVAL = 200;
+  const CHECK_INTERVAL = 500;
 
   let adState = {
     active: false,
     currentAd: undefined,
     startTime: null,
-    skipTimer: null,
-    targetSkipReached: false,
     watching: false,
     overlayEl: null,
     countdownInterval: null,
     skipTargetTime: null,
-    warningCount: 0,   // conta quantas vezes o popup anti-adblock apareceu
+    warningCount: 0,
+    totalSkipped: 0,
+    adsSkippedToday: 0,
+    todayDate: null,
+    lastVideoTime: -1,
+    alreadyCounted: false,
   };
 
-  // ── Humanização — jitter Gaussiano ────────────────────
-  // Humanos reais têm tempo de reação que segue uma curva
-  // normal (Gaussiana), não linear. Isso é muito mais
-  // difícil de detectar como comportamento automático.
-
-  function gaussianRandom() {
-    // Box-Muller transform para gerar distribuição normal
-    let u = 0, v = 0;
-    while (u === 0) u = Math.random();
-    while (v === 0) v = Math.random();
-    return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
-  }
+  // ── Humanização — jitter aleatório ────────────────────
 
   function humanDelay(baseMs) {
-    // Centro no baseMs, desvio padrão de 15% do base
-    // Resultado: 85% das vezes fica entre ±15% do valor configurado
-    const stdDev = baseMs * 0.15;
-    const delay = baseMs + gaussianRandom() * stdDev;
-    // Mínimo de 300ms (ninguém reage em menos que isso)
-    return Math.max(300, Math.round(delay));
+    if (baseMs <= 0) return 0;
+    // ±15 % de variação para parecer humano
+    const jitter = baseMs * (0.85 + Math.random() * 0.3);
+    return Math.round(jitter);
   }
 
   // ── Carregar configurações ────────────────────────────
 
   function loadSettings() {
-    if (chrome?.storage?.local) {
-      chrome.storage.local.get(
-        { enabled: true, skipDelay: 1, muteAds: true, showOverlay: true, aggressiveSkip: true, warningCount: 0, theme: 'dark' },
-        (s) => {
-          config.enabled = s.enabled;
-          config.skipDelay = s.skipDelay;
-          config.muteAds = s.muteAds;
-          config.showOverlay = s.showOverlay;
-          config.aggressiveSkip = s.aggressiveSkip;
-          config.theme = s.theme;
-          adState.warningCount = s.warningCount || 0;
-        }
-      );
-    }
+    return new Promise((resolve) => {
+      if (chrome?.storage?.local) {
+        chrome.storage.local.get(
+          {
+            enabled: true, skipDelay: 1, muteAds: true, showOverlay: true,
+            aggressiveSkip: true, instantSkip: false, showToast: false,
+            shortcutEnabled: false, whitelist: [], warningCount: 0,
+            totalAdsSkipped: 0, adsSkippedToday: 0, todayDate: null,
+          },
+          (s) => {
+            config.enabled = !!s.enabled;
+            const d = Number(s.skipDelay);
+            config.skipDelay = isNaN(d) || d < 0 ? 1 : d;
+            config.muteAds = !!s.muteAds;
+            config.showOverlay = !!s.showOverlay;
+            config.aggressiveSkip = !!s.aggressiveSkip;
+            config.instantSkip = !!s.instantSkip;
+            config.showToast = !!s.showToast;
+            config.shortcutEnabled = !!s.shortcutEnabled;
+            config.whitelist = Array.isArray(s.whitelist) ? s.whitelist : [];
+            adState.warningCount = s.warningCount || 0;
+            adState.totalSkipped = s.totalAdsSkipped || 0;
+            adState.adsSkippedToday = s.adsSkippedToday || 0;
+            adState.todayDate = s.todayDate || null;
+            resolve();
+          }
+        );
+      } else {
+        resolve();
+      }
+    });
   }
-
-  loadSettings();
 
   if (chrome?.storage?.onChanged) {
     chrome.storage.onChanged.addListener((changes) => {
-      if (changes.enabled) config.enabled = changes.enabled.newValue;
-      if (changes.skipDelay) config.skipDelay = changes.skipDelay.newValue;
-      if (changes.muteAds) config.muteAds = changes.muteAds.newValue;
-      if (changes.showOverlay) config.showOverlay = changes.showOverlay.newValue;
-      if (changes.aggressiveSkip) config.aggressiveSkip = changes.aggressiveSkip.newValue;
-      if (changes.theme) {
-        config.theme = changes.theme.newValue;
-        // Se o overlay já existir, atualiza a classe dele
-        const overlay = document.getElementById(OVERLAY_ID);
-        if (overlay) {
-          if (config.theme === 'light') {
-            overlay.classList.add('theme-light');
-          } else {
-            overlay.classList.remove('theme-light');
-          }
-        }
+      if (changes.enabled) config.enabled = !!changes.enabled.newValue;
+      if (changes.skipDelay) {
+        const v = Number(changes.skipDelay.newValue);
+        if (!isNaN(v) && v >= 0) config.skipDelay = v;
       }
+      if (changes.muteAds) config.muteAds = !!changes.muteAds.newValue;
+      if (changes.showOverlay) config.showOverlay = !!changes.showOverlay.newValue;
+      if (changes.aggressiveSkip) config.aggressiveSkip = !!changes.aggressiveSkip.newValue;
+      if (changes.instantSkip) config.instantSkip = !!changes.instantSkip.newValue;
+      if (changes.showToast) config.showToast = !!changes.showToast.newValue;
+      if (changes.shortcutEnabled) config.shortcutEnabled = !!changes.shortcutEnabled.newValue;
+      if (changes.whitelist) config.whitelist = Array.isArray(changes.whitelist.newValue) ? changes.whitelist.newValue : [];
     });
   }
 
@@ -190,13 +188,11 @@
   ];
 
   // ── Camada 1: CSS Preemptivo ──────────────────────────
-  // ID dinâmico para evitar fingerprinting por ID fixo
-  const _cssId = 'ytp-' + Math.random().toString(36).slice(2, 10);
-
   function injectAntiAdblockCSS() {
-    if (document.getElementById(_cssId)) return;
+    const id = 'ytp-css-patch-ab';
+    if (document.getElementById(id)) return;
     const s = document.createElement('style');
-    s.id = _cssId;
+    s.id = id;
     s.textContent = `
       ytd-enforcement-message-view-model,
       tp-yt-paper-dialog:has(ytd-enforcement-message-view-model),
@@ -365,24 +361,6 @@
       #${OVERLAY_ID} button:hover {
         background: rgba(255,255,255,0.25);
       }
-
-      /* Tema Claro */
-      #${OVERLAY_ID}.theme-light {
-        background: rgba(255, 255, 255, 0.95);
-        border: 1px solid rgba(0, 0, 0, 0.1);
-        color: #18181b;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-      }
-
-      #${OVERLAY_ID}.theme-light button {
-        background: rgba(0, 0, 0, 0.05);
-        color: #18181b;
-        border: 1px solid rgba(0, 0, 0, 0.05);
-      }
-
-      #${OVERLAY_ID}.theme-light button:hover {
-        background: rgba(0, 0, 0, 0.1);
-      }
     `;
     document.head.appendChild(style);
   }
@@ -396,15 +374,13 @@
 
     const overlay = document.createElement("div");
     overlay.id = OVERLAY_ID;
-    if (config.theme === 'light') {
-      overlay.classList.add('theme-light');
-    }
 
-    const delay = config.skipDelay;
+    const delay = getEffectiveDelay();
+    const initialRemaining = adState.skipTargetTime ? Math.max(0, Math.ceil((adState.skipTargetTime - Date.now()) / 1000)) : delay;
 
     overlay.innerHTML = `
       <div class="ytp-ad-text">Auto Pular Anuncio</div>
-      <div class="ytp-ad-timer-text" id="${TIMER_ID}">${delay}s</div>
+      <div class="ytp-ad-timer-text" id="${TIMER_ID}">${initialRemaining}s</div>
       <button class="ytp-ad-watch">Assistir Anuncio</button>
     `;
 
@@ -416,7 +392,6 @@
     if (watchBtn) {
       watchBtn.addEventListener("click", () => {
         adState.watching = true;
-        clearTimeout(adState.skipTimer);
         clearInterval(adState.countdownInterval);
         removeOverlay();
         unmuteVideo();
@@ -439,31 +414,18 @@
     clearInterval(adState.countdownInterval);
   }
 
-  // ── Agendar skip (com randomização) ───────────────────
+  // ── Delay efetivo ─────────────────────────────────────
 
-  function scheduleSkip() {
-    clearTimeout(adState.skipTimer);
-    clearInterval(adState.countdownInterval);
-    adState.targetSkipReached = false;
-
-    // Leitura FRESCA do storage para garantir que o valor
-    // do slider é respeitado, mesmo sem F5.
-    if (chrome?.storage?.local) {
-      chrome.storage.local.get({ skipDelay: 1 }, (s) => {
-        config.skipDelay = s.skipDelay;
-        _startSkipTimer();
-      });
-    } else {
-      _startSkipTimer();
-    }
+  function getEffectiveDelay() {
+    return config.instantSkip ? 0 : config.skipDelay;
   }
 
-  function _startSkipTimer() {
-    const actualDelay = humanDelay(config.skipDelay * 1000);
-    adState.skipTargetTime = Date.now() + actualDelay;
-    adState.skipTimer = setTimeout(() => {
-      adState.targetSkipReached = true;
-    }, actualDelay);
+  // ── Agendar skip (para countdown do overlay) ──────────
+
+  function scheduleSkip() {
+    clearInterval(adState.countdownInterval);
+    const delayMs = getEffectiveDelay() * 1000;
+    adState.skipTargetTime = Date.now() + humanDelay(delayMs);
   }
 
   // ── Mute/unmute ───────────────────────────────────────
@@ -494,6 +456,96 @@
     adState._wasMuted = false;
   }
 
+  // ── Whitelist de canais ───────────────────────────────
+
+  function getCurrentChannelName() {
+    const sels = [
+      '#channel-name yt-formatted-string a',
+      '#channel-name a',
+      'ytd-video-owner-renderer #channel-name a',
+      '#owner-name a',
+      '#upload-info #channel-name a',
+      'ytd-channel-name yt-formatted-string',
+    ];
+    for (const s of sels) {
+      const el = document.querySelector(s);
+      if (el && el.textContent.trim()) return el.textContent.trim();
+    }
+    return null;
+  }
+
+  function isChannelWhitelisted() {
+    if (!config.whitelist || config.whitelist.length === 0) return false;
+    const ch = getCurrentChannelName();
+    if (!ch) return false;
+    const lower = ch.toLowerCase();
+    return config.whitelist.some(w =>
+      lower.includes(w.toLowerCase()) || w.toLowerCase().includes(lower)
+    );
+  }
+
+  // ── Toast notification ────────────────────────────────
+
+  function showToastNotification() {
+    if (!config.showToast) return;
+    const existing = document.getElementById('ytp-skipper-toast');
+    if (existing) existing.remove();
+
+    if (!document.getElementById('ytp-toast-style')) {
+      const style = document.createElement('style');
+      style.id = 'ytp-toast-style';
+      style.textContent = `
+        #ytp-skipper-toast {
+          position: fixed; bottom: 24px; right: 24px;
+          padding: 10px 20px; background: rgba(0, 0, 0, 0.85);
+          color: #fff; font-family: 'Roboto', 'Arial', sans-serif;
+          font-size: 13px; font-weight: 500; border-radius: 8px;
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          z-index: 999999; opacity: 0; transform: translateY(10px);
+          transition: opacity 0.3s ease, transform 0.3s ease;
+          pointer-events: none; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+        }
+        #ytp-skipper-toast.show { opacity: 1; transform: translateY(0); }
+      `;
+      (document.head || document.documentElement).appendChild(style);
+    }
+
+    const toast = document.createElement('div');
+    toast.id = 'ytp-skipper-toast';
+    toast.textContent = 'Anúncio pulado ✓';
+    document.body.appendChild(toast);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => { toast.classList.add('show'); });
+    });
+    setTimeout(() => {
+      toast.classList.remove('show');
+      setTimeout(() => toast.remove(), 300);
+    }, 2000);
+  }
+
+  // ── Contador de anúncios ──────────────────────────────
+
+  function incrementAdCounter() {
+    if (adState.alreadyCounted) return;
+    adState.alreadyCounted = true;
+
+    const today = new Date().toISOString().split('T')[0];
+    if (adState.todayDate !== today) {
+      adState.todayDate = today;
+      adState.adsSkippedToday = 0;
+    }
+    adState.totalSkipped++;
+    adState.adsSkippedToday++;
+
+    if (chrome?.storage?.local) {
+      chrome.storage.local.set({
+        totalAdsSkipped: adState.totalSkipped,
+        adsSkippedToday: adState.adsSkippedToday,
+        todayDate: adState.todayDate,
+      });
+    }
+  }
+
   // ── Main loop ─────────────────────────────────────────
 
   function mainLoop() {
@@ -506,10 +558,15 @@
 
     if (adPlaying && !adState.active) {
       // ── Anúncio COMEÇOU ───
+
+      // Verificar whitelist — se canal está na lista branca, não mexer
+      if (isChannelWhitelisted()) return;
+
       adState.active = true;
       adState.watching = false;
       adState.startTime = Date.now();
-      adState._speedRamp = 0; // contador para aceleração progressiva
+      adState.lastVideoTime = -1;
+      adState.alreadyCounted = false;
 
       muteVideo();
       scheduleSkip();
@@ -517,27 +574,65 @@
 
     } else if (adPlaying && adState.active) {
       // ── Anúncio ainda ativo — tick ───
-      if (adState.targetSkipReached && !adState.watching) {
-        
-        // 1. Tentar clicar no botão nativamente (Stealth) se estiver visível
+
+      if (adState.watching) return;
+
+      const video = document.querySelector("video");
+
+      // Detectar novo anúncio em sequência (posição do vídeo voltou ao início)
+      if (video) {
+        const ct = video.currentTime;
+        if (adState.lastVideoTime > 2 && ct < adState.lastVideoTime - 2) {
+          // Contar o anúncio anterior como pulado
+          incrementAdCounter();
+          showToastNotification();
+          // Resetar para o novo anúncio
+          adState.startTime = Date.now();
+          adState.alreadyCounted = false;
+          adState.lastVideoTime = ct;
+          scheduleSkip();
+          if (config.showOverlay) createOverlay();
+          return;
+        }
+        adState.lastVideoTime = ct;
+      }
+
+      // Verificar se o delay passou (comparação DIRETA de timestamp)
+      const elapsedMs = Date.now() - adState.startTime;
+      const requiredMs = getEffectiveDelay() * 1000;
+
+      if (elapsedMs >= requiredMs) {
+        // 1. Tentar clicar no botão nativamente (Stealth)
         const skipped = clickSkipAdBtn();
-        
-        if (!skipped && config.aggressiveSkip) {
-          // 2. Forçar Pulo: Estratégia de 3 camadas (da mais stealth pra menos)
-          forceSkipAd();
-        } else if (skipped) {
-          // Se pulou na maciota (clique)
+
+        // 2. Se falhou e aggressiveSkip está ON → forçar pulo
+        if (!skipped) {
+          if (config.aggressiveSkip && video) {
+            video.playbackRate = 16.0;
+            if (video.duration > 0 && video.currentTime < video.duration - 1) {
+              video.currentTime = video.duration - 0.5;
+            }
+          }
+        } else {
+          // Pulou com sucesso via clique
           removeOverlay();
-          adState.targetSkipReached = false;
+          incrementAdCounter();
+          showToastNotification();
         }
       }
     } else if (!adPlaying && adState.active) {
       // ── Anúncio ACABOU ───
+
+      // Contar como pulado se não estava assistindo
+      if (!adState.watching) {
+        incrementAdCounter();
+        showToastNotification();
+      }
+
       adState.active = false;
       adState.currentAd = undefined;
-      adState._speedRamp = 0;
-      adState.targetSkipReached = false;
-      clearTimeout(adState.skipTimer);
+      adState.lastVideoTime = -1;
+      adState.alreadyCounted = false;
       removeOverlay();
       unmuteVideo();
 
@@ -551,53 +646,22 @@
     }
   }
 
-  // ── Forçar pulo do anúncio (3 camadas stealth) ──────────
-  //
-  // Camada A: YouTube Player API (.seekTo) — usa o método interno que o
-  //           próprio YouTube usa quando VOCÊ arrasta a barra de progresso.
-  //           É o mais indetectável porque é o mesmo código nativo.
-  //
-  // Camada B: Aceleração Progressiva — em vez de pular pra 16x de uma vez
-  //           (que grita "robô"), sobe a velocidade aos poucos: 2→4→8.
-  //           Velocidade 2x é algo que o próprio usuário pode configurar
-  //           no YouTube, então é invisível. 4x e 8x são mais rápidas
-  //           mas ainda dentro do que extensões de velocidade fazem.
-  //
-  // Camada C: Seek direto — só se as outras falharem, pula pro final.
+  // ── Atalho de teclado ─────────────────────────────────
 
-  function forceSkipAd() {
-    const video = document.querySelector("video");
-    if (!video || !video.duration || video.duration <= 0) return;
-
-    // ── Camada A: YouTube Player API ──
-    const player = document.querySelector("#movie_player");
-    if (player && typeof player.seekTo === "function") {
-      // Pula pro último segundo do ad usando a API nativa do YouTube
-      player.seekTo(video.duration - 0.1, true);
-      return;
+  document.addEventListener('keydown', (e) => {
+    if (!config.shortcutEnabled) return;
+    if (e.shiftKey && (e.key === 'S' || e.key === 's')) {
+      e.preventDefault();
+      if (adState.active && !adState.watching) {
+        const skipped = clickSkipAdBtn();
+        if (skipped) {
+          removeOverlay();
+          incrementAdCounter();
+          showToastNotification();
+        }
+      }
     }
-
-    // ── Camada B: Aceleração Progressiva ──
-    // Sobe a velocidade gradualmente a cada tick (200ms)
-    adState._speedRamp = (adState._speedRamp || 0) + 1;
-
-    if (adState._speedRamp <= 2) {
-      // Primeiros 400ms: velocidade 2x (normal humano)
-      video.playbackRate = 2;
-    } else if (adState._speedRamp <= 4) {
-      // 400-800ms: velocidade 4x
-      video.playbackRate = 4;
-    } else {
-      // Depois de 800ms tentando: velocidade 8x
-      video.playbackRate = 8;
-    }
-
-    // ── Camada C: Seek se o ad for muito longo (>15s restando) ──
-    // Se depois de 1.2 segundos acelerando ainda sobra muito ad...
-    if (adState._speedRamp > 6 && video.currentTime < video.duration - 2) {
-      video.currentTime = video.duration - 0.1;
-    }
-  }
+  });
 
   // ── Init ──────────────────────────────────────────────
 
@@ -607,7 +671,11 @@
 
   function init() {
     if (isInIframe()) return;
-    setInterval(mainLoop, CHECK_INTERVAL);
+    loadSettings().then(() => {
+      // garantir que as configurações foram carregadas antes de iniciar o loop
+      try { mainLoop(); } catch (e) {}
+      setInterval(mainLoop, CHECK_INTERVAL);
+    });
   }
 
   if (document.readyState === "loading") {

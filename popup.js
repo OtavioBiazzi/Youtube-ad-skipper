@@ -1,5 +1,5 @@
 // ══════════════════════════════════════════════════
-// YouTube Ad Skipper — Popup Logic v3 | Taste Skill
+// YouTube Ad Skipper — Popup Logic v3.3 | Taste Skill
 // ══════════════════════════════════════════════════
 
 const DEFAULT_SETTINGS = {
@@ -9,7 +9,6 @@ const DEFAULT_SETTINGS = {
   showOverlay: true,
   aggressiveSkip: true,
   warningCount: 0,
-  theme: 'dark',
 };
 
 // ── Elements ─────────────────────────────────────
@@ -21,12 +20,12 @@ const toggleAggressive = document.getElementById("toggle-aggressive");
 const skipDelaySlider  = document.getElementById("skip-delay");
 const delayDisplay     = document.getElementById("delay-display");
 const delayHint        = document.getElementById("delay-hint");
-const blockDelay       = document.getElementById("block-delay");
 const statusPip        = document.querySelector(".status-pip");
 const statusLabel      = document.getElementById("status-text");
 const container        = document.querySelector(".popup-container");
 const warningRow       = document.getElementById("warning-row");
 const warningText      = document.getElementById("warning-text");
+const btnSettings      = document.getElementById("btn-settings");
 
 const notes = {
   enabled: document.getElementById("note-enabled"),
@@ -52,15 +51,12 @@ chrome.storage.local.get(DEFAULT_SETTINGS, (s) => {
     skipDelay: s.skipDelay,
     muteAds: s.muteAds,
     showOverlay: s.showOverlay,
-    aggressiveSkip: s.aggressiveSkip,
-    theme: s.theme
+    aggressiveSkip: s.aggressiveSkip
   };
 
-  applyTheme(s.theme);
   renderDelay(s.skipDelay);
   renderStatus(s.enabled);
   renderSliderTrack();
-  renderAggressiveState(s.aggressiveSkip);
   renderWarnings(s.warningCount || 0);
 });
 
@@ -71,23 +67,26 @@ toggleEnabled.addEventListener("change", () => {
   chrome.storage.local.set({ enabled: on });
   renderStatus(on);
   checkChanges();
+  flashBlock(toggleEnabled);
 });
 
 toggleMute.addEventListener("change", () => {
   chrome.storage.local.set({ muteAds: toggleMute.checked });
   checkChanges();
+  flashBlock(toggleMute);
 });
 
 toggleOverlay.addEventListener("change", () => {
   chrome.storage.local.set({ showOverlay: toggleOverlay.checked });
   checkChanges();
+  flashBlock(toggleOverlay);
 });
 
 toggleAggressive.addEventListener("change", () => {
   const on = toggleAggressive.checked;
   chrome.storage.local.set({ aggressiveSkip: on });
-  renderAggressiveState(on);
   checkChanges();
+  flashBlock(toggleAggressive);
 });
 
 skipDelaySlider.addEventListener("input", () => {
@@ -98,13 +97,15 @@ skipDelaySlider.addEventListener("input", () => {
   checkChanges();
 });
 
-function applyTheme(theme) {
-  if (theme === 'light') {
-    document.body.classList.add('theme-light');
+// ── Settings button ──────────────────────────────
+
+btnSettings.addEventListener("click", () => {
+  if (chrome.runtime.openOptionsPage) {
+    chrome.runtime.openOptionsPage();
   } else {
-    document.body.classList.remove('theme-light');
+    window.open(chrome.runtime.getURL("options.html"));
   }
-}
+});
 
 // ── Render helpers ───────────────────────────────
 
@@ -162,14 +163,6 @@ function renderStatus(enabled) {
   }
 }
 
-function renderAggressiveState(on) {
-  if (on) {
-    blockDelay.classList.remove("block--disabled");
-  } else {
-    blockDelay.classList.add("block--disabled");
-  }
-}
-
 function renderWarnings(count) {
   if (count === 0) {
     warningRow.classList.remove("warning-row--alert");
@@ -180,19 +173,23 @@ function renderWarnings(count) {
   }
 }
 
+// ── Flash feedback ───────────────────────────────
+
+function flashBlock(element) {
+  const block = element.closest(".block");
+  if (!block) return;
+  block.classList.remove("flash");
+  void block.offsetWidth; // Force reflow to restart animation
+  block.classList.add("flash");
+  block.addEventListener("animationend", () => {
+    block.classList.remove("flash");
+  }, { once: true });
+}
+
 // ── Live sync ────────────────────────────────────
 
 chrome.storage.onChanged.addListener((changes) => {
   if (changes.warningCount) {
     renderWarnings(changes.warningCount.newValue || 0);
   }
-  if (changes.theme) {
-    applyTheme(changes.theme.newValue);
-  }
-});
-
-// ── Open settings page ──────────────────────────
-
-document.getElementById("btn-open-settings").addEventListener("click", () => {
-  chrome.runtime.openOptionsPage();
 });
