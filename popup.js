@@ -27,6 +27,7 @@ const statusLabel      = document.getElementById("status-text");
 const container        = document.querySelector(".popup-container");
 const warningRow       = document.getElementById("warning-row");
 const warningText      = document.getElementById("warning-text");
+const versionTag       = document.getElementById("version-tag");
 
 const notes = {
   enabled: document.getElementById("note-enabled"),
@@ -37,6 +38,16 @@ const notes = {
 };
 
 let initialState = {};
+
+// ── Version ────────────────────────────────────────
+
+try {
+  const manifestVersion = chrome.runtime.getManifest().version;
+  if (versionTag) versionTag.textContent = `v${manifestVersion}`;
+} catch (err) {
+  console.warn("[YouTube Ad Skipper] Failed to read manifest version:", err);
+  if (versionTag) versionTag.textContent = "v-";
+}
 
 // ── Load settings ────────────────────────────────
 
