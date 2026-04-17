@@ -45,6 +45,9 @@ fetch(chrome.runtime.getURL("manifest.json"))
   .then((r) => r.json())
   .then((m) => {
     if (versionTag) versionTag.textContent = "v" + m.version;
+  })
+  .catch(() => {
+    if (versionTag && !versionTag.textContent) versionTag.textContent = "v-";
   });
 
 // ── Load settings ────────────────────────────────
