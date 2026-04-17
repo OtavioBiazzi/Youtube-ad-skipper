@@ -41,15 +41,13 @@ let initialState = {};
 
 // ── Version ────────────────────────────────────────
 
-fetch(chrome.runtime.getURL("manifest.json"))
-  .then((r) => r.json())
-  .then((m) => {
-    if (versionTag) versionTag.textContent = `v${m.version}`;
-  })
-  .catch((err) => {
-    console.warn("[YouTube Ad Skipper] Failed to load manifest version:", err);
-    if (versionTag) versionTag.textContent = "v-";
-  });
+try {
+  const manifestVersion = chrome.runtime.getManifest().version;
+  if (versionTag && manifestVersion) versionTag.textContent = `v${manifestVersion}`;
+} catch (err) {
+  console.warn("[YouTube Ad Skipper] Failed to read manifest version:", err);
+  if (versionTag) versionTag.textContent = "v-";
+}
 
 // ── Load settings ────────────────────────────────
 
