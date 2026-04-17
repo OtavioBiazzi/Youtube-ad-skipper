@@ -27,6 +27,7 @@ const statusLabel      = document.getElementById("status-text");
 const container        = document.querySelector(".popup-container");
 const warningRow       = document.getElementById("warning-row");
 const warningText      = document.getElementById("warning-text");
+const versionTag       = document.getElementById("version-tag");
 
 const notes = {
   enabled: document.getElementById("note-enabled"),
@@ -37,6 +38,14 @@ const notes = {
 };
 
 let initialState = {};
+
+// ── Version ────────────────────────────────────────
+
+fetch(chrome.runtime.getURL("manifest.json"))
+  .then((r) => r.json())
+  .then((m) => {
+    if (versionTag) versionTag.textContent = "v" + m.version;
+  });
 
 // ── Load settings ────────────────────────────────
 
