@@ -19,6 +19,7 @@
     instantSkip: false,
     showToast: false,
     shortcutEnabled: false,
+    listMode: "whitelist",
     whitelist: [],
   };
 
@@ -58,7 +59,7 @@
           {
             enabled: true, skipDelay: 1, muteAds: true, showOverlay: true,
             aggressiveSkip: true, instantSkip: false, showToast: false,
-            shortcutEnabled: false, whitelist: [], warningCount: 0,
+            shortcutEnabled: false, listMode: "whitelist", whitelist: [], warningCount: 0,
             totalAdsSkipped: 0, adsSkippedToday: 0, todayDate: null,
           },
           (s) => {
@@ -71,6 +72,7 @@
             config.instantSkip = !!s.instantSkip;
             config.showToast = !!s.showToast;
             config.shortcutEnabled = !!s.shortcutEnabled;
+            config.listMode = s.listMode === "blacklist" ? "blacklist" : "whitelist";
             config.whitelist = Array.isArray(s.whitelist) ? s.whitelist : [];
             adState.warningCount = s.warningCount || 0;
             adState.totalSkipped = s.totalAdsSkipped || 0;
@@ -98,6 +100,7 @@
       if (changes.instantSkip) config.instantSkip = !!changes.instantSkip.newValue;
       if (changes.showToast) config.showToast = !!changes.showToast.newValue;
       if (changes.shortcutEnabled) config.shortcutEnabled = !!changes.shortcutEnabled.newValue;
+      if (changes.listMode) config.listMode = changes.listMode.newValue === "blacklist" ? "blacklist" : "whitelist";
       if (changes.whitelist) config.whitelist = Array.isArray(changes.whitelist.newValue) ? changes.whitelist.newValue : [];
     });
   }
@@ -630,10 +633,7 @@
       }
 
       // Verificar se o delay passou (comparação DIRETA de timestamp)
-      const elapsedMs = Date.now() - adState.startTime;
-      const requiredMs = getEffectiveDelay() * 1000;
-
-      if (elapsedMs >= requiredMs) {
+      if (adState.skipTargetTime && Date.now() >= adState.skipTargetTime) {
         // 1. Tentar clicar no botão nativamente (Stealth)
         const skipped = clickSkipAdBtn();
 
