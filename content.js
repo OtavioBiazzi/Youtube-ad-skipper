@@ -21,6 +21,7 @@
     shortcutEnabled: false,
     listMode: "whitelist",
     whitelist: [],
+    pipEnabled: false,
   };
 
   const CHECK_INTERVAL = 500;
@@ -60,7 +61,7 @@
             enabled: true, skipDelay: 1, muteAds: true, showOverlay: true,
             aggressiveSkip: true, instantSkip: false, showToast: false,
             shortcutEnabled: false, listMode: "whitelist", whitelist: [], warningCount: 0,
-            totalAdsSkipped: 0, adsSkippedToday: 0, todayDate: null,
+            totalAdsSkipped: 0, adsSkippedToday: 0, todayDate: null, pipEnabled: false,
           },
           (s) => {
             config.enabled = !!s.enabled;
@@ -74,6 +75,7 @@
             config.shortcutEnabled = !!s.shortcutEnabled;
             config.listMode = s.listMode === "blacklist" ? "blacklist" : "whitelist";
             config.whitelist = Array.isArray(s.whitelist) ? s.whitelist : [];
+            config.pipEnabled = !!s.pipEnabled;
             adState.warningCount = s.warningCount || 0;
             adState.totalSkipped = s.totalAdsSkipped || 0;
             adState.adsSkippedToday = s.adsSkippedToday || 0;
@@ -102,6 +104,10 @@
       if (changes.shortcutEnabled) config.shortcutEnabled = !!changes.shortcutEnabled.newValue;
       if (changes.listMode) config.listMode = changes.listMode.newValue === "blacklist" ? "blacklist" : "whitelist";
       if (changes.whitelist) config.whitelist = Array.isArray(changes.whitelist.newValue) ? changes.whitelist.newValue : [];
+      if (changes.pipEnabled) {
+        config.pipEnabled = !!changes.pipEnabled.newValue;
+        if (config.pipEnabled) { injectPipButton(); } else { removePipButton(); }
+      }
     });
   }
 
@@ -695,6 +701,152 @@
     }
   });
 
+  // ── Picture-in-Picture (PiP) — Player Flutuante ───────
+
+  const PIP_BTN_ID = 'ytp-pip-float-btn';
+  const PIP_STYLE_ID = 'ytp-pip-style';
+
+  function injectPipStyles() {
+    if (document.getElementById(PIP_STYLE_ID)) return;
+    const style = document.createElement('style');
+    style.id = PIP_STYLE_ID;
+    style.textContent = `
+      #${PIP_BTN_ID} {
+        position: absolute;
+        bottom: 60px;
+        right: 16px;
+        z-index: 99998;
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: rgba(0, 0, 0, 0.7);
+        border: 1.5px solid rgba(255, 255, 255, 0.2);
+        color: #fff;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        transition: opacity 0.3s ease, transform 0.2s ease, background 0.2s ease;
+        pointer-events: auto;
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+      }
+      .html5-video-player:hover #${PIP_BTN_ID},
+      #${PIP_BTN_ID}:focus {
+        opacity: 1;
+      }
+      #${PIP_BTN_ID}:hover {
+        background: rgba(200, 60, 60, 0.85);
+        border-color: rgba(255, 255, 255, 0.35);
+        transform: scale(1.1);
+      }
+      #${PIP_BTN_ID}:active {
+        transform: scale(0.95);
+      }
+      #${PIP_BTN_ID} svg {
+        width: 20px;
+        height: 20px;
+        pointer-events: none;
+      }
+      #${PIP_BTN_ID}.pip-active {
+        background: rgba(200, 60, 60, 0.9);
+        border-color: rgba(200, 60, 60, 0.6);
+        box-shadow: 0 0 12px rgba(200, 60, 60, 0.4);
+      }
+      .html5-video-player:hover #${PIP_BTN_ID}.pip-active {
+        opacity: 1;
+      }
+    `;
+    (document.head || document.documentElement).appendChild(style);
+  }
+
+  function createPipButton() {
+    if (document.getElementById(PIP_BTN_ID)) return;
+    injectPipStyles();
+
+    const player = document.querySelector('#movie_player') || document.querySelector('.html5-video-player');
+    if (!player) return;
+
+    const btn = document.createElement('button');
+    btn.id = PIP_BTN_ID;
+    btn.title = 'Player Flutuante (PiP)';
+    btn.innerHTML = `
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+        <rect x="12" y="10" width="8" height="6" rx="1" ry="1" fill="currentColor" opacity="0.4"/>
+      </svg>
+    `;
+
+    btn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const video = document.querySelector('video');
+      if (!video) return;
+
+      try {
+        if (document.pictureInPictureElement) {
+          await document.exitPictureInPicture();
+          btn.classList.remove('pip-active');
+        } else {
+          await video.requestPictureInPicture();
+          btn.classList.add('pip-active');
+        }
+      } catch (err) {
+        console.warn('[YouTube Ad Skipper] PiP error:', err);
+      }
+    });
+
+    player.style.position = 'relative';
+    player.appendChild(btn);
+
+    // Listen for PiP state changes to update button
+    const video = document.querySelector('video');
+    if (video) {
+      video.addEventListener('enterpictureinpicture', () => {
+        const b = document.getElementById(PIP_BTN_ID);
+        if (b) b.classList.add('pip-active');
+      });
+      video.addEventListener('leavepictureinpicture', () => {
+        const b = document.getElementById(PIP_BTN_ID);
+        if (b) b.classList.remove('pip-active');
+      });
+    }
+  }
+
+  function removePipButton() {
+    const btn = document.getElementById(PIP_BTN_ID);
+    if (btn) btn.remove();
+    const style = document.getElementById(PIP_STYLE_ID);
+    if (style) style.remove();
+  }
+
+  function injectPipButton() {
+    if (!config.pipEnabled) return;
+    // Wait for the player to be ready
+    const player = document.querySelector('#movie_player') || document.querySelector('.html5-video-player');
+    if (player) {
+      createPipButton();
+    } else {
+      // Retry after a short delay
+      setTimeout(() => { if (config.pipEnabled) createPipButton(); }, 2000);
+    }
+  }
+
+  // Re-inject PiP button on YouTube SPA navigation
+  let _pipLastUrl = location.href;
+  const _pipNavObserver = new MutationObserver(() => {
+    if (location.href !== _pipLastUrl) {
+      _pipLastUrl = location.href;
+      if (config.pipEnabled) {
+        setTimeout(injectPipButton, 1500);
+      }
+    }
+  });
+  _pipNavObserver.observe(document.documentElement, { childList: true, subtree: true });
+
   // ── Init ──────────────────────────────────────────────
 
   function isInIframe() {
@@ -707,6 +859,8 @@
       // garantir que as configurações foram carregadas antes de iniciar o loop
       try { mainLoop(); } catch (e) {}
       setInterval(mainLoop, CHECK_INTERVAL);
+      // Inject PiP button if enabled
+      injectPipButton();
     });
   }
 

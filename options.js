@@ -18,6 +18,7 @@ const DEFAULT = {
   showToast: false,
   shortcutEnabled: false,
   instantSkip: false,
+  pipEnabled: false,
 };
 
 // ── Elements ─────────────────────────────────────
@@ -52,6 +53,7 @@ const listModeLabel = document.getElementById("list-mode-label");
 const optToast    = document.getElementById("opt-toast");
 const optShortcut = document.getElementById("opt-shortcut");
 const optInstant  = document.getElementById("opt-instant");
+const optPip      = document.getElementById("opt-pip");
 const f5Banner    = document.getElementById("f5-banner");
 
 let currentWhitelist = [];
@@ -71,6 +73,7 @@ chrome.storage.local.get(DEFAULT, (s) => {
   optToast.checked      = !!s.showToast;
   optShortcut.checked   = !!s.shortcutEnabled;
   optInstant.checked    = !!s.instantSkip;
+  optPip.checked        = !!s.pipEnabled;
   optListMode.checked   = s.listMode === 'blacklist';
 
   applyTheme(s.theme);
@@ -160,6 +163,10 @@ optShortcut.addEventListener("change", () => {
 
 optInstant.addEventListener("change", () => {
   chrome.storage.local.set({ instantSkip: optInstant.checked });
+});
+
+optPip.addEventListener("change", () => {
+  chrome.storage.local.set({ pipEnabled: optPip.checked });
 });
 
 btnReset.addEventListener("click", () => {
@@ -312,7 +319,7 @@ function renderWarnings(count) {
 function checkRestartWarning() {
   if (!initialState) return;
   chrome.storage.local.get(DEFAULT, (current) => {
-    const needsReload = ['enabled', 'skipDelay', 'muteAds', 'showOverlay', 'aggressiveSkip', 'listMode', 'instantSkip'];
+    const needsReload = ['enabled', 'skipDelay', 'muteAds', 'showOverlay', 'aggressiveSkip', 'listMode', 'instantSkip', 'pipEnabled'];
     let changed = false;
     
     for (const key of needsReload) {
