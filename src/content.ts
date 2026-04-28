@@ -35,6 +35,8 @@ declare global {
   };
 
   const CHECK_INTERVAL = 500;
+  const FORCE_SKIP_RETRY_MS = 120;
+  const FORCE_SKIP_WINDOW_MS = 2400;
 
   let adState: any = {
     active: false,
@@ -50,6 +52,8 @@ declare global {
     todayDate: null,
     lastVideoTime: -1,
     alreadyCounted: false,
+    forceSkipInterval: null,
+    forceSkipStartedAt: null,
   };
 
   let adblockObserver: MutationObserver | null = null;
@@ -160,31 +164,62 @@ declare global {
 
   // ── Clicar no botão de pular ──────────────────────────
 
+  function getClickableTarget(el) {
+    if (!el) return null;
+    return el.closest?.(
+      'button, [role="button"], .ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-ad-skip-button-modern, .videoAdUiSkipButton'
+    ) || el;
+  }
+
+  function isClickableVisible(el) {
+    if (!el) return false;
+    const rect = el.getBoundingClientRect?.();
+    if (!rect || rect.width <= 0 || rect.height <= 0) return false;
+    const style = window.getComputedStyle(el);
+    return style.display !== "none" && style.visibility !== "hidden" && style.pointerEvents !== "none";
+  }
+
+  function clickElement(el) {
+    const target = getClickableTarget(el);
+    if (!target || !isClickableVisible(target)) return false;
+    if (typeof target.click !== "function") return false;
+
+    target.dispatchEvent(new MouseEvent("mouseover", { bubbles: true, cancelable: true, view: window }));
+    target.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, view: window }));
+    target.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, view: window }));
+    target.click();
+    return true;
+  }
+
   function clickSkipAdBtn() {
     // Método 1: classNames exatos
     for (const className of _skipClasses) {
       const elems = document.getElementsByClassName(className);
       for (const el of elems) {
-        if (el && (el.offsetParent !== null || el.offsetWidth > 0)) {
-          el.click();
-          return true;
-        }
+        if (clickElement(el)) return true;
       }
     }
 
     // Método 2: seletores CSS adicionais
     const extraSelectors = [
+      ".ytp-skip-ad-button",
+      ".ytp-ad-skip-button",
+      ".ytp-ad-skip-button-modern",
       ".ytp-ad-skip-button-slot button",
       ".ytp-ad-skip-button-container button",
       'button[id^="skip-button"]',
       "div.ytp-ad-skip-button-slot button",
+      '[aria-label*="Skip" i]',
+      '[aria-label*="Pular" i]',
+      '[title*="Skip" i]',
+      '[title*="Pular" i]',
+      '[class*="skip"][class*="ad" i]',
     ];
 
     for (const sel of extraSelectors) {
-      const btn = document.querySelector(sel);
-      if (btn && btn.offsetParent !== null) {
-        btn.click();
-        return true;
+      const candidates = document.querySelectorAll(sel);
+      for (const btn of candidates) {
+        if (clickElement(btn)) return true;
       }
     }
 
@@ -194,9 +229,8 @@ declare global {
       const text = (btn.textContent || "").toLowerCase().trim();
       if (
         (text.includes("pular") || text.includes("skip") || text.includes("ignorar")) &&
-        (btn.offsetParent !== null || btn.offsetWidth > 0)
+        clickElement(btn)
       ) {
-        btn.click();
         return true;
       }
     }
@@ -205,12 +239,105 @@ declare global {
     const dismiss = document.querySelector(
       'button[id="dismiss-button"], tp-yt-paper-button#dismiss-button'
     );
-    if (dismiss && dismiss.offsetParent !== null) {
-      dismiss.click();
-      return true;
-    }
+    if (clickElement(dismiss)) return true;
 
     return false;
+  }
+
+  function getYouTubePlayer() {
+    const player = document.getElementById("movie_player") || document.querySelector(".html5-video-player");
+    return player || null;
+  }
+
+  function getFinitePositiveNumber(value) {
+    const n = Number(value);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  }
+
+  function forceSkipAd(video = document.querySelector("video")) {
+    if (!config.enabled || !config.aggressiveSkip || adState.watching) return false;
+
+    const player: any = getYouTubePlayer();
+    let attempted = false;
+
+    if (video) {
+      const duration = getFinitePositiveNumber(video.duration);
+      const currentTime = getFinitePositiveNumber(video.currentTime);
+      const target = duration > 0
+        ? Math.max(duration - 0.05, currentTime + 0.25)
+        : currentTime + 600;
+
+      try {
+        video.playbackRate = 16;
+        attempted = true;
+      } catch (err) {}
+
+      try {
+        if (typeof video.fastSeek === "function") {
+          video.fastSeek(target);
+        }
+        video.currentTime = target;
+        attempted = true;
+      } catch (err) {
+        try {
+          video.currentTime = currentTime + 30;
+          attempted = true;
+        } catch (innerErr) {}
+      }
+
+      try {
+        if (player && typeof player.seekTo === "function" && duration > 0) {
+          player.seekTo(target, true);
+          attempted = true;
+        }
+      } catch (err) {}
+    }
+
+    try {
+      if (player && typeof player.setPlaybackRate === "function") {
+        player.setPlaybackRate(16);
+        attempted = true;
+      }
+    } catch (err) {}
+
+    return attempted;
+  }
+
+  function stopForceSkipBurst() {
+    if (adState.forceSkipInterval) {
+      clearInterval(adState.forceSkipInterval);
+      adState.forceSkipInterval = null;
+    }
+    adState.forceSkipStartedAt = null;
+  }
+
+  function startForceSkipBurst(video = document.querySelector("video")) {
+    if (!config.aggressiveSkip || adState.forceSkipInterval) return;
+    adState.forceSkipStartedAt = Date.now();
+
+    const tick = () => {
+      if (!config.enabled || adState.watching || !getAdPlaying()) {
+        stopForceSkipBurst();
+        return;
+      }
+
+      if (clickSkipAdBtn()) {
+        stopForceSkipBurst();
+        adState.skipTargetTime = Date.now() + 1000;
+        removeOverlay();
+        if (incrementAdCounter()) showToastNotification();
+        return;
+      }
+
+      forceSkipAd(video);
+
+      if (Date.now() - adState.forceSkipStartedAt >= FORCE_SKIP_WINDOW_MS) {
+        stopForceSkipBurst();
+      }
+    };
+
+    tick();
+    adState.forceSkipInterval = setInterval(tick, FORCE_SKIP_RETRY_MS);
   }
 
   // ── Anti-Adblock: SISTEMA TRIPLO ────────────────────────
@@ -490,6 +617,7 @@ declare global {
 
   function scheduleSkip() {
     clearInterval(adState.countdownInterval);
+    stopForceSkipBurst();
     const delayMs = getEffectiveDelay() * 1000;
     adState.skipTargetTime = Date.now() + humanDelay(delayMs);
   }
@@ -650,9 +778,16 @@ declare global {
     if (video && video.playbackRate !== 1) {
       video.playbackRate = 1;
     }
+    const player: any = getYouTubePlayer();
+    try {
+      if (player && typeof player.setPlaybackRate === "function") {
+        player.setPlaybackRate(1);
+      }
+    } catch (err) {}
   }
 
   function cleanupRuntimeState() {
+    stopForceSkipBurst();
     removeOverlay();
     unmuteVideo();
     resetPlaybackRate();
@@ -664,6 +799,8 @@ declare global {
     adState.skipTargetTime = null;
     adState.lastVideoTime = -1;
     adState.alreadyCounted = false;
+    adState.forceSkipInterval = null;
+    adState.forceSkipStartedAt = null;
   }
 
   // ── Main loop ─────────────────────────────────────────
@@ -727,13 +864,12 @@ declare global {
         // 2. Se falhou e aggressiveSkip está ON → forçar pulo
         if (!skipped) {
           if (config.aggressiveSkip && video) {
-            video.playbackRate = 16.0;
-            if (video.duration > 0 && video.currentTime < video.duration - 1) {
-              video.currentTime = video.duration - 0.5;
-            }
+            forceSkipAd(video);
+            startForceSkipBurst(video);
           }
         } else {
           // Pulou com sucesso via clique
+          stopForceSkipBurst();
           adState.skipTargetTime = Date.now() + 1000;
           removeOverlay();
           if (incrementAdCounter()) showToastNotification();
