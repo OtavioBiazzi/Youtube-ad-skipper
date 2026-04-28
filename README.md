@@ -49,7 +49,7 @@ Quando um anúncio aparece no YouTube:
    - Edge: `edge://extensions/`
 4. Ative a opção **"Modo do desenvolvedor"** (geralmente no canto superior direito).
 5. Clique no botão **"Carregar sem compactação"** (ou *"Load unpacked"*).
-6. Selecione a **pasta que você extraiu** no passo 2.
+6. Selecione a **pasta que você extraiu** no passo 2. Se você gerou um build local, também pode selecionar a pasta `dist/`.
 7. Pronto! A extensão já está instalada e ativa. ⚡
 
 ## ⚙️ Configurações
@@ -68,14 +68,29 @@ Clique no ícone da extensão na barra de ferramentas para acessar o menu:
 
 ```
 ├── manifest.json      # Configuração da extensão (Manifest V3)
-├── content.js         # Script principal que detecta e pula anúncios
-├── override.js        # Override do addEventListener para bypass do isTrusted
+├── src/               # Código-fonte TypeScript
+├── scripts/           # Build e verificação da extensão
+├── content.js         # Build gerado do script principal
+├── override.js        # Build gerado do script injetado no MAIN world
 ├── popup.html         # Interface do menu popup
 ├── popup.css          # Estilos do popup
-├── popup.js           # Lógica do popup
+├── popup.js           # Build gerado da lógica do popup
 ├── icon48.png         # Ícone 48x48
 └── icon128.png        # Ícone 128x128
 ```
+
+### Build moderno
+
+O projeto usa **TypeScript + Vite** para gerar os scripts finais da extensão.
+
+```bash
+npm install
+npm run verify
+```
+
+- `npm run check` valida os arquivos em `src/` com TypeScript.
+- `npm run build` gera os scripts finais na raiz e monta a extensão limpa em `dist/`.
+- `npm run verify` roda a checagem TypeScript, build e valida os arquivos referenciados pelo `manifest.json`.
 
 ### Como funciona tecnicamente
 

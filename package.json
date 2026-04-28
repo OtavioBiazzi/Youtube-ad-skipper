@@ -1,0 +1,16 @@
+{
+  "name": "youtube-ad-skipper",
+  "version": "4.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "tsc --noEmit",
+    "build": "node scripts/build-extension.mjs",
+    "verify": "npm run check && npm run build && node scripts/verify-extension.mjs"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.1.33",
+    "typescript": "^5.9.3",
+    "vite": "^7.2.4"
+  }
+}
