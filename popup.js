@@ -194,12 +194,31 @@ function renderWarnings(count) {
 // ── Live sync ────────────────────────────────────
 
 chrome.storage.onChanged.addListener((changes) => {
+  if (changes.enabled) {
+    toggleEnabled.checked = !!changes.enabled.newValue;
+    renderStatus(!!changes.enabled.newValue);
+  }
+  if (changes.muteAds) toggleMute.checked = !!changes.muteAds.newValue;
+  if (changes.showOverlay) toggleOverlay.checked = !!changes.showOverlay.newValue;
+  if (changes.aggressiveSkip) {
+    toggleAggressive.checked = !!changes.aggressiveSkip.newValue;
+    renderAggressiveState(!!changes.aggressiveSkip.newValue);
+  }
+  if (changes.skipDelay) {
+    const value = parseInt(changes.skipDelay.newValue, 10);
+    if (!isNaN(value)) {
+      skipDelaySlider.value = value;
+      renderDelay(value);
+      renderSliderTrack();
+    }
+  }
   if (changes.warningCount) {
     renderWarnings(changes.warningCount.newValue || 0);
   }
   if (changes.theme) {
     applyTheme(changes.theme.newValue);
   }
+  checkChanges();
 });
 
 // ── Open settings page ──────────────────────────

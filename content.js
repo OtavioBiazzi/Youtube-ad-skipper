@@ -42,6 +42,9 @@
     alreadyCounted: false,
   };
 
+  let adblockObserver = null;
+  let adblockBodyWaitObserver = null;
+
   // ── Humanização — jitter aleatório ────────────────────
 
   function humanDelay(baseMs) {
@@ -91,13 +94,26 @@
 
   if (chrome?.storage?.onChanged) {
     chrome.storage.onChanged.addListener((changes) => {
-      if (changes.enabled) config.enabled = !!changes.enabled.newValue;
+      if (changes.enabled) {
+        config.enabled = !!changes.enabled.newValue;
+        if (config.enabled) {
+          startAdblockProtection();
+          if (config.pipEnabled) injectPipButton();
+        } else {
+          cleanupRuntimeState();
+          stopAdblockProtection();
+          removePipButton();
+        }
+      }
       if (changes.skipDelay) {
         const v = Number(changes.skipDelay.newValue);
         if (!isNaN(v) && v >= 0) config.skipDelay = v;
       }
       if (changes.muteAds) config.muteAds = !!changes.muteAds.newValue;
-      if (changes.showOverlay) config.showOverlay = !!changes.showOverlay.newValue;
+      if (changes.showOverlay) {
+        config.showOverlay = !!changes.showOverlay.newValue;
+        if (!config.showOverlay) removeOverlay();
+      }
       if (changes.aggressiveSkip) config.aggressiveSkip = !!changes.aggressiveSkip.newValue;
       if (changes.instantSkip) config.instantSkip = !!changes.instantSkip.newValue;
       if (changes.showToast) config.showToast = !!changes.showToast.newValue;
@@ -106,7 +122,7 @@
       if (changes.whitelist) config.whitelist = Array.isArray(changes.whitelist.newValue) ? changes.whitelist.newValue : [];
       if (changes.pipEnabled) {
         config.pipEnabled = !!changes.pipEnabled.newValue;
-        if (config.pipEnabled) { injectPipButton(); } else { removePipButton(); }
+        if (config.enabled && config.pipEnabled) { injectPipButton(); } else { removePipButton(); }
       }
     });
   }
@@ -190,18 +206,20 @@
   // ── Anti-Adblock: SISTEMA TRIPLO ────────────────────────
   // Camada 1: CSS injection — esconde o dialog ANTES de renderizar
   // Camada 2: MutationObserver — remove do DOM no instante que aparece (0ms)
-  // Camada 3: Polling fallback — varredura a cada 200ms como rede de segurança
+  // Camada 3: Polling fallback — varredura no loop principal como rede de segurança
 
   const _abTagNames = [
     'YTD-ENFORCEMENT-MESSAGE-VIEW-MODEL',
   ];
 
+  const ANTI_ADBLOCK_STYLE_ID = 'ytp-css-patch-ab';
+
   // ── Camada 1: CSS Preemptivo ──────────────────────────
   function injectAntiAdblockCSS() {
-    const id = 'ytp-css-patch-ab';
-    if (document.getElementById(id)) return;
+    if (!config.enabled) return;
+    if (document.getElementById(ANTI_ADBLOCK_STYLE_ID)) return;
     const s = document.createElement('style');
-    s.id = id;
+    s.id = ANTI_ADBLOCK_STYLE_ID;
     s.textContent = `
       ytd-enforcement-message-view-model,
       tp-yt-paper-dialog:has(ytd-enforcement-message-view-model),
@@ -223,18 +241,42 @@
     (document.head || document.documentElement).appendChild(s);
   }
 
-  injectAntiAdblockCSS();
+  function removeAntiAdblockCSS() {
+    const style = document.getElementById(ANTI_ADBLOCK_STYLE_ID);
+    if (style) style.remove();
+  }
+
+  function startAdblockProtection() {
+    if (!config.enabled) return;
+    injectAntiAdblockCSS();
+    startAdblockObserver();
+    dismissAdblockWarning();
+  }
+
+  function stopAdblockProtection() {
+    if (adblockObserver) {
+      adblockObserver.disconnect();
+      adblockObserver = null;
+    }
+    if (adblockBodyWaitObserver) {
+      adblockBodyWaitObserver.disconnect();
+      adblockBodyWaitObserver = null;
+    }
+    removeAntiAdblockCSS();
+  }
 
   // ── Camada 2: MutationObserver (instantâneo) ──────────
   function nukeAdblockElement(el) {
-    if (!el) return;
+    if (!config.enabled || !el) return;
+    const shouldCount = el.isConnected !== false;
     el.remove();
     const backdrops = document.querySelectorAll('iron-overlay-backdrop, tp-yt-paper-dialog-backdrop');
     backdrops.forEach(b => b.remove());
-    document.body.style.overflow = '';
+    if (document.body) document.body.style.overflow = '';
     document.documentElement.style.overflow = '';
 
     // Incrementar contador de avisos e salvar
+    if (!shouldCount) return;
     adState.warningCount++;
     if (chrome?.storage?.local) {
       chrome.storage.local.set({ warningCount: adState.warningCount });
@@ -242,6 +284,7 @@
   }
 
   function checkAndNukeNode(node) {
+    if (!config.enabled) return;
     if (!node || node.nodeType !== 1) return;
 
     if (_abTagNames.includes(node.tagName)) {
@@ -268,33 +311,37 @@
   }
 
   function startAdblockObserver() {
-    const observer = new MutationObserver((mutations) => {
+    if (!config.enabled || adblockObserver || adblockBodyWaitObserver) return;
+    const root = document.body || document.documentElement;
+    if (!document.body) {
+      adblockBodyWaitObserver = new MutationObserver(() => {
+        if (document.body) {
+          adblockBodyWaitObserver.disconnect();
+          adblockBodyWaitObserver = null;
+          startAdblockObserver();
+        }
+      });
+      adblockBodyWaitObserver.observe(document.documentElement, { childList: true });
+      return;
+    }
+
+    adblockObserver = new MutationObserver((mutations) => {
+      if (!config.enabled) return;
       for (const mutation of mutations) {
         for (const node of mutation.addedNodes) {
           checkAndNukeNode(node);
         }
       }
     });
-    observer.observe(document.body || document.documentElement, {
+    adblockObserver.observe(root, {
       childList: true,
       subtree: true,
     });
   }
 
-  if (document.body) {
-    startAdblockObserver();
-  } else {
-    const bodyWait = new MutationObserver(() => {
-      if (document.body) {
-        bodyWait.disconnect();
-        startAdblockObserver();
-      }
-    });
-    bodyWait.observe(document.documentElement, { childList: true });
-  }
-
   // ── Camada 3: Polling fallback ────────────────────────
   function dismissAdblockWarning() {
+    if (!config.enabled) return false;
     const enforcement = document.querySelector('ytd-enforcement-message-view-model');
     if (enforcement) {
       const dialog = enforcement.closest('tp-yt-paper-dialog') || enforcement;
@@ -566,7 +613,7 @@
   // ── Contador de anúncios ──────────────────────────────
 
   function incrementAdCounter() {
-    if (adState.alreadyCounted) return;
+    if (adState.alreadyCounted) return false;
     adState.alreadyCounted = true;
 
     const now = new Date();
@@ -585,12 +632,37 @@
         todayDate: adState.todayDate,
       });
     }
+    return true;
+  }
+
+  function resetPlaybackRate() {
+    const video = document.querySelector("video");
+    if (video && video.playbackRate !== 1) {
+      video.playbackRate = 1;
+    }
+  }
+
+  function cleanupRuntimeState() {
+    removeOverlay();
+    unmuteVideo();
+    resetPlaybackRate();
+
+    adState.active = false;
+    adState.currentAd = undefined;
+    adState.startTime = null;
+    adState.watching = false;
+    adState.skipTargetTime = null;
+    adState.lastVideoTime = -1;
+    adState.alreadyCounted = false;
   }
 
   // ── Main loop ─────────────────────────────────────────
 
   function mainLoop() {
-    if (!config.enabled) return;
+    if (!config.enabled) {
+      if (adState.active || adState.overlayEl) cleanupRuntimeState();
+      return;
+    }
 
     // Sempre tentar fechar popup anti-adblock
     dismissAdblockWarning();
@@ -625,8 +697,7 @@
         const ct = video.currentTime;
         if (adState.lastVideoTime > 2 && ct < adState.lastVideoTime - 2) {
           // Contar o anúncio anterior como pulado
-          incrementAdCounter();
-          showToastNotification();
+          if (incrementAdCounter()) showToastNotification();
           // Resetar para o novo anúncio
           adState.startTime = Date.now();
           adState.alreadyCounted = false;
@@ -653,9 +724,9 @@
           }
         } else {
           // Pulou com sucesso via clique
+          adState.skipTargetTime = Date.now() + 1000;
           removeOverlay();
-          incrementAdCounter();
-          showToastNotification();
+          if (incrementAdCounter()) showToastNotification();
         }
       }
     } else if (!adPlaying && adState.active) {
@@ -663,21 +734,10 @@
 
       // Contar como pulado se não estava assistindo
       if (!adState.watching) {
-        incrementAdCounter();
-        showToastNotification();
+        if (incrementAdCounter()) showToastNotification();
       }
 
-      adState.active = false;
-      adState.currentAd = undefined;
-      adState.lastVideoTime = -1;
-      adState.alreadyCounted = false;
-      removeOverlay();
-      unmuteVideo();
-
-      const video = document.querySelector("video");
-      if (video && video.playbackRate !== 1) {
-        video.playbackRate = 1;
-      }
+      cleanupRuntimeState();
     } else if (!adPlaying && !adState.active) {
       const orphans = document.querySelectorAll("#" + OVERLAY_ID);
       if (orphans.length > 0) orphans.forEach(el => el.remove());
@@ -687,15 +747,14 @@
   // ── Atalho de teclado ─────────────────────────────────
 
   document.addEventListener('keydown', (e) => {
-    if (!config.shortcutEnabled) return;
+    if (!config.enabled || !config.shortcutEnabled) return;
     if (e.shiftKey && (e.key === 'S' || e.key === 's')) {
       e.preventDefault();
       if (adState.active && !adState.watching) {
         const skipped = clickSkipAdBtn();
         if (skipped) {
           removeOverlay();
-          incrementAdCounter();
-          showToastNotification();
+          if (incrementAdCounter()) showToastNotification();
         }
       }
     }
@@ -824,14 +883,14 @@
   }
 
   function injectPipButton() {
-    if (!config.pipEnabled) return;
+    if (!config.enabled || !config.pipEnabled) return;
     // Wait for the player to be ready
     const player = document.querySelector('#movie_player') || document.querySelector('.html5-video-player');
     if (player) {
       createPipButton();
     } else {
       // Retry after a short delay
-      setTimeout(() => { if (config.pipEnabled) createPipButton(); }, 2000);
+      setTimeout(() => { if (config.enabled && config.pipEnabled) createPipButton(); }, 2000);
     }
   }
 
@@ -840,7 +899,7 @@
   const _pipNavObserver = new MutationObserver(() => {
     if (location.href !== _pipLastUrl) {
       _pipLastUrl = location.href;
-      if (config.pipEnabled) {
+      if (config.enabled && config.pipEnabled) {
         setTimeout(injectPipButton, 1500);
       }
     }
@@ -857,6 +916,7 @@
     if (isInIframe()) return;
     loadSettings().then(() => {
       // garantir que as configurações foram carregadas antes de iniciar o loop
+      startAdblockProtection();
       try { mainLoop(); } catch (e) {}
       setInterval(mainLoop, CHECK_INTERVAL);
       // Inject PiP button if enabled

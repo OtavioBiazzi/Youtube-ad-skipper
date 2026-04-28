@@ -86,7 +86,7 @@ body * {
 .header-title {
   font-size: 22px;
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
   line-height: 1.1;
 }
 
@@ -428,6 +428,16 @@ body.theme-light .theme-toggle:hover {
   color: var(--green);
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+body.extension-disabled .process-pip {
+  background: var(--text-muted);
+  box-shadow: none;
+  animation: none;
+}
+
+body.extension-disabled .process-status {
+  color: var(--text-muted);
 }
 
 .tag {

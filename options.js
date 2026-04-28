@@ -77,6 +77,7 @@ chrome.storage.local.get(DEFAULT, (s) => {
   optListMode.checked   = s.listMode === 'blacklist';
 
   applyTheme(s.theme);
+  renderStatus(s.enabled);
   renderDelay(s.skipDelay);
   renderWarnings(s.warningCount || 0);
   renderMode(s.aggressiveSkip);
@@ -97,11 +98,12 @@ chrome.storage.local.get(DEFAULT, (s) => {
 });
 
 // Get version from manifest
-fetch(chrome.runtime.getURL("manifest.json"))
-  .then(r => r.json())
-  .then(m => {
-    versionTag.textContent = "v" + m.version;
-  });
+try {
+  versionTag.textContent = "v" + chrome.runtime.getManifest().version;
+} catch (err) {
+  console.warn("[YouTube Ad Skipper] Failed to read manifest version:", err);
+  versionTag.textContent = "v-";
+}
 
 // ── Events ───────────────────────────────────────
 
@@ -266,6 +268,10 @@ function renderSlider() {
   optDelay.style.background = "linear-gradient(90deg, hsl(355,65%,52%) " + pct + "%, #1c1c1f " + pct + "%)";
 }
 
+function renderStatus(enabled) {
+  document.body.classList.toggle("extension-disabled", !enabled);
+}
+
 function renderMode(aggressive) {
   if (stealthBadge) {
     stealthBadge.textContent = aggressive ? "AGRESSIVO" : "SEGURO/FURTIVO";
@@ -337,8 +343,35 @@ function checkRestartWarning() {
 }
 
 chrome.storage.onChanged.addListener((changes) => {
+  if (changes.enabled) {
+    optEnabled.checked = !!changes.enabled.newValue;
+    renderStatus(!!changes.enabled.newValue);
+  }
+  if (changes.muteAds) optMute.checked = !!changes.muteAds.newValue;
+  if (changes.showOverlay) optOverlay.checked = !!changes.showOverlay.newValue;
+  if (changes.skipDelay) {
+    const value = parseInt(changes.skipDelay.newValue, 10);
+    if (!isNaN(value)) {
+      optDelay.value = value;
+      renderDelay(value);
+      renderSlider();
+    }
+  }
   if (changes.warningCount) renderWarnings(changes.warningCount.newValue || 0);
-  if (changes.aggressiveSkip) renderMode(changes.aggressiveSkip.newValue);
+  if (changes.aggressiveSkip) {
+    optAggressive.checked = !!changes.aggressiveSkip.newValue;
+    renderMode(!!changes.aggressiveSkip.newValue);
+  }
+  if (changes.theme) applyTheme(changes.theme.newValue);
+  if (changes.listMode) {
+    const mode = changes.listMode.newValue === 'blacklist' ? 'blacklist' : 'whitelist';
+    optListMode.checked = mode === 'blacklist';
+    renderListMode(mode);
+  }
+  if (changes.showToast) optToast.checked = !!changes.showToast.newValue;
+  if (changes.shortcutEnabled) optShortcut.checked = !!changes.shortcutEnabled.newValue;
+  if (changes.instantSkip) optInstant.checked = !!changes.instantSkip.newValue;
+  if (changes.pipEnabled) optPip.checked = !!changes.pipEnabled.newValue;
   
   if (changes.totalAdsSkipped) {
     animateCounter(statTotal, changes.totalAdsSkipped.newValue || 0);
