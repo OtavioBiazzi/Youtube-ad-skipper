@@ -36,7 +36,9 @@ declare global {
 
   const CHECK_INTERVAL = 500;
   const FORCE_SKIP_RETRY_MS = 120;
-  const FORCE_SKIP_WINDOW_MS = 2400;
+  const FORCE_SKIP_WINDOW_MS = 6000;
+  const MAIN_FORCE_SKIP_MESSAGE = "yt-ad-skipper:force-skip";
+  const MAIN_FORCE_SKIP_RESULT = "yt-ad-skipper:force-skip-result";
 
   let adState: any = {
     active: false,
@@ -54,6 +56,7 @@ declare global {
     alreadyCounted: false,
     forceSkipInterval: null,
     forceSkipStartedAt: null,
+    skipTimeout: null,
   };
 
   let adblockObserver: MutationObserver | null = null;
@@ -140,6 +143,15 @@ declare global {
       }
     });
   }
+
+  window.addEventListener("message", (event) => {
+    if (event.source !== window) return;
+    const data = event.data || {};
+    if (data.source !== MAIN_FORCE_SKIP_RESULT || !data.ok) return;
+    if (data.method === "click") {
+      finishSkipClick();
+    }
+  });
 
   // ── Detectar anúncio (método combinado) ───────────────
   // Usa AMBOS os métodos: classe no player + elementos de UI do anúncio
@@ -254,8 +266,17 @@ declare global {
     return Number.isFinite(n) && n > 0 ? n : 0;
   }
 
+  function requestMainWorldSkip() {
+    window.postMessage({
+      source: MAIN_FORCE_SKIP_MESSAGE,
+      targetTime: adState.skipTargetTime || Date.now(),
+    }, "*");
+  }
+
   function forceSkipAd(video = document.querySelector("video")) {
     if (!config.enabled || !config.aggressiveSkip || adState.watching) return false;
+
+    requestMainWorldSkip();
 
     const player: any = getYouTubePlayer();
     let attempted = false;
@@ -311,6 +332,38 @@ declare global {
     adState.forceSkipStartedAt = null;
   }
 
+  function clearSkipTimeout() {
+    if (adState.skipTimeout) {
+      clearTimeout(adState.skipTimeout);
+      adState.skipTimeout = null;
+    }
+  }
+
+  function finishSkipClick() {
+    stopForceSkipBurst();
+    clearSkipTimeout();
+    adState.skipTargetTime = Date.now() + 1000;
+    removeOverlay();
+    if (incrementAdCounter()) showToastNotification();
+  }
+
+  function attemptScheduledSkip() {
+    if (!config.enabled || !adState.active || adState.watching) return false;
+
+    const video = document.querySelector("video");
+    if (clickSkipAdBtn()) {
+      finishSkipClick();
+      return true;
+    }
+
+    if (config.aggressiveSkip) {
+      forceSkipAd(video);
+      startForceSkipBurst(video);
+    }
+
+    return false;
+  }
+
   function startForceSkipBurst(video = document.querySelector("video")) {
     if (!config.aggressiveSkip || adState.forceSkipInterval) return;
     adState.forceSkipStartedAt = Date.now();
@@ -322,10 +375,7 @@ declare global {
       }
 
       if (clickSkipAdBtn()) {
-        stopForceSkipBurst();
-        adState.skipTargetTime = Date.now() + 1000;
-        removeOverlay();
-        if (incrementAdCounter()) showToastNotification();
+        finishSkipClick();
         return;
       }
 
@@ -618,8 +668,11 @@ declare global {
   function scheduleSkip() {
     clearInterval(adState.countdownInterval);
     stopForceSkipBurst();
+    clearSkipTimeout();
     const delayMs = getEffectiveDelay() * 1000;
-    adState.skipTargetTime = Date.now() + humanDelay(delayMs);
+    const actualDelayMs = config.aggressiveSkip ? delayMs : humanDelay(delayMs);
+    adState.skipTargetTime = Date.now() + actualDelayMs;
+    adState.skipTimeout = setTimeout(attemptScheduledSkip, actualDelayMs);
   }
 
   // ── Mute/unmute ───────────────────────────────────────
@@ -788,6 +841,7 @@ declare global {
 
   function cleanupRuntimeState() {
     stopForceSkipBurst();
+    clearSkipTimeout();
     removeOverlay();
     unmuteVideo();
     resetPlaybackRate();
@@ -801,6 +855,7 @@ declare global {
     adState.alreadyCounted = false;
     adState.forceSkipInterval = null;
     adState.forceSkipStartedAt = null;
+    adState.skipTimeout = null;
   }
 
   // ── Main loop ─────────────────────────────────────────
@@ -858,22 +913,7 @@ declare global {
 
       // Verificar se o delay passou (comparação DIRETA de timestamp)
       if (adState.skipTargetTime && Date.now() >= adState.skipTargetTime) {
-        // 1. Tentar clicar no botão nativamente (Stealth)
-        const skipped = clickSkipAdBtn();
-
-        // 2. Se falhou e aggressiveSkip está ON → forçar pulo
-        if (!skipped) {
-          if (config.aggressiveSkip && video) {
-            forceSkipAd(video);
-            startForceSkipBurst(video);
-          }
-        } else {
-          // Pulou com sucesso via clique
-          stopForceSkipBurst();
-          adState.skipTargetTime = Date.now() + 1000;
-          removeOverlay();
-          if (incrementAdCounter()) showToastNotification();
-        }
+        attemptScheduledSkip();
       }
     } else if (!adPlaying && adState.active) {
       // ── Anúncio ACABOU ───

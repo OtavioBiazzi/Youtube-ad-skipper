@@ -22,7 +22,9 @@
     };
     const CHECK_INTERVAL = 500;
     const FORCE_SKIP_RETRY_MS = 120;
-    const FORCE_SKIP_WINDOW_MS = 2400;
+    const FORCE_SKIP_WINDOW_MS = 6e3;
+    const MAIN_FORCE_SKIP_MESSAGE = "yt-ad-skipper:force-skip";
+    const MAIN_FORCE_SKIP_RESULT = "yt-ad-skipper:force-skip-result";
     let adState = {
       active: false,
       currentAd: void 0,
@@ -38,7 +40,8 @@
       lastVideoTime: -1,
       alreadyCounted: false,
       forceSkipInterval: null,
-      forceSkipStartedAt: null
+      forceSkipStartedAt: null,
+      skipTimeout: null
     };
     let adblockObserver = null;
     let adblockBodyWaitObserver = null;
@@ -131,6 +134,14 @@
         }
       });
     }
+    window.addEventListener("message", (event) => {
+      if (event.source !== window) return;
+      const data = event.data || {};
+      if (data.source !== MAIN_FORCE_SKIP_RESULT || !data.ok) return;
+      if (data.method === "click") {
+        finishSkipClick();
+      }
+    });
     function getAdPlaying() {
       const player = document.querySelector(".html5-video-player");
       if (player && player.classList.contains("ad-showing")) return true;
@@ -213,8 +224,15 @@
       const n = Number(value);
       return Number.isFinite(n) && n > 0 ? n : 0;
     }
+    function requestMainWorldSkip() {
+      window.postMessage({
+        source: MAIN_FORCE_SKIP_MESSAGE,
+        targetTime: adState.skipTargetTime || Date.now()
+      }, "*");
+    }
     function forceSkipAd(video = document.querySelector("video")) {
       if (!config.enabled || !config.aggressiveSkip || adState.watching) return false;
+      requestMainWorldSkip();
       const player = getYouTubePlayer();
       let attempted = false;
       if (video) {
@@ -263,6 +281,32 @@
       }
       adState.forceSkipStartedAt = null;
     }
+    function clearSkipTimeout() {
+      if (adState.skipTimeout) {
+        clearTimeout(adState.skipTimeout);
+        adState.skipTimeout = null;
+      }
+    }
+    function finishSkipClick() {
+      stopForceSkipBurst();
+      clearSkipTimeout();
+      adState.skipTargetTime = Date.now() + 1e3;
+      removeOverlay();
+      if (incrementAdCounter()) showToastNotification();
+    }
+    function attemptScheduledSkip() {
+      if (!config.enabled || !adState.active || adState.watching) return false;
+      const video = document.querySelector("video");
+      if (clickSkipAdBtn()) {
+        finishSkipClick();
+        return true;
+      }
+      if (config.aggressiveSkip) {
+        forceSkipAd(video);
+        startForceSkipBurst(video);
+      }
+      return false;
+    }
     function startForceSkipBurst(video = document.querySelector("video")) {
       if (!config.aggressiveSkip || adState.forceSkipInterval) return;
       adState.forceSkipStartedAt = Date.now();
@@ -272,10 +316,7 @@
           return;
         }
         if (clickSkipAdBtn()) {
-          stopForceSkipBurst();
-          adState.skipTargetTime = Date.now() + 1e3;
-          removeOverlay();
-          if (incrementAdCounter()) showToastNotification();
+          finishSkipClick();
           return;
         }
         forceSkipAd(video);
@@ -521,8 +562,11 @@
     function scheduleSkip() {
       clearInterval(adState.countdownInterval);
       stopForceSkipBurst();
+      clearSkipTimeout();
       const delayMs = getEffectiveDelay() * 1e3;
-      adState.skipTargetTime = Date.now() + humanDelay(delayMs);
+      const actualDelayMs = config.aggressiveSkip ? delayMs : humanDelay(delayMs);
+      adState.skipTargetTime = Date.now() + actualDelayMs;
+      adState.skipTimeout = setTimeout(attemptScheduledSkip, actualDelayMs);
     }
     function muteVideo() {
       if (!config.muteAds || adState.watching) return;
@@ -656,6 +700,7 @@
     }
     function cleanupRuntimeState() {
       stopForceSkipBurst();
+      clearSkipTimeout();
       removeOverlay();
       unmuteVideo();
       resetPlaybackRate();
@@ -668,6 +713,7 @@
       adState.alreadyCounted = false;
       adState.forceSkipInterval = null;
       adState.forceSkipStartedAt = null;
+      adState.skipTimeout = null;
     }
     function mainLoop() {
       if (!config.enabled) {
@@ -703,18 +749,7 @@
           adState.lastVideoTime = ct;
         }
         if (adState.skipTargetTime && Date.now() >= adState.skipTargetTime) {
-          const skipped = clickSkipAdBtn();
-          if (!skipped) {
-            if (config.aggressiveSkip && video) {
-              forceSkipAd(video);
-              startForceSkipBurst(video);
-            }
-          } else {
-            stopForceSkipBurst();
-            adState.skipTargetTime = Date.now() + 1e3;
-            removeOverlay();
-            if (incrementAdCounter()) showToastNotification();
-          }
+          attemptScheduledSkip();
         }
       } else if (!adPlaying && adState.active) {
         if (!adState.watching) {
