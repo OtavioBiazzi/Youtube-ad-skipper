@@ -16,7 +16,8 @@
     showToast: false,
     shortcutEnabled: false,
     instantSkip: false,
-    pipEnabled: false
+    pipEnabled: false,
+    adSpeedRate: 3
   };
   function byId(id) {
     return document.getElementById(id);
@@ -47,6 +48,8 @@
   const optShortcut = byId("opt-shortcut");
   const optInstant = byId("opt-instant");
   const optPip = byId("opt-pip");
+  const optAdSpeed = byId("opt-ad-speed");
+  const adSpeedValue = byId("opt-ad-speed-value");
   const f5Banner = byId("f5-banner");
   let currentWhitelist = [];
   let initialState = null;
@@ -61,6 +64,7 @@
     optShortcut.checked = !!s.shortcutEnabled;
     optInstant.checked = !!s.instantSkip;
     optPip.checked = !!s.pipEnabled;
+    optAdSpeed.value = String(s.adSpeedRate || 3);
     optListMode.checked = s.listMode === "blacklist";
     applyTheme(s.theme);
     renderStatus(s.enabled);
@@ -69,6 +73,7 @@
     renderMode(s.aggressiveSkip);
     renderListMode(s.listMode || "whitelist");
     renderSlider();
+    renderAdSpeed(s.adSpeedRate || 3);
     const now = /* @__PURE__ */ new Date();
     const today = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0");
     const todayCount = s.todayDate === today ? s.adsSkippedToday || 0 : 0;
@@ -134,6 +139,11 @@
   });
   optPip.addEventListener("change", () => {
     chrome.storage.local.set({ pipEnabled: optPip.checked });
+  });
+  optAdSpeed.addEventListener("input", () => {
+    const value = parseFloat(optAdSpeed.value);
+    chrome.storage.local.set({ adSpeedRate: value });
+    renderAdSpeed(value);
   });
   btnReset.addEventListener("click", () => {
     if (confirm("Isso vai resetar todas as configurações e zerar o contador de anúncios e avisos. Continuar?")) {
@@ -236,6 +246,13 @@
       listModeLabel.style.color = "var(--accent)";
     }
   }
+  function renderAdSpeed(value) {
+    adSpeedValue.textContent = value.toFixed(value % 1 === 0 ? 0 : 1) + "x";
+    const min = parseFloat(optAdSpeed.min);
+    const max = parseFloat(optAdSpeed.max);
+    const pct = (value - min) / (max - min) * 100;
+    optAdSpeed.style.background = "linear-gradient(90deg, hsl(355,65%,52%) " + pct + "%, #1c1c1f " + pct + "%)";
+  }
   function animateCounter(el, target) {
     if (!el) return;
     if (target === 0) {
@@ -266,7 +283,7 @@
   function checkRestartWarning() {
     if (!initialState) return;
     chrome.storage.local.get(DEFAULT, (current) => {
-      const needsReload = ["enabled", "skipDelay", "muteAds", "showOverlay", "aggressiveSkip", "listMode", "instantSkip", "pipEnabled"];
+      const needsReload = ["enabled", "skipDelay", "muteAds", "showOverlay", "aggressiveSkip", "listMode", "instantSkip", "pipEnabled", "adSpeedRate"];
       let changed = false;
       for (const key of needsReload) {
         if (current[key] !== initialState[key]) {
@@ -312,6 +329,11 @@
     if (changes.shortcutEnabled) optShortcut.checked = !!changes.shortcutEnabled.newValue;
     if (changes.instantSkip) optInstant.checked = !!changes.instantSkip.newValue;
     if (changes.pipEnabled) optPip.checked = !!changes.pipEnabled.newValue;
+    if (changes.adSpeedRate) {
+      const value = Number(changes.adSpeedRate.newValue) || 3;
+      optAdSpeed.value = String(value);
+      renderAdSpeed(value);
+    }
     if (changes.totalAdsSkipped) {
       animateCounter(statTotal, Number(changes.totalAdsSkipped.newValue) || 0);
     }

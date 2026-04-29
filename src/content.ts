@@ -32,13 +32,20 @@ declare global {
     listMode: "whitelist",
     whitelist: [],
     pipEnabled: false,
+    adSpeedRate: 3,
   };
 
   const CHECK_INTERVAL = 500;
   const FORCE_SKIP_RETRY_MS = 120;
   const FORCE_SKIP_WINDOW_MS = 6000;
-  const SPEED_THROUGH_RATE = 16;
+  const DEFAULT_SPEED_THROUGH_RATE = 3;
+  const MIN_SPEED_THROUGH_RATE = 1;
+  const MAX_SPEED_THROUGH_RATE = 8;
+  const MIN_PLAYBACK_RATE = 0.0625;
+  const MAX_PLAYBACK_RATE = 16;
   const SPEED_THROUGH_RETRY_MS = 250;
+  const PLAYBACK_RESTORE_RETRY_MS = 150;
+  const PLAYBACK_RESTORE_WINDOW_MS = 2400;
   const MAIN_FORCE_SKIP_MESSAGE = "yt-ad-skipper:force-skip";
   const MAIN_SPEED_THROUGH_MESSAGE = "yt-ad-skipper:speed-through";
   const MAIN_FORCE_SKIP_RESULT = "yt-ad-skipper:force-skip-result";
@@ -61,6 +68,9 @@ declare global {
     forceSkipStartedAt: null,
     skipTimeout: null,
     speedThroughInterval: null,
+    playbackRestoreInterval: null,
+    playbackRestoreStartedAt: null,
+    preAdPlaybackRate: null,
   };
 
   let adblockObserver: MutationObserver | null = null;
@@ -86,6 +96,7 @@ declare global {
             aggressiveSkip: true, instantSkip: false, showToast: false,
             shortcutEnabled: false, listMode: "whitelist", whitelist: [], warningCount: 0,
             totalAdsSkipped: 0, adsSkippedToday: 0, todayDate: null, pipEnabled: false,
+            adSpeedRate: DEFAULT_SPEED_THROUGH_RATE,
           },
           (s) => {
             config.enabled = !!s.enabled;
@@ -100,6 +111,7 @@ declare global {
             config.listMode = s.listMode === "blacklist" ? "blacklist" : "whitelist";
             config.whitelist = Array.isArray(s.whitelist) ? s.whitelist : [];
             config.pipEnabled = !!s.pipEnabled;
+            config.adSpeedRate = normalizeSpeedRate(s.adSpeedRate);
             adState.warningCount = s.warningCount || 0;
             adState.totalSkipped = s.totalAdsSkipped || 0;
             adState.adsSkippedToday = s.adsSkippedToday || 0;
@@ -145,6 +157,7 @@ declare global {
         config.pipEnabled = !!changes.pipEnabled.newValue;
         if (config.enabled && config.pipEnabled) { injectPipButton(); } else { removePipButton(); }
       }
+      if (changes.adSpeedRate) config.adSpeedRate = normalizeSpeedRate(changes.adSpeedRate.newValue);
     });
   }
 
@@ -270,14 +283,31 @@ declare global {
     return Number.isFinite(n) && n > 0 ? n : 0;
   }
 
+  function normalizeSpeedRate(rate) {
+    const n = Number(rate);
+    if (!Number.isFinite(n)) return DEFAULT_SPEED_THROUGH_RATE;
+    return Math.min(MAX_SPEED_THROUGH_RATE, Math.max(MIN_SPEED_THROUGH_RATE, n));
+  }
+
+  function normalizePlaybackRate(rate, fallback = 1) {
+    const n = Number(rate);
+    if (!Number.isFinite(n) || n <= 0) return fallback;
+    return Math.min(MAX_PLAYBACK_RATE, Math.max(MIN_PLAYBACK_RATE, n));
+  }
+
+  function getSpeedThroughRate() {
+    return normalizeSpeedRate(config.adSpeedRate);
+  }
+
   function requestMainWorldSkip() {
     window.postMessage({
       source: MAIN_FORCE_SKIP_MESSAGE,
       targetTime: adState.skipTargetTime || Date.now(),
+      rate: getSpeedThroughRate(),
     }, "*");
   }
 
-  function requestMainWorldSpeedThrough(rate = SPEED_THROUGH_RATE) {
+  function requestMainWorldSpeedThrough(rate = getSpeedThroughRate()) {
     window.postMessage({
       source: MAIN_SPEED_THROUGH_MESSAGE,
       rate,
@@ -300,7 +330,7 @@ declare global {
         : currentTime + 600;
 
       try {
-        video.playbackRate = SPEED_THROUGH_RATE;
+        video.playbackRate = getSpeedThroughRate();
         attempted = true;
       } catch (err) {}
 
@@ -327,7 +357,7 @@ declare global {
 
     try {
       if (player && typeof player.setPlaybackRate === "function") {
-        player.setPlaybackRate(SPEED_THROUGH_RATE);
+        player.setPlaybackRate(getSpeedThroughRate());
         attempted = true;
       }
     } catch (err) {}
@@ -343,16 +373,45 @@ declare global {
     adState.forceSkipStartedAt = null;
   }
 
+  function getCurrentPlaybackRate(video = document.querySelector("video")) {
+    const player: any = getYouTubePlayer();
+    try {
+      if (player && typeof player.getPlaybackRate === "function") {
+        return normalizePlaybackRate(player.getPlaybackRate());
+      }
+    } catch (err) {}
+
+    if (video && Number.isFinite(video.playbackRate)) {
+      return normalizePlaybackRate(video.playbackRate);
+    }
+
+    return 1;
+  }
+
+  function stopPlaybackRateRestore() {
+    if (adState.playbackRestoreInterval) {
+      clearInterval(adState.playbackRestoreInterval);
+      adState.playbackRestoreInterval = null;
+    }
+    adState.playbackRestoreStartedAt = null;
+  }
+
+  function capturePlaybackRate() {
+    adState.preAdPlaybackRate = getCurrentPlaybackRate();
+    stopPlaybackRateRestore();
+  }
+
   function applySpeedThrough(video = document.querySelector("video")) {
     if (!config.enabled || !config.aggressiveSkip || adState.watching) return false;
 
-    requestMainWorldSpeedThrough(SPEED_THROUGH_RATE);
+    const rate = getSpeedThroughRate();
+    requestMainWorldSpeedThrough(rate);
 
     let attempted = false;
     if (video) {
       try {
-        if (video.playbackRate !== SPEED_THROUGH_RATE) {
-          video.playbackRate = SPEED_THROUGH_RATE;
+        if (video.playbackRate !== rate) {
+          video.playbackRate = rate;
         }
         attempted = true;
       } catch (err) {}
@@ -361,7 +420,7 @@ declare global {
     const player: any = getYouTubePlayer();
     try {
       if (player && typeof player.setPlaybackRate === "function") {
-        player.setPlaybackRate(SPEED_THROUGH_RATE);
+        player.setPlaybackRate(rate);
         attempted = true;
       }
     } catch (err) {}
@@ -386,6 +445,39 @@ declare global {
       clearInterval(adState.speedThroughInterval);
       adState.speedThroughInterval = null;
     }
+  }
+
+  function restorePlaybackRate(rate = adState.preAdPlaybackRate || 1) {
+    const targetRate = normalizePlaybackRate(rate || 1);
+    const video = document.querySelector("video");
+    if (video) {
+      try {
+        if (video.playbackRate !== targetRate) video.playbackRate = targetRate;
+      } catch (err) {}
+    }
+
+    const player: any = getYouTubePlayer();
+    try {
+      if (player && typeof player.setPlaybackRate === "function") {
+        player.setPlaybackRate(targetRate);
+      }
+    } catch (err) {}
+
+    requestMainWorldSpeedThrough(targetRate);
+  }
+
+  function startPlaybackRateRestore(rate = adState.preAdPlaybackRate || 1) {
+    stopPlaybackRateRestore();
+    const targetRate = normalizePlaybackRate(rate || 1);
+    adState.playbackRestoreStartedAt = Date.now();
+    restorePlaybackRate(targetRate);
+    adState.playbackRestoreInterval = setInterval(() => {
+      restorePlaybackRate(targetRate);
+      if (Date.now() - adState.playbackRestoreStartedAt >= PLAYBACK_RESTORE_WINDOW_MS) {
+        stopPlaybackRateRestore();
+        adState.preAdPlaybackRate = null;
+      }
+    }, PLAYBACK_RESTORE_RETRY_MS);
   }
 
   function clearSkipTimeout() {
@@ -883,17 +975,7 @@ declare global {
   }
 
   function resetPlaybackRate() {
-    const video = document.querySelector("video");
-    if (video && video.playbackRate !== 1) {
-      video.playbackRate = 1;
-    }
-    const player: any = getYouTubePlayer();
-    try {
-      if (player && typeof player.setPlaybackRate === "function") {
-        player.setPlaybackRate(1);
-      }
-    } catch (err) {}
-    requestMainWorldSpeedThrough(1);
+    startPlaybackRateRestore(adState.preAdPlaybackRate || 1);
   }
 
   function cleanupRuntimeState() {
@@ -942,6 +1024,7 @@ declare global {
       adState.lastVideoTime = -1;
       adState.alreadyCounted = false;
 
+      capturePlaybackRate();
       muteVideo();
       startSpeedThrough();
       scheduleSkip();

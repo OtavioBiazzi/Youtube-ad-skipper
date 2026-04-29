@@ -19,7 +19,7 @@ Uma extensão de navegador que **pula automaticamente os anúncios do YouTube**.
 | Funcionalidade | Descrição |
 |---|---|
 | ⏭️ **Pular Automático** | Detecta anúncios e clica no botão de pular automaticamente |
-| ⏱️ **Delay Configurável** | Escolha de 0s (instantâneo) até 30s antes de pular |
+| ⏱️ **Delay Configurável** | Escolha de 1s até 30s antes de pular |
 | 🔇 **Mutar Anúncios** | Silencia automaticamente durante o anúncio |
 | 🎬 **Overlay Interativo** | Mostra countdown no vídeo com opção de assistir ou pular |
 | 👁 **Modo Assistir** | Opção de cancelar o skip e ver o anúncio se quiser |
@@ -57,7 +57,7 @@ Quando um anúncio aparece no YouTube:
 Clique no ícone da extensão na barra de ferramentas para acessar o menu:
 
 - **🛡️ Extensão Ativa** — Liga/desliga a extensão
-- **⏱️ Tempo para Pular** — Slider de 0s (instantâneo) até 30s
+- **⏱️ Tempo para Pular** — Slider de 1s até 30s
 - **🔇 Mutar Anúncios** — Silencia durante o anúncio
 - **🎬 Mostrar Overlay** — Mostra/oculta o overlay no vídeo
 - **📊 Estatísticas** — Anúncios pulados e tempo economizado
