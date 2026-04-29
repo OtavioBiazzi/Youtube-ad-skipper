@@ -381,6 +381,12 @@ body.theme-light .theme-toggle:hover {
   color: var(--yellow);
 }
 
+.hint--danger {
+  background: var(--red-dim);
+  border-color: hsla(0, 72%, 51%, 0.24);
+  color: var(--red);
+}
+
 /* ── Process List ── */
 .process-list {
   display: flex;
@@ -455,6 +461,11 @@ body.extension-disabled .process-status {
   color: var(--bg);
   margin-left: 8px;
   padding: 2px 6px;
+}
+
+.tag--safe {
+  background: var(--green-dim);
+  color: var(--green);
 }
 
 /* ── Whitelist Inputs ── */

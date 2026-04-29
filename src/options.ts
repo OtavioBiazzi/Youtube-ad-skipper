@@ -44,6 +44,10 @@ const DEFAULT: OptionsSettings = {
   adSpeedRate: 3,
 };
 
+const SAFE_AD_SPEED_RATE = 3;
+const MIN_AD_SPEED_RATE = 1;
+const MAX_AD_SPEED_RATE = 8;
+
 // ── Elements ─────────────────────────────────────
 
 function byId<T extends HTMLElement>(id: string): T {
@@ -82,6 +86,7 @@ const optInstant  = byId<HTMLInputElement>("opt-instant");
 const optPip      = byId<HTMLInputElement>("opt-pip");
 const optAdSpeed  = byId<HTMLInputElement>("opt-ad-speed");
 const adSpeedValue = byId<HTMLElement>("opt-ad-speed-value");
+const adSpeedWarning = byId<HTMLElement>("opt-ad-speed-warning");
 const f5Banner    = byId<HTMLElement>("f5-banner");
 
 let currentWhitelist: string[] = [];
@@ -102,7 +107,7 @@ chrome.storage.local.get(DEFAULT, (s: OptionsSettings) => {
   optShortcut.checked   = !!s.shortcutEnabled;
   optInstant.checked    = !!s.instantSkip;
   optPip.checked        = !!s.pipEnabled;
-  optAdSpeed.value      = String(s.adSpeedRate || 3);
+  optAdSpeed.value      = String(normalizeAdSpeed(s.adSpeedRate));
   optListMode.checked   = s.listMode === 'blacklist';
 
   applyTheme(s.theme);
@@ -112,7 +117,7 @@ chrome.storage.local.get(DEFAULT, (s: OptionsSettings) => {
   renderMode(s.aggressiveSkip);
   renderListMode(s.listMode || 'whitelist');
   renderSlider();
-  renderAdSpeed(s.adSpeedRate || 3);
+  renderAdSpeed(normalizeAdSpeed(s.adSpeedRate));
   
   // Stats
   const now = new Date();
@@ -202,7 +207,7 @@ optPip.addEventListener("change", () => {
 });
 
 optAdSpeed.addEventListener("input", () => {
-  const value = parseFloat(optAdSpeed.value);
+  const value = normalizeAdSpeed(optAdSpeed.value);
   chrome.storage.local.set({ adSpeedRate: value });
   renderAdSpeed(value);
 });
@@ -327,11 +332,29 @@ function renderListMode(mode: ListMode) {
   }
 }
 
+function normalizeAdSpeed(value: unknown) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return SAFE_AD_SPEED_RATE;
+  return Math.min(MAX_AD_SPEED_RATE, Math.max(MIN_AD_SPEED_RATE, n));
+}
+
+function formatSpeed(value: number) {
+  return value.toFixed(value % 1 === 0 ? 0 : 1) + "x";
+}
+
 function renderAdSpeed(value: number) {
-  adSpeedValue.textContent = value.toFixed(value % 1 === 0 ? 0 : 1) + "x";
+  const speed = normalizeAdSpeed(value);
+  const isBeta = speed > SAFE_AD_SPEED_RATE;
+  adSpeedValue.textContent = formatSpeed(speed) + (isBeta ? " BETA" : " SEGURO");
+  adSpeedValue.classList.toggle("tag--safe", !isBeta);
+  adSpeedValue.classList.toggle("tag--experimental", isBeta);
+  adSpeedWarning.classList.toggle("hint--danger", isBeta);
+  adSpeedWarning.textContent = isBeta
+    ? "Modo beta ativo: acima de 3x pode parecer comportamento automatizado e aumentar o risco do YouTube identificar."
+    : "3x é o limite seguro. 4x a 8x fica em beta e pode aumentar o risco de identificação.";
   const min = parseFloat(optAdSpeed.min);
   const max = parseFloat(optAdSpeed.max);
-  const pct = ((value - min) / (max - min)) * 100;
+  const pct = ((speed - min) / (max - min)) * 100;
   optAdSpeed.style.background = "linear-gradient(90deg, hsl(355,65%,52%) " + pct + "%, #1c1c1f " + pct + "%)";
 }
 
@@ -417,7 +440,7 @@ chrome.storage.onChanged.addListener((changes) => {
   if (changes.instantSkip) optInstant.checked = !!changes.instantSkip.newValue;
   if (changes.pipEnabled) optPip.checked = !!changes.pipEnabled.newValue;
   if (changes.adSpeedRate) {
-    const value = Number(changes.adSpeedRate.newValue) || 3;
+    const value = normalizeAdSpeed(changes.adSpeedRate.newValue);
     optAdSpeed.value = String(value);
     renderAdSpeed(value);
   }
