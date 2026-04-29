@@ -78,9 +78,25 @@ body * {
 .header-mark {
   width: 42px; height: 42px;
   display: flex; align-items: center; justify-content: center;
-  background: var(--accent-dim);
+  background: transparent;
   border-radius: 12px;
   color: var(--accent);
+  overflow: hidden;
+}
+
+.header-mark-img {
+  width: 42px;
+  height: 42px;
+  display: block;
+  object-fit: contain;
+}
+
+.state-icon-img {
+  width: 18px;
+  height: 18px;
+  display: block;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 
 .header-title {
@@ -363,6 +379,33 @@ body.theme-light .theme-toggle:hover {
   color: var(--text-muted);
 }
 
+.speed-range-labels {
+  display: block;
+  position: relative;
+  height: 16px;
+}
+
+.speed-range-labels span {
+  position: absolute;
+  top: 0;
+  white-space: nowrap;
+}
+
+.speed-label-min {
+  left: 0;
+}
+
+.speed-label-safe {
+  left: calc(28.571% + 4px);
+  color: var(--green);
+  transform: translateX(-50%);
+}
+
+.speed-label-max {
+  right: 0;
+  color: var(--text-muted);
+}
+
 /* ── Hints ── */
 .hint {
   font-size: 12px;
@@ -379,12 +422,6 @@ body.theme-light .theme-toggle:hover {
   background: var(--yellow-dim);
   border-color: hsla(45, 75%, 52%, 0.2);
   color: var(--yellow);
-}
-
-.hint--danger {
-  background: var(--red-dim);
-  border-color: hsla(0, 72%, 51%, 0.24);
-  color: var(--red);
 }
 
 /* ── Process List ── */
@@ -578,6 +615,30 @@ kbd {
 }
 
 .warning-box--alert svg { color: var(--red); }
+
+.f5-banner {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(640px, calc(100vw - 32px));
+  background: var(--yellow);
+  color: #09090b;
+  padding: 12px 24px;
+  border-radius: 30px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: center;
+  box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+  z-index: 9999;
+  animation: fadeInUp 0.3s ease-out;
+}
+
+.f5-banner--danger {
+  background: var(--red);
+  color: #fff;
+}
 
 /* ── About ── */
 .about-text {

@@ -71,6 +71,7 @@ const warningBox    = byId<HTMLElement>("warning-box");
 const warningText   = byId<HTMLElement>("warning-text");
 const versionTag    = byId<HTMLElement>("version-tag");
 const btnReset      = byId<HTMLButtonElement>("btn-reset");
+const stateIcons    = Array.from(document.querySelectorAll<HTMLImageElement>("[data-state-icon]"));
 
 const whitelistInput  = byId<HTMLInputElement>("whitelist-input");
 const whitelistAddBtn = byId<HTMLButtonElement>("whitelist-add");
@@ -86,7 +87,6 @@ const optInstant  = byId<HTMLInputElement>("opt-instant");
 const optPip      = byId<HTMLInputElement>("opt-pip");
 const optAdSpeed  = byId<HTMLInputElement>("opt-ad-speed");
 const adSpeedValue = byId<HTMLElement>("opt-ad-speed-value");
-const adSpeedWarning = byId<HTMLElement>("opt-ad-speed-warning");
 const f5Banner    = byId<HTMLElement>("f5-banner");
 
 let currentWhitelist: string[] = [];
@@ -115,6 +115,7 @@ chrome.storage.local.get(DEFAULT, (s: OptionsSettings) => {
   renderDelay(s.skipDelay);
   renderWarnings(s.warningCount || 0);
   renderMode(s.aggressiveSkip);
+  renderStateIcons(s.enabled, s.aggressiveSkip);
   renderListMode(s.listMode || 'whitelist');
   renderSlider();
   renderAdSpeed(normalizeAdSpeed(s.adSpeedRate));
@@ -311,6 +312,7 @@ function renderSlider() {
 
 function renderStatus(enabled: boolean) {
   document.body.classList.toggle("extension-disabled", !enabled);
+  renderStateIcons(enabled, optAggressive.checked);
 }
 
 function renderMode(aggressive: boolean) {
@@ -319,6 +321,19 @@ function renderMode(aggressive: boolean) {
     stealthBadge.style.background = aggressive ? "var(--accent-dim)" : "var(--green-dim)";
     stealthBadge.style.color = aggressive ? "var(--accent)" : "var(--green)";
   }
+  renderStateIcons(optEnabled.checked, aggressive);
+}
+
+function getStateIconPath(enabled: boolean, aggressive: boolean) {
+  if (!enabled) return "icon48_off.png";
+  return aggressive ? "icon48.png" : "icon48_stealth.png";
+}
+
+function renderStateIcons(enabled: boolean, aggressive: boolean) {
+  const path = getStateIconPath(enabled, aggressive);
+  stateIcons.forEach((icon) => {
+    icon.src = path;
+  });
 }
 
 function renderListMode(mode: ListMode) {
@@ -345,13 +360,9 @@ function formatSpeed(value: number) {
 function renderAdSpeed(value: number) {
   const speed = normalizeAdSpeed(value);
   const isBeta = speed > SAFE_AD_SPEED_RATE;
-  adSpeedValue.textContent = formatSpeed(speed) + (isBeta ? " BETA" : " SEGURO");
+  adSpeedValue.textContent = formatSpeed(speed);
   adSpeedValue.classList.toggle("tag--safe", !isBeta);
   adSpeedValue.classList.toggle("tag--experimental", isBeta);
-  adSpeedWarning.classList.toggle("hint--danger", isBeta);
-  adSpeedWarning.textContent = isBeta
-    ? "Modo beta ativo: acima de 3x pode parecer comportamento automatizado e aumentar o risco do YouTube identificar."
-    : "3x é o limite seguro. 4x a 8x fica em beta e pode aumentar o risco de identificação.";
   const min = parseFloat(optAdSpeed.min);
   const max = parseFloat(optAdSpeed.max);
   const pct = ((speed - min) / (max - min)) * 100;
@@ -402,11 +413,21 @@ function checkRestartWarning() {
     if (!changed && JSON.stringify(current.whitelist) !== JSON.stringify(initialState.whitelist)) {
       changed = true;
     }
-    
-    if (f5Banner) {
-      f5Banner.style.display = changed ? "block" : "none";
-    }
+
+    const initialSpeed = normalizeAdSpeed(initialState.adSpeedRate);
+    const currentSpeed = normalizeAdSpeed(current.adSpeedRate);
+    const riskySpeedChange = currentSpeed > SAFE_AD_SPEED_RATE && currentSpeed !== initialSpeed;
+    renderRestartBanner(changed, riskySpeedChange);
   });
+}
+
+function renderRestartBanner(visible: boolean, riskySpeedChange: boolean) {
+  if (!f5Banner) return;
+  f5Banner.style.display = visible ? "block" : "none";
+  f5Banner.classList.toggle("f5-banner--danger", riskySpeedChange);
+  f5Banner.textContent = riskySpeedChange
+    ? "Recarregue os vídeos do YouTube (F5) para aplicar. Velocidade acima de 3x pode aumentar o risco de identificação."
+    : "Configurações alteradas! Recarregue os vídeos do YouTube (F5) para aplicar.";
 }
 
 chrome.storage.onChanged.addListener((changes) => {

@@ -102,12 +102,24 @@ body {
   align-items: center;
   justify-content: center;
   border-radius: 10px;
-  background: var(--accent);
-  color: #fff;
+  background: transparent;
   flex-shrink: 0;
-  /* Subtle tinted shadow instead of neon glow */
-  box-shadow: 0 4px 14px hsla(355, 65%, 42%, 0.30),
-              var(--glass-inner-light);
+  overflow: hidden;
+}
+
+.header-mark-img {
+  width: 36px;
+  height: 36px;
+  display: block;
+  object-fit: contain;
+}
+
+.state-icon-img {
+  width: 16px;
+  height: 16px;
+  display: block;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 
 .header-title {

@@ -60,7 +60,7 @@ Clique no ícone da extensão na barra de ferramentas para acessar o menu:
 - **⏱️ Tempo para Pular** — Slider de 1s até 30s
 - **🔇 Mutar Anúncios** — Silencia durante o anúncio
 - **🎬 Mostrar Overlay** — Mostra/oculta o overlay no vídeo
-- **⚡ Velocidade dos Anúncios** — 3x seguro; 4x a 8x fica em beta com risco maior de identificação
+- **⚡ Velocidade dos Anúncios** — 3x seguro; 4x a 8x pode aumentar o risco de identificação
 - **📊 Estatísticas** — Anúncios pulados e tempo economizado
 
 ## 🧑‍💻 Desenvolvimento

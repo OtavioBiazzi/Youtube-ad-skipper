@@ -49,6 +49,7 @@ const container        = query<HTMLElement>(".popup-container");
 const warningRow       = byId<HTMLElement>("warning-row");
 const warningText      = byId<HTMLElement>("warning-text");
 const versionTag       = byId<HTMLElement>("version-tag");
+const stateIcons       = Array.from(document.querySelectorAll<HTMLImageElement>("[data-state-icon]"));
 
 const notes = {
   enabled: document.getElementById("note-enabled"),
@@ -192,6 +193,7 @@ function renderStatus(enabled: boolean) {
     statusLabel.textContent = "Desativado";
     container.classList.add("disabled");
   }
+  renderStateIcons(enabled, toggleAggressive.checked);
 }
 
 function renderAggressiveState(on: boolean) {
@@ -200,6 +202,19 @@ function renderAggressiveState(on: boolean) {
   } else {
     blockDelay.classList.add("block--disabled");
   }
+  renderStateIcons(toggleEnabled.checked, on);
+}
+
+function getStateIconPath(enabled: boolean, aggressive: boolean) {
+  if (!enabled) return "icon48_off.png";
+  return aggressive ? "icon48.png" : "icon48_stealth.png";
+}
+
+function renderStateIcons(enabled: boolean, aggressive: boolean) {
+  const path = getStateIconPath(enabled, aggressive);
+  stateIcons.forEach((icon) => {
+    icon.src = path;
+  });
 }
 
 function renderWarnings(count: number) {
