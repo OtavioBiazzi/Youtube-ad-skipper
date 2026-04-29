@@ -5,6 +5,7 @@
   const nativePlaybackRate = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, "playbackRate");
   const wrappedListeners = new WeakMap();
   const MAIN_FORCE_SKIP_MESSAGE = "yt-ad-skipper:force-skip";
+  const MAIN_SPEED_THROUGH_MESSAGE = "yt-ad-skipper:speed-through";
   const MAIN_FORCE_SKIP_RESULT = "yt-ad-skipper:force-skip-result";
 
   function getCapture(options) {
@@ -149,12 +150,40 @@
     return { ok: attempted, method: attempted ? "seek" : "none" };
   }
 
+  function setSpeedThrough(rate) {
+    const player: any = getPlayer();
+    const video = document.querySelector("video");
+    let attempted = false;
+
+    if (video) {
+      try {
+        attempted = setNativeMediaValue(nativePlaybackRate, video, rate) || attempted;
+        video.playbackRate = rate;
+        attempted = true;
+      } catch (err) {}
+    }
+
+    try {
+      if (player && typeof player.setPlaybackRate === "function") {
+        player.setPlaybackRate(rate);
+        attempted = true;
+      }
+    } catch (err) {}
+
+    return attempted;
+  }
+
   window.addEventListener("message", (event) => {
     if (event.source !== window) return;
     const data = event.data || {};
-    if (data.source !== MAIN_FORCE_SKIP_MESSAGE) return;
-    const result = forceSkipFromMainWorld();
-    window.postMessage({ source: MAIN_FORCE_SKIP_RESULT, ...result }, "*");
+    if (data.source === MAIN_FORCE_SKIP_MESSAGE) {
+      const result = forceSkipFromMainWorld();
+      window.postMessage({ source: MAIN_FORCE_SKIP_RESULT, ...result }, "*");
+      return;
+    }
+    if (data.source === MAIN_SPEED_THROUGH_MESSAGE) {
+      setSpeedThrough(Number(data.rate) || 1);
+    }
   });
 
   HTMLElement.prototype.addEventListener = function(type, listener, options) {

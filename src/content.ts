@@ -37,7 +37,10 @@ declare global {
   const CHECK_INTERVAL = 500;
   const FORCE_SKIP_RETRY_MS = 120;
   const FORCE_SKIP_WINDOW_MS = 6000;
+  const SPEED_THROUGH_RATE = 16;
+  const SPEED_THROUGH_RETRY_MS = 250;
   const MAIN_FORCE_SKIP_MESSAGE = "yt-ad-skipper:force-skip";
+  const MAIN_SPEED_THROUGH_MESSAGE = "yt-ad-skipper:speed-through";
   const MAIN_FORCE_SKIP_RESULT = "yt-ad-skipper:force-skip-result";
 
   let adState: any = {
@@ -57,6 +60,7 @@ declare global {
     forceSkipInterval: null,
     forceSkipStartedAt: null,
     skipTimeout: null,
+    speedThroughInterval: null,
   };
 
   let adblockObserver: MutationObserver | null = null;
@@ -273,6 +277,13 @@ declare global {
     }, "*");
   }
 
+  function requestMainWorldSpeedThrough(rate = SPEED_THROUGH_RATE) {
+    window.postMessage({
+      source: MAIN_SPEED_THROUGH_MESSAGE,
+      rate,
+    }, "*");
+  }
+
   function forceSkipAd(video = document.querySelector("video")) {
     if (!config.enabled || !config.aggressiveSkip || adState.watching) return false;
 
@@ -289,7 +300,7 @@ declare global {
         : currentTime + 600;
 
       try {
-        video.playbackRate = 16;
+        video.playbackRate = SPEED_THROUGH_RATE;
         attempted = true;
       } catch (err) {}
 
@@ -316,7 +327,7 @@ declare global {
 
     try {
       if (player && typeof player.setPlaybackRate === "function") {
-        player.setPlaybackRate(16);
+        player.setPlaybackRate(SPEED_THROUGH_RATE);
         attempted = true;
       }
     } catch (err) {}
@@ -330,6 +341,51 @@ declare global {
       adState.forceSkipInterval = null;
     }
     adState.forceSkipStartedAt = null;
+  }
+
+  function applySpeedThrough(video = document.querySelector("video")) {
+    if (!config.enabled || !config.aggressiveSkip || adState.watching) return false;
+
+    requestMainWorldSpeedThrough(SPEED_THROUGH_RATE);
+
+    let attempted = false;
+    if (video) {
+      try {
+        if (video.playbackRate !== SPEED_THROUGH_RATE) {
+          video.playbackRate = SPEED_THROUGH_RATE;
+        }
+        attempted = true;
+      } catch (err) {}
+    }
+
+    const player: any = getYouTubePlayer();
+    try {
+      if (player && typeof player.setPlaybackRate === "function") {
+        player.setPlaybackRate(SPEED_THROUGH_RATE);
+        attempted = true;
+      }
+    } catch (err) {}
+
+    return attempted;
+  }
+
+  function startSpeedThrough() {
+    if (!config.aggressiveSkip || adState.speedThroughInterval) return;
+    applySpeedThrough();
+    adState.speedThroughInterval = setInterval(() => {
+      if (!config.enabled || !adState.active || adState.watching || !getAdPlaying()) {
+        stopSpeedThrough();
+        return;
+      }
+      applySpeedThrough();
+    }, SPEED_THROUGH_RETRY_MS);
+  }
+
+  function stopSpeedThrough() {
+    if (adState.speedThroughInterval) {
+      clearInterval(adState.speedThroughInterval);
+      adState.speedThroughInterval = null;
+    }
   }
 
   function clearSkipTimeout() {
@@ -837,10 +893,12 @@ declare global {
         player.setPlaybackRate(1);
       }
     } catch (err) {}
+    requestMainWorldSpeedThrough(1);
   }
 
   function cleanupRuntimeState() {
     stopForceSkipBurst();
+    stopSpeedThrough();
     clearSkipTimeout();
     removeOverlay();
     unmuteVideo();
@@ -856,6 +914,7 @@ declare global {
     adState.forceSkipInterval = null;
     adState.forceSkipStartedAt = null;
     adState.skipTimeout = null;
+    adState.speedThroughInterval = null;
   }
 
   // ── Main loop ─────────────────────────────────────────
@@ -884,6 +943,7 @@ declare global {
       adState.alreadyCounted = false;
 
       muteVideo();
+      startSpeedThrough();
       scheduleSkip();
       if (config.showOverlay) createOverlay();
 

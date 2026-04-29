@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "YouTube Ad Skipper",
-  "version": "4.2.2",
+  "version": "4.3.0",
   "description": "Pula automaticamente os anúncios do YouTube. Não é um ad blocker — apenas automatiza o clique no botão 'Pular anúncio'.",
   "permissions": ["storage"],
   "host_permissions": [

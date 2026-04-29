@@ -23,7 +23,10 @@
     const CHECK_INTERVAL = 500;
     const FORCE_SKIP_RETRY_MS = 120;
     const FORCE_SKIP_WINDOW_MS = 6e3;
+    const SPEED_THROUGH_RATE = 16;
+    const SPEED_THROUGH_RETRY_MS = 250;
     const MAIN_FORCE_SKIP_MESSAGE = "yt-ad-skipper:force-skip";
+    const MAIN_SPEED_THROUGH_MESSAGE = "yt-ad-skipper:speed-through";
     const MAIN_FORCE_SKIP_RESULT = "yt-ad-skipper:force-skip-result";
     let adState = {
       active: false,
@@ -41,7 +44,8 @@
       alreadyCounted: false,
       forceSkipInterval: null,
       forceSkipStartedAt: null,
-      skipTimeout: null
+      skipTimeout: null,
+      speedThroughInterval: null
     };
     let adblockObserver = null;
     let adblockBodyWaitObserver = null;
@@ -230,6 +234,12 @@
         targetTime: adState.skipTargetTime || Date.now()
       }, "*");
     }
+    function requestMainWorldSpeedThrough(rate = SPEED_THROUGH_RATE) {
+      window.postMessage({
+        source: MAIN_SPEED_THROUGH_MESSAGE,
+        rate
+      }, "*");
+    }
     function forceSkipAd(video = document.querySelector("video")) {
       if (!config.enabled || !config.aggressiveSkip || adState.watching) return false;
       requestMainWorldSkip();
@@ -240,7 +250,7 @@
         const currentTime = getFinitePositiveNumber(video.currentTime);
         const target = duration > 0 ? Math.max(duration - 0.05, currentTime + 0.25) : currentTime + 600;
         try {
-          video.playbackRate = 16;
+          video.playbackRate = SPEED_THROUGH_RATE;
           attempted = true;
         } catch (err) {
         }
@@ -267,7 +277,7 @@
       }
       try {
         if (player && typeof player.setPlaybackRate === "function") {
-          player.setPlaybackRate(16);
+          player.setPlaybackRate(SPEED_THROUGH_RATE);
           attempted = true;
         }
       } catch (err) {
@@ -280,6 +290,46 @@
         adState.forceSkipInterval = null;
       }
       adState.forceSkipStartedAt = null;
+    }
+    function applySpeedThrough(video = document.querySelector("video")) {
+      if (!config.enabled || !config.aggressiveSkip || adState.watching) return false;
+      requestMainWorldSpeedThrough(SPEED_THROUGH_RATE);
+      let attempted = false;
+      if (video) {
+        try {
+          if (video.playbackRate !== SPEED_THROUGH_RATE) {
+            video.playbackRate = SPEED_THROUGH_RATE;
+          }
+          attempted = true;
+        } catch (err) {
+        }
+      }
+      const player = getYouTubePlayer();
+      try {
+        if (player && typeof player.setPlaybackRate === "function") {
+          player.setPlaybackRate(SPEED_THROUGH_RATE);
+          attempted = true;
+        }
+      } catch (err) {
+      }
+      return attempted;
+    }
+    function startSpeedThrough() {
+      if (!config.aggressiveSkip || adState.speedThroughInterval) return;
+      applySpeedThrough();
+      adState.speedThroughInterval = setInterval(() => {
+        if (!config.enabled || !adState.active || adState.watching || !getAdPlaying()) {
+          stopSpeedThrough();
+          return;
+        }
+        applySpeedThrough();
+      }, SPEED_THROUGH_RETRY_MS);
+    }
+    function stopSpeedThrough() {
+      if (adState.speedThroughInterval) {
+        clearInterval(adState.speedThroughInterval);
+        adState.speedThroughInterval = null;
+      }
     }
     function clearSkipTimeout() {
       if (adState.skipTimeout) {
@@ -697,9 +747,11 @@
         }
       } catch (err) {
       }
+      requestMainWorldSpeedThrough(1);
     }
     function cleanupRuntimeState() {
       stopForceSkipBurst();
+      stopSpeedThrough();
       clearSkipTimeout();
       removeOverlay();
       unmuteVideo();
@@ -714,6 +766,7 @@
       adState.forceSkipInterval = null;
       adState.forceSkipStartedAt = null;
       adState.skipTimeout = null;
+      adState.speedThroughInterval = null;
     }
     function mainLoop() {
       if (!config.enabled) {
@@ -730,6 +783,7 @@
         adState.lastVideoTime = -1;
         adState.alreadyCounted = false;
         muteVideo();
+        startSpeedThrough();
         scheduleSkip();
         if (config.showOverlay) createOverlay();
       } else if (adPlaying && adState.active) {
