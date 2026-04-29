@@ -1,4 +1,5 @@
 (function() {
+  const MAX_AD_RATE = 16;
   const originalAddEventListener = HTMLElement.prototype.addEventListener;
   const originalRemoveEventListener = HTMLElement.prototype.removeEventListener;
   const nativeCurrentTime = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, "currentTime");
@@ -86,7 +87,7 @@
   function normalizeAdRate(rate) {
     const n = Number(rate);
     if (!Number.isFinite(n)) return 3;
-    return Math.min(8, Math.max(1, n));
+    return Math.min(MAX_AD_RATE, Math.max(1, n));
   }
 
   function normalizePlaybackRate(rate) {

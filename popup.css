@@ -48,13 +48,13 @@
 }
 
 body.theme-light {
-  --bg:         #ffffff;
-  --surface:    rgba(0, 0, 0, 0.02);
-  --border:     rgba(0, 0, 0, 0.06);
-  --border-h:   rgba(0, 0, 0, 0.10);
-  --text-1:     #18181b;
-  --text-2:     #52525b;
-  --text-3:     #a1a1aa;
+  --bg:         #e9edf4;
+  --surface:    rgba(255, 255, 255, 0.58);
+  --border:     rgba(26, 32, 44, 0.10);
+  --border-h:   rgba(26, 32, 44, 0.18);
+  --text-1:     #141821;
+  --text-2:     #4b5565;
+  --text-3:     #7a8494;
   --accent:     hsl(355, 65%, 52%);
   --accent-dim: hsl(355, 50%, 42%);
   --accent-bg:  hsla(355, 65%, 52%, 0.08);

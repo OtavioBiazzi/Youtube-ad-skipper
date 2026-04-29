@@ -47,6 +47,7 @@ const DEFAULT: OptionsSettings = {
 const SAFE_AD_SPEED_RATE = 3;
 const MIN_AD_SPEED_RATE = 1;
 const MAX_AD_SPEED_RATE = 8;
+const INSTANT_AD_SPEED_RATE = 16;
 
 // ── Elements ─────────────────────────────────────
 
@@ -59,6 +60,8 @@ const optMute       = byId<HTMLInputElement>("opt-mute");
 const optOverlay    = byId<HTMLInputElement>("opt-overlay");
 const optAggressive = byId<HTMLInputElement>("opt-aggressive");
 const optDelay      = byId<HTMLInputElement>("opt-delay");
+const timingCard    = byId<HTMLElement>("timing-card");
+const delayControl  = byId<HTMLElement>("delay-control");
 const themeToggle   = byId<HTMLButtonElement>("theme-toggle");
 const delayValue    = byId<HTMLElement>("opt-delay-value");
 const delayHint     = byId<HTMLElement>("opt-delay-hint");
@@ -86,6 +89,7 @@ const optShortcut = byId<HTMLInputElement>("opt-shortcut");
 const optInstant  = byId<HTMLInputElement>("opt-instant");
 const optPip      = byId<HTMLInputElement>("opt-pip");
 const optAdSpeed  = byId<HTMLInputElement>("opt-ad-speed");
+const adSpeedControl = byId<HTMLElement>("ad-speed-control");
 const adSpeedValue = byId<HTMLElement>("opt-ad-speed-value");
 const f5Banner    = byId<HTMLElement>("f5-banner");
 
@@ -112,13 +116,11 @@ chrome.storage.local.get(DEFAULT, (s: OptionsSettings) => {
 
   applyTheme(s.theme);
   renderStatus(s.enabled);
-  renderDelay(s.skipDelay);
   renderWarnings(s.warningCount || 0);
   renderMode(s.aggressiveSkip);
   renderStateIcons(s.enabled, s.aggressiveSkip);
   renderListMode(s.listMode || 'whitelist');
-  renderSlider();
-  renderAdSpeed(normalizeAdSpeed(s.adSpeedRate));
+  renderTimingControls();
   
   // Stats
   const now = new Date();
@@ -176,13 +178,13 @@ optAggressive.addEventListener("change", () => {
   const on = optAggressive.checked;
   chrome.storage.local.set({ aggressiveSkip: on });
   renderMode(on);
+  renderTimingControls();
 });
 
 optDelay.addEventListener("input", () => {
   const v = parseInt(optDelay.value, 10);
   chrome.storage.local.set({ skipDelay: v });
-  renderDelay(v);
-  renderSlider();
+  renderTimingControls();
 });
 
 optListMode.addEventListener("change", () => {
@@ -201,6 +203,7 @@ optShortcut.addEventListener("change", () => {
 
 optInstant.addEventListener("change", () => {
   chrome.storage.local.set({ instantSkip: optInstant.checked });
+  renderTimingControls();
 });
 
 optPip.addEventListener("change", () => {
@@ -210,7 +213,7 @@ optPip.addEventListener("change", () => {
 optAdSpeed.addEventListener("input", () => {
   const value = normalizeAdSpeed(optAdSpeed.value);
   chrome.storage.local.set({ adSpeedRate: value });
-  renderAdSpeed(value);
+  renderTimingControls();
 });
 
 btnReset.addEventListener("click", () => {
@@ -288,9 +291,15 @@ function flashBorder(el: HTMLElement, color: string) {
 
 // ── Render ────────────────────────────────────────
 
-function renderDelay(v: number) {
-  delayValue.textContent = String(v);
-  if (v <= 3) {
+function renderDelay(v: number, aggressive: boolean, instant: boolean) {
+  delayValue.textContent = String(instant ? 0 : v);
+  if (!aggressive) {
+    delayHint.textContent = "Modo agressivo desligado: aguarda o botão de pular aparecer naturalmente.";
+    delayHint.style.color = "hsl(45, 75%, 52%)";
+  } else if (instant) {
+    delayHint.textContent = "Pulo instantâneo ativo: usa 0s e aceleração máxima.";
+    delayHint.style.color = "hsl(0, 72%, 58%)";
+  } else if (v <= 3) {
     delayHint.textContent = "Espera ~" + v + "s e depois pula o anúncio.";
     delayHint.style.color = "hsl(152, 55%, 42%)";
   } else if (v <= 10) {
@@ -353,19 +362,46 @@ function normalizeAdSpeed(value: unknown) {
   return Math.min(MAX_AD_SPEED_RATE, Math.max(MIN_AD_SPEED_RATE, n));
 }
 
+function getTimingState() {
+  const aggressive = optAggressive.checked;
+  const instant = aggressive && optInstant.checked;
+  return {
+    aggressive,
+    instant,
+    locked: !aggressive || instant,
+  };
+}
+
 function formatSpeed(value: number) {
   return value.toFixed(value % 1 === 0 ? 0 : 1) + "x";
 }
 
-function renderAdSpeed(value: number) {
-  const speed = normalizeAdSpeed(value);
-  const isBeta = speed > SAFE_AD_SPEED_RATE;
-  adSpeedValue.textContent = formatSpeed(speed);
-  adSpeedValue.classList.toggle("tag--safe", !isBeta);
-  adSpeedValue.classList.toggle("tag--experimental", isBeta);
+function renderTimingControls() {
+  const delay = parseInt(optDelay.value, 10) || DEFAULT.skipDelay;
+  const speed = normalizeAdSpeed(optAdSpeed.value);
+  const state = getTimingState();
+
+  optDelay.disabled = state.locked;
+  optAdSpeed.disabled = state.locked;
+  timingCard.classList.toggle("card--locked", state.locked);
+  delayControl.classList.toggle("control-locked", state.locked);
+  adSpeedControl.classList.toggle("control-locked", state.locked);
+
+  renderDelay(delay, state.aggressive, state.instant);
+  renderSlider();
+  renderAdSpeed(speed, state.instant);
+}
+
+function renderAdSpeed(value: number, instant = false) {
+  const speed = instant ? INSTANT_AD_SPEED_RATE : normalizeAdSpeed(value);
+  const isRisk = speed > SAFE_AD_SPEED_RATE;
+  adSpeedValue.textContent = instant ? formatSpeed(speed) + " max" : formatSpeed(speed);
+  adSpeedValue.classList.toggle("tag--safe", !isRisk);
+  adSpeedValue.classList.toggle("tag--risk", isRisk);
   const min = parseFloat(optAdSpeed.min);
   const max = parseFloat(optAdSpeed.max);
-  const pct = ((speed - min) / (max - min)) * 100;
+  const visualSpeed = instant ? max : speed;
+  const pct = ((visualSpeed - min) / (max - min)) * 100;
   optAdSpeed.style.background = "linear-gradient(90deg, hsl(355,65%,52%) " + pct + "%, #1c1c1f " + pct + "%)";
 }
 
@@ -416,7 +452,10 @@ function checkRestartWarning() {
 
     const initialSpeed = normalizeAdSpeed(initialState.adSpeedRate);
     const currentSpeed = normalizeAdSpeed(current.adSpeedRate);
-    const riskySpeedChange = currentSpeed > SAFE_AD_SPEED_RATE && currentSpeed !== initialSpeed;
+    const riskySpeedChange = (
+      (current.instantSkip && current.aggressiveSkip && current.instantSkip !== initialState.instantSkip) ||
+      (currentSpeed > SAFE_AD_SPEED_RATE && currentSpeed !== initialSpeed)
+    );
     renderRestartBanner(changed, riskySpeedChange);
   });
 }
@@ -426,7 +465,7 @@ function renderRestartBanner(visible: boolean, riskySpeedChange: boolean) {
   f5Banner.style.display = visible ? "block" : "none";
   f5Banner.classList.toggle("f5-banner--danger", riskySpeedChange);
   f5Banner.textContent = riskySpeedChange
-    ? "Recarregue os vídeos do YouTube (F5) para aplicar. Velocidade acima de 3x pode aumentar o risco de identificação."
+    ? "Recarregue os vídeos do YouTube (F5) para aplicar. Aceleração acima de 3x pode aumentar o risco de identificação."
     : "Configurações alteradas! Recarregue os vídeos do YouTube (F5) para aplicar.";
 }
 
@@ -441,14 +480,14 @@ chrome.storage.onChanged.addListener((changes) => {
     const value = parseInt(String(changes.skipDelay.newValue), 10);
     if (!isNaN(value)) {
       optDelay.value = String(value);
-      renderDelay(value);
-      renderSlider();
+      renderTimingControls();
     }
   }
   if (changes.warningCount) renderWarnings(Number(changes.warningCount.newValue) || 0);
   if (changes.aggressiveSkip) {
     optAggressive.checked = !!changes.aggressiveSkip.newValue;
     renderMode(!!changes.aggressiveSkip.newValue);
+    renderTimingControls();
   }
   if (changes.theme) applyTheme(String(changes.theme.newValue));
   if (changes.listMode) {
@@ -458,12 +497,15 @@ chrome.storage.onChanged.addListener((changes) => {
   }
   if (changes.showToast) optToast.checked = !!changes.showToast.newValue;
   if (changes.shortcutEnabled) optShortcut.checked = !!changes.shortcutEnabled.newValue;
-  if (changes.instantSkip) optInstant.checked = !!changes.instantSkip.newValue;
+  if (changes.instantSkip) {
+    optInstant.checked = !!changes.instantSkip.newValue;
+    renderTimingControls();
+  }
   if (changes.pipEnabled) optPip.checked = !!changes.pipEnabled.newValue;
   if (changes.adSpeedRate) {
     const value = normalizeAdSpeed(changes.adSpeedRate.newValue);
     optAdSpeed.value = String(value);
-    renderAdSpeed(value);
+    renderTimingControls();
   }
   
   if (changes.totalAdsSkipped) {

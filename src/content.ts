@@ -41,6 +41,7 @@ declare global {
   const DEFAULT_SPEED_THROUGH_RATE = 3;
   const MIN_SPEED_THROUGH_RATE = 1;
   const MAX_SPEED_THROUGH_RATE = 8;
+  const INSTANT_SPEED_THROUGH_RATE = 16;
   const MIN_PLAYBACK_RATE = 0.0625;
   const MAX_PLAYBACK_RATE = 16;
   const SPEED_THROUGH_RETRY_MS = 250;
@@ -296,6 +297,7 @@ declare global {
   }
 
   function getSpeedThroughRate() {
+    if (config.instantSkip) return INSTANT_SPEED_THROUGH_RATE;
     return normalizeSpeedRate(config.adSpeedRate);
   }
 
@@ -783,9 +785,13 @@ declare global {
     if (watchBtn) {
       watchBtn.addEventListener("click", () => {
         adState.watching = true;
+        stopForceSkipBurst();
+        stopSpeedThrough();
+        clearSkipTimeout();
         clearInterval(adState.countdownInterval);
         removeOverlay();
         unmuteVideo();
+        resetPlaybackRate();
       });
     }
 

@@ -104,7 +104,7 @@
       </div>
 
       <!-- ── Card: Tempo para Pular ── -->
-      <div class="card">
+      <div class="card card--timing" id="timing-card">
         <div class="card-header">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
           <span>Tempo para Pular</span>
@@ -114,16 +114,34 @@
             <span class="delay-value" id="opt-delay-value">1</span>
             <span class="delay-unit">segundos</span>
           </div>
-          <div class="range-wrap">
+          <div class="range-wrap timing-control" id="delay-control">
             <input type="range" id="opt-delay" min="1" max="30" value="1" step="1" class="range">
             <div class="range-labels"><span>1s</span><span>15s</span><span>30s</span></div>
           </div>
           <div class="hint" id="opt-delay-hint">Espera ~1s e depois pula o anúncio.</div>
+          <hr class="divider">
+          <div class="timing-control" id="ad-speed-control">
+            <div class="opt-row">
+              <div class="opt-info">
+                <span class="opt-title">Velocidade dos Anúncios</span>
+                <span class="opt-desc">3x é o limite seguro. 4x a 8x pode aumentar o risco de identificação.</span>
+              </div>
+              <span class="tag tag--safe" id="opt-ad-speed-value" style="margin-left:0;">3x</span>
+            </div>
+            <div class="range-wrap" style="margin-top:14px;">
+              <input type="range" id="opt-ad-speed" min="1" max="8" value="3" step="0.5" class="range">
+              <div class="range-labels speed-range-labels">
+                <span class="speed-label-min">1x</span>
+                <span class="speed-label-safe">3x seguro</span>
+                <span class="speed-label-max">8x risco</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
       <!-- ── Card: Modo Avançado ── -->
-      <div class="card">
+      <div class="card card--advanced">
         <div class="card-header">
           <img class="state-icon-img" data-state-icon src="icon48.png" alt="" aria-hidden="true">
           <span>Acelerar e Pular</span>
@@ -200,7 +218,7 @@
       </div>
 
       <!-- ── Card: Filtro de Canais ── -->
-      <div class="card">
+      <div class="card card--filter">
         <div class="card-header">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
           <span>Filtro de Canais</span>
@@ -258,30 +276,12 @@
           <div class="opt-row">
             <div class="opt-info">
               <span class="opt-title">Pulo Instantâneo (0s)</span>
-              <span class="opt-desc">Pula sem delay, mas pode causar problemas.</span>
+              <span class="opt-desc">Pula sem delay e força aceleração máxima.</span>
             </div>
             <label class="switch">
               <input type="checkbox" id="opt-instant">
               <span class="switch-track"></span>
             </label>
-          </div>
-          <hr class="divider">
-          <div>
-            <div class="opt-row">
-              <div class="opt-info">
-                <span class="opt-title">Velocidade dos Anúncios</span>
-                <span class="opt-desc">3x é o limite seguro. 4x a 8x pode aumentar o risco de identificação.</span>
-              </div>
-              <span class="tag tag--safe" id="opt-ad-speed-value" style="margin-left:0;">3x</span>
-            </div>
-            <div class="range-wrap" style="margin-top:14px;">
-              <input type="range" id="opt-ad-speed" min="1" max="8" value="3" step="0.5" class="range">
-              <div class="range-labels speed-range-labels">
-                <span class="speed-label-min">1x</span>
-                <span class="speed-label-safe">3x seguro</span>
-                <span class="speed-label-max">8x risco</span>
-              </div>
-            </div>
           </div>
           <hr class="divider">
           <div class="opt-row">
