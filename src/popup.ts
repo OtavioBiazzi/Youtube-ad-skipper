@@ -118,7 +118,9 @@ toggleOverlay.addEventListener("change", () => {
 
 toggleAggressive.addEventListener("change", () => {
   const on = toggleAggressive.checked;
-  chrome.storage.local.set({ aggressiveSkip: on });
+  const nextSettings: Record<string, unknown> = { aggressiveSkip: on };
+  if (!on) nextSettings.instantSkip = false;
+  chrome.storage.local.set(nextSettings);
   renderAggressiveState(on);
   checkChanges();
 });
@@ -180,7 +182,7 @@ function renderSliderTrack() {
   const val = parseInt(skipDelaySlider.value, 10);
   const pct = ((val - min) / (max - min)) * 100;
   skipDelaySlider.style.background =
-    "linear-gradient(90deg, hsl(355,65%,52%) " + pct + "%, #1c1c1f " + pct + "%)";
+    "linear-gradient(90deg, var(--accent) " + pct + "%, var(--border) " + pct + "%)";
 }
 
 function renderStatus(enabled: boolean) {

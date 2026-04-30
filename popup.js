@@ -82,7 +82,9 @@
   });
   toggleAggressive.addEventListener("change", () => {
     const on = toggleAggressive.checked;
-    chrome.storage.local.set({ aggressiveSkip: on });
+    const nextSettings = { aggressiveSkip: on };
+    if (!on) nextSettings.instantSkip = false;
+    chrome.storage.local.set(nextSettings);
     renderAggressiveState(on);
     checkChanges();
   });
@@ -133,7 +135,7 @@
     const max = parseInt(skipDelaySlider.max, 10);
     const val = parseInt(skipDelaySlider.value, 10);
     const pct = (val - min) / (max - min) * 100;
-    skipDelaySlider.style.background = "linear-gradient(90deg, hsl(355,65%,52%) " + pct + "%, #1c1c1f " + pct + "%)";
+    skipDelaySlider.style.background = "linear-gradient(90deg, var(--accent) " + pct + "%, var(--border) " + pct + "%)";
   }
   function renderStatus(enabled) {
     if (enabled) {

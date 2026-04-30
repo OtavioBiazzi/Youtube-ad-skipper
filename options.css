@@ -382,7 +382,7 @@ body.theme-light .theme-toggle:hover {
   width: 100%;
   height: 6px;
   border-radius: 3px;
-  background: linear-gradient(90deg, var(--accent) 0%, #1c1c1f 0%);
+  background: linear-gradient(90deg, var(--accent) 0%, var(--surface-2) 0%);
   outline: none;
   cursor: pointer;
 }

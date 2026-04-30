@@ -50,6 +50,7 @@ declare global {
   const SPEED_THROUGH_RETRY_MS = 250;
   const PLAYBACK_RESTORE_RETRY_MS = 150;
   const PLAYBACK_RESTORE_WINDOW_MS = 2400;
+  const POST_SKIP_RESTORE_DELAYS_MS = [180, 450, 900, 1500];
   const MAIN_FORCE_SKIP_MESSAGE = "yt-ad-skipper:force-skip";
   const MAIN_SPEED_THROUGH_MESSAGE = "yt-ad-skipper:speed-through";
   const MAIN_FORCE_SKIP_RESULT = "yt-ad-skipper:force-skip-result";
@@ -74,11 +75,14 @@ declare global {
     speedThroughInterval: null,
     playbackRestoreInterval: null,
     playbackRestoreStartedAt: null,
+    postSkipRestoreTimeouts: [],
+    lastObserverSkipAttempt: 0,
     preAdPlaybackRate: null,
   };
 
   let adblockObserver: MutationObserver | null = null;
   let adblockBodyWaitObserver: MutationObserver | null = null;
+  let skipButtonObserver: MutationObserver | null = null;
 
   // ── Humanização — jitter aleatório ────────────────────
 
@@ -104,8 +108,7 @@ declare global {
           },
           (s) => {
             config.enabled = !!s.enabled;
-            const d = Number(s.skipDelay);
-            config.skipDelay = isNaN(d) || d < 0 ? 1 : d;
+            config.skipDelay = normalizeSkipDelay(s.skipDelay);
             config.muteAds = !!s.muteAds;
             config.showOverlay = !!s.showOverlay;
             config.aggressiveSkip = !!s.aggressiveSkip;
@@ -145,8 +148,7 @@ declare global {
         }
       }
       if (changes.skipDelay) {
-        const v = Number(changes.skipDelay.newValue);
-        if (!isNaN(v) && v >= 0) config.skipDelay = v;
+        config.skipDelay = normalizeSkipDelay(changes.skipDelay.newValue);
       }
       if (changes.muteAds) config.muteAds = !!changes.muteAds.newValue;
       if (changes.showOverlay) {
@@ -184,8 +186,13 @@ declare global {
 
   function getAdPlaying() {
     // Método 1: classe no player (original e mais confiável)
-    const player = document.querySelector(".html5-video-player");
-    if (player && player.classList.contains("ad-showing")) return true;
+    const player = getYouTubePlayer();
+    if (
+      player &&
+      (player.classList.contains("ad-showing") || player.classList.contains("ad-interrupting"))
+    ) {
+      return true;
+    }
 
     // Método 2: elementos de UI do anúncio com verificação real de visibilidade
     const badges = document.querySelectorAll(".ytp-ad-badge, .ytp-ad-visit-advertiser-button, .ytp-visit-advertiser-link");
@@ -521,6 +528,26 @@ declare global {
     }, PLAYBACK_RESTORE_RETRY_MS);
   }
 
+  function clearPostSkipRestoreChecks() {
+    for (const timeoutId of adState.postSkipRestoreTimeouts || []) {
+      clearTimeout(timeoutId);
+    }
+    adState.postSkipRestoreTimeouts = [];
+  }
+
+  function queuePlaybackRateRestoreAfterSkip() {
+    clearPostSkipRestoreChecks();
+    const targetRate = adState.preAdPlaybackRate || 1;
+
+    adState.postSkipRestoreTimeouts = POST_SKIP_RESTORE_DELAYS_MS.map((delay) => setTimeout(() => {
+      if (!config.enabled || adState.watching || !getAdPlaying()) {
+        stopSpeedThrough();
+        startPlaybackRateRestore(targetRate);
+        clearPostSkipRestoreChecks();
+      }
+    }, delay));
+  }
+
   function clearSkipTimeout() {
     if (adState.skipTimeout) {
       clearTimeout(adState.skipTimeout);
@@ -531,8 +558,10 @@ declare global {
   function finishSkipClick() {
     stopForceSkipBurst();
     clearSkipTimeout();
+    stopSkipButtonObserver();
     adState.skipTargetTime = Date.now() + 1000;
     removeOverlay();
+    queuePlaybackRateRestoreAfterSkip();
     if (incrementAdCounter()) showToastNotification();
   }
 
@@ -577,6 +606,36 @@ declare global {
 
     tick();
     adState.forceSkipInterval = setInterval(tick, FORCE_SKIP_RETRY_MS);
+  }
+
+  function stopSkipButtonObserver() {
+    if (skipButtonObserver) {
+      skipButtonObserver.disconnect();
+      skipButtonObserver = null;
+    }
+    adState.lastObserverSkipAttempt = 0;
+  }
+
+  function startSkipButtonObserver() {
+    if (skipButtonObserver) return;
+    const root = document.body || document.documentElement;
+    if (!root) return;
+
+    skipButtonObserver = new MutationObserver(() => {
+      if (!config.enabled || !adState.active || adState.watching || !adState.skipTargetTime) return;
+      if (Date.now() < adState.skipTargetTime) return;
+      if (Date.now() - adState.lastObserverSkipAttempt < 90) return;
+
+      adState.lastObserverSkipAttempt = Date.now();
+      attemptScheduledSkip();
+    });
+
+    skipButtonObserver.observe(root, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["class", "style", "aria-label", "title"],
+    });
   }
 
   // ── Anti-Adblock: SISTEMA TRIPLO ────────────────────────
@@ -862,10 +921,12 @@ declare global {
     clearInterval(adState.countdownInterval);
     stopForceSkipBurst();
     clearSkipTimeout();
+    stopSkipButtonObserver();
     const delayMs = getEffectiveDelay() * 1000;
     const actualDelayMs = config.aggressiveSkip ? delayMs : humanDelay(delayMs);
     adState.skipTargetTime = Date.now() + actualDelayMs;
     adState.skipTimeout = setTimeout(attemptScheduledSkip, actualDelayMs);
+    startSkipButtonObserver();
   }
 
   // ── Mute/unmute ───────────────────────────────────────
@@ -1026,6 +1087,8 @@ declare global {
   function cleanupRuntimeState() {
     stopForceSkipBurst();
     stopSpeedThrough();
+    stopSkipButtonObserver();
+    clearPostSkipRestoreChecks();
     clearSkipTimeout();
     removeOverlay();
     unmuteVideo();

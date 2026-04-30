@@ -345,7 +345,7 @@ function renderSlider() {
   const max = parseInt(optDelay.max, 10);
   const val = parseInt(optDelay.value, 10);
   const pct = ((val - min) / (max - min)) * 100;
-  optDelay.style.background = "linear-gradient(90deg, hsl(355,65%,52%) " + pct + "%, #1c1c1f " + pct + "%)";
+  optDelay.style.background = "linear-gradient(90deg, var(--accent) " + pct + "%, var(--surface-2) " + pct + "%)";
 }
 
 function renderStatus(enabled: boolean) {
@@ -470,7 +470,7 @@ function renderAdSpeed(delay: number, manualSpeed: number, state = getTimingStat
   const max = parseFloat(optAdSpeed.max);
   const visualSpeed = state.instant ? max : Math.min(max, speed);
   const pct = ((visualSpeed - min) / (max - min)) * 100;
-  optAdSpeed.style.background = "linear-gradient(90deg, hsl(355,65%,52%) " + pct + "%, #1c1c1f " + pct + "%)";
+  optAdSpeed.style.background = "linear-gradient(90deg, var(--accent) " + pct + "%, var(--surface-2) " + pct + "%)";
   adSpeedBetaHint.textContent = state.adaptiveSpeed
     ? "Adaptação beta ativa: " + delay + "s usa " + formatSpeed(speed) + ". Acima de 3x pode aumentar o risco de identificação."
     : "Acima de 3x pode aumentar o risco de identificação.";
