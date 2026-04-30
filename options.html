@@ -249,27 +249,31 @@
         </div>
         <div class="section-grid section-grid--three">
           <article class="card card--module">
-            <div class="card-header"><span>Velocidade de reproducao</span><span class="tag tag--stage">BASE</span></div>
+            <div class="card-header"><span>Velocidade de reproducao</span><span class="tag tag--safe">ATIVO</span></div>
             <div class="card-body control-stack">
-              <label class="field-row"><span>Velocidade padrao</span><input class="control-input" type="number" value="1" min="0.25" max="16" step="0.05" disabled></label>
-              <label class="field-row"><span>Variacao por roda/botoes</span><input class="control-input" type="number" value="0.02" min="0.01" max="1" step="0.01" disabled></label>
-              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Roda do mouse + Ctrl</span></div><label class="switch"><input type="checkbox" checked disabled><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Aplicar velocidade padrao</span><span class="opt-desc">Define a velocidade ao abrir um video novo.</span></div><label class="switch"><input type="checkbox" id="opt-player-speed-enabled"><span class="switch-track"></span></label></div>
+              <label class="field-row"><span>Velocidade padrao</span><input class="control-input" id="opt-player-speed-default" type="number" value="1" min="0.25" max="16" step="0.05"></label>
+              <label class="field-row"><span>Variacao por roda</span><input class="control-input" id="opt-player-speed-step" type="number" value="0.25" min="0.05" max="2" step="0.05"></label>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Roda do mouse + Ctrl</span><span class="opt-desc">Passe o mouse no player e use Ctrl + roda.</span></div><label class="switch"><input type="checkbox" id="opt-player-speed-wheel"><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Exigir botao direito pressionado</span></div><label class="switch"><input type="checkbox" id="opt-player-speed-right-button"><span class="switch-track"></span></label></div>
             </div>
           </article>
           <article class="card card--module">
-            <div class="card-header"><span>Volume</span><span class="tag tag--stage">BASE</span></div>
+            <div class="card-header"><span>Volume</span><span class="tag tag--safe">ATIVO</span></div>
             <div class="card-body control-stack">
-              <label class="field-row"><span>Volume padrao</span><input class="control-input" type="number" value="50" min="0" max="100" disabled></label>
-              <label class="field-row"><span>Amplificador</span><input class="control-input" type="number" value="2" min="1" max="8" disabled></label>
-              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Volume pela roda</span></div><label class="switch"><input type="checkbox" checked disabled><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Aplicar volume padrao</span><span class="opt-desc">Ajusta o volume ao abrir um video novo.</span></div><label class="switch"><input type="checkbox" id="opt-player-volume-enabled"><span class="switch-track"></span></label></div>
+              <label class="field-row"><span>Volume padrao</span><input class="control-input" id="opt-player-volume-default" type="number" value="50" min="0" max="100" step="1"></label>
+              <label class="field-row"><span>Variacao por roda</span><input class="control-input" id="opt-player-volume-step" type="number" value="5" min="1" max="25" step="1"></label>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Volume pela roda</span><span class="opt-desc">Use a roda com o cursor em cima do player.</span></div><label class="switch"><input type="checkbox" id="opt-player-volume-wheel"><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Exigir botao direito pressionado</span></div><label class="switch"><input type="checkbox" id="opt-player-volume-right-button"><span class="switch-track"></span></label></div>
             </div>
           </article>
           <article class="card card--module">
-            <div class="card-header"><span>Autoplay</span><span class="tag tag--stage">BASE</span></div>
+            <div class="card-header"><span>Mouse e reproducao</span><span class="tag tag--safe">ATIVO</span></div>
             <div class="card-body control-stack">
-              <label class="field-row"><span>Preset</span><select class="control-input" disabled><option>Bloquear abas em segundo plano</option></select></label>
-              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Bloquear autoplay</span></div><label class="switch"><input type="checkbox" disabled><span class="switch-track"></span></label></div>
-              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Impedir pre-carregamento</span></div><label class="switch"><input type="checkbox" disabled><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Inverter direcao da roda</span><span class="opt-desc">Troca subir/descer nos controles de volume e velocidade.</span></div><label class="switch"><input type="checkbox" id="opt-player-wheel-invert"><span class="switch-track"></span></label></div>
+              <div class="module-note">Autoplay, pausa em abas de fundo e bloqueio de pre-carregamento entram na proxima etapa.</div>
+              <label class="field-row"><span>Preset futuro</span><select class="control-input" disabled><option>Bloquear abas em segundo plano</option></select></label>
             </div>
           </article>
         </div>

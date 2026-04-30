@@ -24,6 +24,17 @@ type OptionsSettings = {
   adSpeedRate: number;
   customSpeedEnabled: boolean;
   adaptiveSpeedEnabled: boolean;
+  playerSpeedEnabled: boolean;
+  playerSpeedDefault: number;
+  playerSpeedStep: number;
+  playerSpeedWheel: boolean;
+  playerSpeedWheelRightButton: boolean;
+  playerVolumeEnabled: boolean;
+  playerVolumeDefault: number;
+  playerVolumeStep: number;
+  playerVolumeWheel: boolean;
+  playerVolumeWheelRightButton: boolean;
+  playerWheelInvert: boolean;
 };
 
 const DEFAULT: OptionsSettings = {
@@ -46,6 +57,17 @@ const DEFAULT: OptionsSettings = {
   adSpeedRate: 3,
   customSpeedEnabled: false,
   adaptiveSpeedEnabled: false,
+  playerSpeedEnabled: false,
+  playerSpeedDefault: 1,
+  playerSpeedStep: 0.25,
+  playerSpeedWheel: false,
+  playerSpeedWheelRightButton: false,
+  playerVolumeEnabled: false,
+  playerVolumeDefault: 50,
+  playerVolumeStep: 5,
+  playerVolumeWheel: false,
+  playerVolumeWheelRightButton: false,
+  playerWheelInvert: false,
 };
 
 const SAFE_AD_SPEED_RATE = 3;
@@ -101,6 +123,18 @@ const adSpeedValue = byId<HTMLElement>("opt-ad-speed-value");
 const adSpeedBetaHint = byId<HTMLElement>("ad-speed-beta-hint");
 const f5Banner    = byId<HTMLElement>("f5-banner");
 
+const optPlayerSpeedEnabled = byId<HTMLInputElement>("opt-player-speed-enabled");
+const optPlayerSpeedDefault = byId<HTMLInputElement>("opt-player-speed-default");
+const optPlayerSpeedStep = byId<HTMLInputElement>("opt-player-speed-step");
+const optPlayerSpeedWheel = byId<HTMLInputElement>("opt-player-speed-wheel");
+const optPlayerSpeedRightButton = byId<HTMLInputElement>("opt-player-speed-right-button");
+const optPlayerVolumeEnabled = byId<HTMLInputElement>("opt-player-volume-enabled");
+const optPlayerVolumeDefault = byId<HTMLInputElement>("opt-player-volume-default");
+const optPlayerVolumeStep = byId<HTMLInputElement>("opt-player-volume-step");
+const optPlayerVolumeWheel = byId<HTMLInputElement>("opt-player-volume-wheel");
+const optPlayerVolumeRightButton = byId<HTMLInputElement>("opt-player-volume-right-button");
+const optPlayerWheelInvert = byId<HTMLInputElement>("opt-player-wheel-invert");
+
 let currentWhitelist: string[] = [];
 let initialState: OptionsSettings | null = null;
 
@@ -123,6 +157,17 @@ chrome.storage.local.get(DEFAULT, (s: OptionsSettings) => {
   optCustomSpeed.checked = !!s.customSpeedEnabled;
   optAdaptiveSpeed.checked = !!s.adaptiveSpeedEnabled;
   optListMode.checked   = s.listMode === 'blacklist';
+  optPlayerSpeedEnabled.checked = !!s.playerSpeedEnabled;
+  optPlayerSpeedDefault.value = formatControlNumber(normalizePlayerSpeed(s.playerSpeedDefault, DEFAULT.playerSpeedDefault));
+  optPlayerSpeedStep.value = formatControlNumber(normalizePlayerSpeedStep(s.playerSpeedStep));
+  optPlayerSpeedWheel.checked = !!s.playerSpeedWheel;
+  optPlayerSpeedRightButton.checked = !!s.playerSpeedWheelRightButton;
+  optPlayerVolumeEnabled.checked = !!s.playerVolumeEnabled;
+  optPlayerVolumeDefault.value = String(normalizeVolumePercent(s.playerVolumeDefault));
+  optPlayerVolumeStep.value = String(normalizeVolumeStep(s.playerVolumeStep));
+  optPlayerVolumeWheel.checked = !!s.playerVolumeWheel;
+  optPlayerVolumeRightButton.checked = !!s.playerVolumeWheelRightButton;
+  optPlayerWheelInvert.checked = !!s.playerWheelInvert;
 
   if (!s.aggressiveSkip && s.instantSkip) {
     chrome.storage.local.set({ instantSkip: false });
@@ -135,6 +180,7 @@ chrome.storage.local.get(DEFAULT, (s: OptionsSettings) => {
   renderStateIcons(s.enabled, s.aggressiveSkip);
   renderListMode(s.listMode || 'whitelist');
   renderTimingControls();
+  renderPlayerControlLocks();
   
   // Stats
   const now = new Date();
@@ -243,6 +289,74 @@ optAdSpeed.addEventListener("input", () => {
   const value = normalizeAdSpeed(optAdSpeed.value);
   chrome.storage.local.set({ adSpeedRate: value });
   renderTimingControls();
+});
+
+optPlayerSpeedEnabled.addEventListener("change", () => {
+  chrome.storage.local.set({ playerSpeedEnabled: optPlayerSpeedEnabled.checked });
+  renderPlayerControlLocks();
+});
+
+optPlayerSpeedDefault.addEventListener("input", () => {
+  const value = normalizePlayerSpeed(optPlayerSpeedDefault.value, DEFAULT.playerSpeedDefault);
+  chrome.storage.local.set({ playerSpeedDefault: value });
+});
+
+optPlayerSpeedDefault.addEventListener("change", () => {
+  optPlayerSpeedDefault.value = formatControlNumber(normalizePlayerSpeed(optPlayerSpeedDefault.value, DEFAULT.playerSpeedDefault));
+});
+
+optPlayerSpeedStep.addEventListener("input", () => {
+  const value = normalizePlayerSpeedStep(optPlayerSpeedStep.value);
+  chrome.storage.local.set({ playerSpeedStep: value });
+});
+
+optPlayerSpeedStep.addEventListener("change", () => {
+  optPlayerSpeedStep.value = formatControlNumber(normalizePlayerSpeedStep(optPlayerSpeedStep.value));
+});
+
+optPlayerSpeedWheel.addEventListener("change", () => {
+  chrome.storage.local.set({ playerSpeedWheel: optPlayerSpeedWheel.checked });
+  renderPlayerControlLocks();
+});
+
+optPlayerSpeedRightButton.addEventListener("change", () => {
+  chrome.storage.local.set({ playerSpeedWheelRightButton: optPlayerSpeedRightButton.checked });
+});
+
+optPlayerVolumeEnabled.addEventListener("change", () => {
+  chrome.storage.local.set({ playerVolumeEnabled: optPlayerVolumeEnabled.checked });
+  renderPlayerControlLocks();
+});
+
+optPlayerVolumeDefault.addEventListener("input", () => {
+  const value = normalizeVolumePercent(optPlayerVolumeDefault.value);
+  chrome.storage.local.set({ playerVolumeDefault: value });
+});
+
+optPlayerVolumeDefault.addEventListener("change", () => {
+  optPlayerVolumeDefault.value = String(normalizeVolumePercent(optPlayerVolumeDefault.value));
+});
+
+optPlayerVolumeStep.addEventListener("input", () => {
+  const value = normalizeVolumeStep(optPlayerVolumeStep.value);
+  chrome.storage.local.set({ playerVolumeStep: value });
+});
+
+optPlayerVolumeStep.addEventListener("change", () => {
+  optPlayerVolumeStep.value = String(normalizeVolumeStep(optPlayerVolumeStep.value));
+});
+
+optPlayerVolumeWheel.addEventListener("change", () => {
+  chrome.storage.local.set({ playerVolumeWheel: optPlayerVolumeWheel.checked });
+  renderPlayerControlLocks();
+});
+
+optPlayerVolumeRightButton.addEventListener("change", () => {
+  chrome.storage.local.set({ playerVolumeWheelRightButton: optPlayerVolumeRightButton.checked });
+});
+
+optPlayerWheelInvert.addEventListener("change", () => {
+  chrome.storage.local.set({ playerWheelInvert: optPlayerWheelInvert.checked });
 });
 
 btnReset.addEventListener("click", () => {
@@ -391,6 +505,34 @@ function normalizeAdSpeed(value: unknown) {
   return Math.min(MAX_AD_SPEED_RATE, Math.max(MIN_AD_SPEED_RATE, n));
 }
 
+function normalizePlayerSpeed(value: unknown, fallback = 1) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return Math.min(16, Math.max(0.25, n));
+}
+
+function normalizePlayerSpeedStep(value: unknown) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return DEFAULT.playerSpeedStep;
+  return Math.min(2, Math.max(0.05, n));
+}
+
+function normalizeVolumePercent(value: unknown) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return DEFAULT.playerVolumeDefault;
+  return Math.min(100, Math.max(0, Math.round(n)));
+}
+
+function normalizeVolumeStep(value: unknown) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return DEFAULT.playerVolumeStep;
+  return Math.min(25, Math.max(1, Math.round(n)));
+}
+
+function formatControlNumber(value: number) {
+  return value.toFixed(2).replace(/\.?0+$/, "");
+}
+
 function getSafeAdaptiveSpeed(delay: number) {
   if (delay <= 3) return SAFE_AD_SPEED_RATE;
   if (delay <= 6) return 2.5;
@@ -446,6 +588,13 @@ function renderTimingControls() {
   renderDelay(delay, state.aggressive, state.instant);
   renderSlider();
   renderAdSpeed(delay, speed, state);
+}
+
+function renderPlayerControlLocks() {
+  optPlayerSpeedDefault.disabled = !optPlayerSpeedEnabled.checked;
+  optPlayerSpeedRightButton.disabled = !optPlayerSpeedWheel.checked;
+  optPlayerVolumeDefault.disabled = !optPlayerVolumeEnabled.checked;
+  optPlayerVolumeRightButton.disabled = !optPlayerVolumeWheel.checked;
 }
 
 function renderAdSpeed(delay: number, manualSpeed: number, state = getTimingState()) {
@@ -510,7 +659,10 @@ function renderWarnings(count: number) {
 function checkRestartWarning() {
   if (!initialState) return;
   chrome.storage.local.get(DEFAULT, (current: OptionsSettings) => {
-    const needsReload: Array<keyof OptionsSettings> = ['enabled', 'skipDelay', 'muteAds', 'showOverlay', 'aggressiveSkip', 'listMode', 'instantSkip', 'pipEnabled', 'adSpeedRate', 'customSpeedEnabled', 'adaptiveSpeedEnabled'];
+    const needsReload: Array<keyof OptionsSettings> = [
+      'enabled', 'skipDelay', 'muteAds', 'showOverlay', 'aggressiveSkip', 'listMode',
+      'instantSkip', 'pipEnabled', 'adSpeedRate', 'customSpeedEnabled', 'adaptiveSpeedEnabled'
+    ];
     let changed = false;
     
     for (const key of needsReload) {
@@ -595,6 +747,37 @@ chrome.storage.onChanged.addListener((changes) => {
     optAdSpeed.value = String(value);
     renderTimingControls();
   }
+  if (changes.playerSpeedEnabled) {
+    optPlayerSpeedEnabled.checked = !!changes.playerSpeedEnabled.newValue;
+    renderPlayerControlLocks();
+  }
+  if (changes.playerSpeedDefault) {
+    optPlayerSpeedDefault.value = formatControlNumber(normalizePlayerSpeed(changes.playerSpeedDefault.newValue, DEFAULT.playerSpeedDefault));
+  }
+  if (changes.playerSpeedStep) {
+    optPlayerSpeedStep.value = formatControlNumber(normalizePlayerSpeedStep(changes.playerSpeedStep.newValue));
+  }
+  if (changes.playerSpeedWheel) {
+    optPlayerSpeedWheel.checked = !!changes.playerSpeedWheel.newValue;
+    renderPlayerControlLocks();
+  }
+  if (changes.playerSpeedWheelRightButton) optPlayerSpeedRightButton.checked = !!changes.playerSpeedWheelRightButton.newValue;
+  if (changes.playerVolumeEnabled) {
+    optPlayerVolumeEnabled.checked = !!changes.playerVolumeEnabled.newValue;
+    renderPlayerControlLocks();
+  }
+  if (changes.playerVolumeDefault) {
+    optPlayerVolumeDefault.value = String(normalizeVolumePercent(changes.playerVolumeDefault.newValue));
+  }
+  if (changes.playerVolumeStep) {
+    optPlayerVolumeStep.value = String(normalizeVolumeStep(changes.playerVolumeStep.newValue));
+  }
+  if (changes.playerVolumeWheel) {
+    optPlayerVolumeWheel.checked = !!changes.playerVolumeWheel.newValue;
+    renderPlayerControlLocks();
+  }
+  if (changes.playerVolumeWheelRightButton) optPlayerVolumeRightButton.checked = !!changes.playerVolumeWheelRightButton.newValue;
+  if (changes.playerWheelInvert) optPlayerWheelInvert.checked = !!changes.playerWheelInvert.newValue;
   
   if (changes.totalAdsSkipped) {
     animateCounter(statTotal, Number(changes.totalAdsSkipped.newValue) || 0);

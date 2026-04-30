@@ -21,7 +21,18 @@
       pipEnabled: false,
       adSpeedRate: 3,
       customSpeedEnabled: false,
-      adaptiveSpeedEnabled: false
+      adaptiveSpeedEnabled: false,
+      playerSpeedEnabled: false,
+      playerSpeedDefault: 1,
+      playerSpeedStep: 0.25,
+      playerSpeedWheel: false,
+      playerSpeedWheelRightButton: false,
+      playerVolumeEnabled: false,
+      playerVolumeDefault: 50,
+      playerVolumeStep: 5,
+      playerVolumeWheel: false,
+      playerVolumeWheelRightButton: false,
+      playerWheelInvert: false
     };
     const CHECK_INTERVAL = 500;
     const FORCE_SKIP_RETRY_MS = 120;
@@ -62,7 +73,11 @@
       playbackRestoreStartedAt: null,
       postSkipRestoreTimeouts: [],
       lastObserverSkipAttempt: 0,
-      preAdPlaybackRate: null
+      preAdPlaybackRate: null,
+      playerVideoKey: "",
+      defaultSpeedAppliedKey: "",
+      defaultVolumeAppliedKey: "",
+      rightMouseDown: false
     };
     let adblockObserver = null;
     let adblockBodyWaitObserver = null;
@@ -94,7 +109,18 @@
               pipEnabled: false,
               adSpeedRate: DEFAULT_SPEED_THROUGH_RATE,
               customSpeedEnabled: false,
-              adaptiveSpeedEnabled: false
+              adaptiveSpeedEnabled: false,
+              playerSpeedEnabled: false,
+              playerSpeedDefault: 1,
+              playerSpeedStep: 0.25,
+              playerSpeedWheel: false,
+              playerSpeedWheelRightButton: false,
+              playerVolumeEnabled: false,
+              playerVolumeDefault: 50,
+              playerVolumeStep: 5,
+              playerVolumeWheel: false,
+              playerVolumeWheelRightButton: false,
+              playerWheelInvert: false
             },
             (s) => {
               config.enabled = !!s.enabled;
@@ -111,6 +137,17 @@
               config.adSpeedRate = normalizeSpeedRate(s.adSpeedRate);
               config.customSpeedEnabled = !!s.customSpeedEnabled;
               config.adaptiveSpeedEnabled = !!s.adaptiveSpeedEnabled;
+              config.playerSpeedEnabled = !!s.playerSpeedEnabled;
+              config.playerSpeedDefault = normalizeUserPlaybackRate(s.playerSpeedDefault, 1);
+              config.playerSpeedStep = normalizePlayerSpeedStep(s.playerSpeedStep);
+              config.playerSpeedWheel = !!s.playerSpeedWheel;
+              config.playerSpeedWheelRightButton = !!s.playerSpeedWheelRightButton;
+              config.playerVolumeEnabled = !!s.playerVolumeEnabled;
+              config.playerVolumeDefault = normalizeVolumePercent(s.playerVolumeDefault);
+              config.playerVolumeStep = normalizeVolumeStep(s.playerVolumeStep);
+              config.playerVolumeWheel = !!s.playerVolumeWheel;
+              config.playerVolumeWheelRightButton = !!s.playerVolumeWheelRightButton;
+              config.playerWheelInvert = !!s.playerWheelInvert;
               adState.warningCount = s.warningCount || 0;
               adState.totalSkipped = s.totalAdsSkipped || 0;
               adState.adsSkippedToday = s.adsSkippedToday || 0;
@@ -161,6 +198,29 @@
         if (changes.adSpeedRate) config.adSpeedRate = normalizeSpeedRate(changes.adSpeedRate.newValue);
         if (changes.customSpeedEnabled) config.customSpeedEnabled = !!changes.customSpeedEnabled.newValue;
         if (changes.adaptiveSpeedEnabled) config.adaptiveSpeedEnabled = !!changes.adaptiveSpeedEnabled.newValue;
+        if (changes.playerSpeedEnabled) {
+          config.playerSpeedEnabled = !!changes.playerSpeedEnabled.newValue;
+          if (config.playerSpeedEnabled) adState.defaultSpeedAppliedKey = "";
+        }
+        if (changes.playerSpeedDefault) {
+          config.playerSpeedDefault = normalizeUserPlaybackRate(changes.playerSpeedDefault.newValue, 1);
+          adState.defaultSpeedAppliedKey = "";
+        }
+        if (changes.playerSpeedStep) config.playerSpeedStep = normalizePlayerSpeedStep(changes.playerSpeedStep.newValue);
+        if (changes.playerSpeedWheel) config.playerSpeedWheel = !!changes.playerSpeedWheel.newValue;
+        if (changes.playerSpeedWheelRightButton) config.playerSpeedWheelRightButton = !!changes.playerSpeedWheelRightButton.newValue;
+        if (changes.playerVolumeEnabled) {
+          config.playerVolumeEnabled = !!changes.playerVolumeEnabled.newValue;
+          if (config.playerVolumeEnabled) adState.defaultVolumeAppliedKey = "";
+        }
+        if (changes.playerVolumeDefault) {
+          config.playerVolumeDefault = normalizeVolumePercent(changes.playerVolumeDefault.newValue);
+          adState.defaultVolumeAppliedKey = "";
+        }
+        if (changes.playerVolumeStep) config.playerVolumeStep = normalizeVolumeStep(changes.playerVolumeStep.newValue);
+        if (changes.playerVolumeWheel) config.playerVolumeWheel = !!changes.playerVolumeWheel.newValue;
+        if (changes.playerVolumeWheelRightButton) config.playerVolumeWheelRightButton = !!changes.playerVolumeWheelRightButton.newValue;
+        if (changes.playerWheelInvert) config.playerWheelInvert = !!changes.playerWheelInvert.newValue;
       });
     }
     window.addEventListener("message", (event) => {
@@ -290,6 +350,129 @@
       const n = Number(rate);
       if (!Number.isFinite(n) || n <= 0) return fallback;
       return Math.min(MAX_PLAYBACK_RATE, Math.max(MIN_PLAYBACK_RATE, n));
+    }
+    function normalizeUserPlaybackRate(rate, fallback = 1) {
+      const n = Number(rate);
+      if (!Number.isFinite(n) || n <= 0) return fallback;
+      return Math.min(MAX_PLAYBACK_RATE, Math.max(0.25, n));
+    }
+    function normalizePlayerSpeedStep(step) {
+      const n = Number(step);
+      if (!Number.isFinite(n) || n <= 0) return 0.25;
+      return Math.min(2, Math.max(0.05, n));
+    }
+    function normalizeVolumePercent(volume) {
+      const n = Number(volume);
+      if (!Number.isFinite(n)) return 50;
+      return Math.min(100, Math.max(0, Math.round(n)));
+    }
+    function normalizeVolumeStep(step) {
+      const n = Number(step);
+      if (!Number.isFinite(n) || n <= 0) return 5;
+      return Math.min(25, Math.max(1, Math.round(n)));
+    }
+    function getActiveVideo() {
+      return document.querySelector("video");
+    }
+    function getCurrentVideoKey() {
+      try {
+        const url = new URL(location.href);
+        const videoId = url.searchParams.get("v");
+        if (videoId) return "watch:" + videoId;
+      } catch (err) {
+      }
+      return location.pathname + location.search;
+    }
+    function setUserPlaybackRate(rate, video = getActiveVideo()) {
+      const targetRate = normalizeUserPlaybackRate(rate, 1);
+      if (video) {
+        try {
+          if (video.playbackRate !== targetRate) video.playbackRate = targetRate;
+        } catch (err) {
+        }
+      }
+      const player = getYouTubePlayer();
+      try {
+        if (player && typeof player.setPlaybackRate === "function") {
+          player.setPlaybackRate(targetRate);
+        }
+      } catch (err) {
+      }
+      requestMainWorldSpeedThrough(targetRate);
+      return targetRate;
+    }
+    function setUserVolume(percent, unmute = false, video = getActiveVideo()) {
+      const target = normalizeVolumePercent(percent);
+      const normalized = target / 100;
+      if (video) {
+        try {
+          video.volume = normalized;
+          if (unmute && target > 0) video.muted = false;
+        } catch (err) {
+        }
+      }
+      const player = getYouTubePlayer();
+      try {
+        if (player && typeof player.setVolume === "function") {
+          player.setVolume(target);
+        }
+        if (unmute && target > 0 && player && typeof player.unMute === "function") {
+          player.unMute();
+        }
+      } catch (err) {
+      }
+      return target;
+    }
+    function applyPlayerPreferences() {
+      if (!config.enabled || adState.active || getAdPlaying()) return;
+      const video = getActiveVideo();
+      if (!video) return;
+      const key = getCurrentVideoKey();
+      if (key !== adState.playerVideoKey) {
+        adState.playerVideoKey = key;
+        adState.defaultSpeedAppliedKey = "";
+        adState.defaultVolumeAppliedKey = "";
+      }
+      if (config.playerSpeedEnabled && adState.defaultSpeedAppliedKey !== key) {
+        setUserPlaybackRate(config.playerSpeedDefault, video);
+        adState.defaultSpeedAppliedKey = key;
+      }
+      if (config.playerVolumeEnabled && adState.defaultVolumeAppliedKey !== key) {
+        setUserVolume(config.playerVolumeDefault, false, video);
+        adState.defaultVolumeAppliedKey = key;
+      }
+    }
+    function isPointerInsidePlayer(target) {
+      if (!target || !(target instanceof Element)) return false;
+      const player = getYouTubePlayer();
+      if (player && player.contains(target)) return true;
+      return !!target.closest("#movie_player, .html5-video-player");
+    }
+    function getWheelDirection(event) {
+      const direction = event.deltaY < 0 ? 1 : -1;
+      return config.playerWheelInvert ? -direction : direction;
+    }
+    function handlePlayerWheel(event) {
+      if (!config.enabled || adState.active || getAdPlaying()) return;
+      if (!isPointerInsidePlayer(event.target)) return;
+      const rightButtonHeld = adState.rightMouseDown || (event.buttons & 2) === 2;
+      const direction = getWheelDirection(event);
+      const video = getActiveVideo();
+      if (config.playerSpeedWheel && event.ctrlKey && (!config.playerSpeedWheelRightButton || rightButtonHeld)) {
+        event.preventDefault();
+        event.stopPropagation();
+        const current = getCurrentPlaybackRate(video);
+        const next = normalizeUserPlaybackRate(current + direction * normalizePlayerSpeedStep(config.playerSpeedStep), current);
+        setUserPlaybackRate(next, video);
+        return;
+      }
+      if (config.playerVolumeWheel && !event.ctrlKey && (!config.playerVolumeWheelRightButton || rightButtonHeld)) {
+        event.preventDefault();
+        event.stopPropagation();
+        const current = video ? Math.round(video.volume * 100) : 50;
+        const next = normalizeVolumePercent(current + direction * normalizeVolumeStep(config.playerVolumeStep));
+        setUserVolume(next, true, video);
+      }
     }
     function getSpeedThroughRate() {
       if (isInstantSkipEnabled()) return INSTANT_SPEED_THROUGH_RATE;
@@ -979,6 +1162,7 @@
         }
         cleanupRuntimeState();
       } else if (!adPlaying && !adState.active) {
+        applyPlayerPreferences();
         const orphans = document.querySelectorAll("#" + OVERLAY_ID);
         if (orphans.length > 0) orphans.forEach((el) => el.remove());
       }
@@ -996,6 +1180,19 @@
         }
       }
     });
+    document.addEventListener("mousedown", (event) => {
+      if (event.button === 2) adState.rightMouseDown = true;
+    }, true);
+    document.addEventListener("mouseup", (event) => {
+      if (event.button === 2) adState.rightMouseDown = false;
+    }, true);
+    document.addEventListener("contextmenu", () => {
+      adState.rightMouseDown = false;
+    }, true);
+    window.addEventListener("blur", () => {
+      adState.rightMouseDown = false;
+    });
+    document.addEventListener("wheel", handlePlayerWheel, { capture: true, passive: false });
     const PIP_BTN_ID = "ytp-pip-float-btn";
     const PIP_STYLE_ID = "ytp-pip-style";
     function injectPipStyles() {
