@@ -1,5 +1,5 @@
 // ══════════════════════════════════════════════════
-// YouTube Ad Skipper — Popup Logic v3 | Taste Skill
+// Tube Shield — Popup Logic v3 | Taste Skill
 // ══════════════════════════════════════════════════
 
 const DEFAULT_SETTINGS = {
@@ -67,7 +67,7 @@ try {
   const manifestVersion = chrome.runtime.getManifest().version;
   if (versionTag) versionTag.textContent = `v${manifestVersion}`;
 } catch (err) {
-  console.warn("[YouTube Ad Skipper] Failed to read manifest version:", err);
+  console.warn("[Tube Shield] Failed to read manifest version:", err);
   if (versionTag) versionTag.textContent = "v-";
 }
 
@@ -262,6 +262,10 @@ chrome.storage.onChanged.addListener((changes) => {
 // ── Open settings page ──────────────────────────
 
 byId<HTMLButtonElement>("btn-open-settings").addEventListener("click", () => {
+  chrome.runtime.openOptionsPage();
+});
+
+byId<HTMLButtonElement>("btn-open-settings-main").addEventListener("click", () => {
   chrome.runtime.openOptionsPage();
 });
 

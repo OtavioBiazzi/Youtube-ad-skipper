@@ -1,8 +1,8 @@
-# ⚡ YouTube Ad Skipper
+# Tube Shield
 
-Uma extensão de navegador que **pula automaticamente os anúncios do YouTube**.
+Uma extensão experimental de navegador para reunir **skipper inteligente, controles de player, aparência e recursos avançados do YouTube** em um único painel.
 
-> **Isso NÃO é um ad blocker** — a extensão apenas automatiza o processo de clicar no botão "Pular anúncio" do YouTube.
+> A base atual ainda preserva o skipper: ela automatiza o processo de clicar no botão "Pular anúncio" do YouTube e prepara a evolução para um control center completo.
 
 <br>
 

@@ -1,5 +1,5 @@
 // ══════════════════════════════════════════════════
-// YouTube Ad Skipper — Options Logic | Taste Skill
+// Tube Shield — Options Logic | Taste Skill
 // ══════════════════════════════════════════════════
 
 type ListMode = 'whitelist' | 'blacklist';
@@ -153,7 +153,7 @@ chrome.storage.local.get(DEFAULT, (s: OptionsSettings) => {
 try {
   versionTag.textContent = "v" + chrome.runtime.getManifest().version;
 } catch (err) {
-  console.warn("[YouTube Ad Skipper] Failed to read manifest version:", err);
+  console.warn("[Tube Shield] Failed to read manifest version:", err);
   versionTag.textContent = "v-";
 }
 

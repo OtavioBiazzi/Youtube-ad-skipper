@@ -103,7 +103,7 @@
   try {
     versionTag.textContent = "v" + chrome.runtime.getManifest().version;
   } catch (err) {
-    console.warn("[YouTube Ad Skipper] Failed to read manifest version:", err);
+    console.warn("[Tube Shield] Failed to read manifest version:", err);
     versionTag.textContent = "v-";
   }
   optEnabled.addEventListener("change", () => {

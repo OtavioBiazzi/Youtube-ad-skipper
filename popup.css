@@ -141,6 +141,50 @@ body {
   border: 1px solid var(--border);
 }
 
+.quick-panel {
+  margin: 2px 0 6px;
+}
+
+.quick-action {
+  width: 100%;
+  display: grid;
+  gap: 3px;
+  padding: 12px 14px;
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius);
+  background:
+    linear-gradient(135deg, var(--accent-bg), transparent 70%),
+    var(--surface);
+  color: var(--text-1);
+  text-align: left;
+  font-family: var(--font);
+  cursor: pointer;
+  box-shadow: var(--glass-inner-border), var(--glass-inner-light);
+  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+}
+
+.quick-action:hover {
+  border-color: var(--accent);
+  background:
+    linear-gradient(135deg, hsla(355, 65%, 52%, 0.12), transparent 70%),
+    var(--surface);
+}
+
+.quick-action:active {
+  transform: translateY(1px);
+}
+
+.quick-action span {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.quick-action small {
+  color: var(--text-2);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
 /* ── Block (card replacement via liquid glass) ── */
 
 .block {

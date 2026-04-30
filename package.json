@@ -1,6 +1,6 @@
 {
-  "name": "youtube-ad-skipper",
-  "version": "4.3.8",
+  "name": "tube-shield",
+  "version": "5.0.0",
   "private": true,
   "type": "module",
   "scripts": {

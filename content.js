@@ -1081,7 +1081,7 @@
             btn.classList.add("pip-active");
           }
         } catch (err) {
-          console.warn("[YouTube Ad Skipper] PiP error:", err);
+          console.warn("[Tube Shield] PiP error:", err);
         }
       });
       player.style.position = "relative";

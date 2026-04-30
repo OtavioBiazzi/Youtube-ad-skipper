@@ -194,25 +194,26 @@ body.theme-light .theme-toggle:hover {
 
 /* ── Grid ── */
 .grid {
-  display: block;
-  columns: 3 300px;
-  column-gap: 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px 20px;
+  align-items: start;
 }
 
 .card--wide {
-  column-span: all;
+  grid-column: 1 / -1;
 }
 
 .card--advanced,
 .card--filter {
-  column-span: none;
+  grid-column: auto;
 }
 
 /* ── Cards ── */
 .card {
-  display: inline-block;
+  display: block;
   width: 100%;
-  margin: 0 0 16px;
+  margin: 0;
   align-self: start;
   background:
     linear-gradient(145deg, color-mix(in srgb, var(--surface) 92%, #ffffff 8%), var(--surface));
@@ -229,7 +230,7 @@ body.theme-light .theme-toggle:hover {
 
 .card--wide {
   display: block;
-  column-span: all;
+  grid-column: 1 / -1;
 }
 
 .card-header {
@@ -753,28 +754,257 @@ kbd {
   border-color: var(--red);
 }
 
+.card--module {
+  border-color: color-mix(in srgb, var(--border) 78%, var(--accent) 22%);
+}
+
+.tag--stage {
+  background: var(--surface-2);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  margin-left: auto;
+}
+
+.tag--risk {
+  background: var(--red-dim);
+  color: var(--red);
+  border: 1px solid hsla(0, 72%, 51%, 0.25);
+  margin-left: auto;
+}
+
+.control-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(120px, 0.45fr);
+  align-items: center;
+  gap: 14px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.control-input {
+  width: 100%;
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--surface-2) 74%, var(--bg) 26%);
+  color: var(--text);
+  font: 500 13px "JetBrains Mono", ui-monospace, monospace;
+}
+
+.control-input:disabled,
+.card--module input:disabled,
+.card--module select:disabled,
+.card--module button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.field-group-label {
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-top: 4px;
+}
+
+.opt-row--tight {
+  min-height: 34px;
+  padding: 0;
+}
+
+.toolbar-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.toolbar-grid label,
+.appearance-grid label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--surface-2) 72%, transparent);
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.control-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.code-panel {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 0 12px;
+  min-height: 110px;
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: #0b0c10;
+  color: #b7c1d1;
+  font: 12px/1.7 "JetBrains Mono", ui-monospace, monospace;
+  overflow: hidden;
+}
+
+.code-panel span {
+  color: #58606d;
+  text-align: right;
+  user-select: none;
+}
+
+.code-panel code {
+  white-space: nowrap;
+}
+
+.code-panel--css {
+  min-height: 90px;
+}
+
+.outline-action {
+  min-height: 34px;
+  padding: 7px 14px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--accent);
+  font: 600 13px "Outfit", system-ui, sans-serif;
+}
+
+.theme-tabs,
+.theme-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.theme-tabs button {
+  min-height: 32px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-dim);
+}
+
+.theme-tabs button:first-child {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.theme-swatches span {
+  width: 34px;
+  height: 24px;
+  border: 2px solid color-mix(in srgb, var(--text) 55%, transparent);
+  background: var(--accent);
+}
+
+.theme-swatches span:nth-child(2) { background: #111318; }
+.theme-swatches span:nth-child(3) { background: #f1f4f8; }
+.theme-swatches span:nth-child(4) { background: #d1d5dc; }
+.theme-swatches span:nth-child(5) { background: #09090b; }
+
+.appearance-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+}
+
+.appearance-grid .field-row {
+  grid-template-columns: minmax(0, 1fr) 78px;
+}
+
+.cinema-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.8fr) minmax(0, 1.2fr);
+  gap: 18px;
+}
+
+.cinema-preview {
+  display: grid;
+  grid-template-columns: 1.35fr 0.65fr;
+  gap: 10px;
+  min-height: 190px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: radial-gradient(circle at 32% 24%, rgba(255,255,255,0.08), transparent 42%), #08090c;
+}
+
+.preview-player,
+.preview-side {
+  align-self: center;
+  border-radius: 8px;
+  background: #1f2229;
+}
+
+.preview-player {
+  height: 118px;
+  position: relative;
+  overflow: hidden;
+}
+
+.preview-player span {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 14px;
+  height: 5px;
+  border-radius: 99px;
+  background: linear-gradient(90deg, var(--accent) 58%, rgba(255,255,255,0.18) 58%);
+}
+
+.preview-side {
+  height: 148px;
+  opacity: 0.45;
+}
+
 /* ── Responsive ── */
 @media (max-width: 900px) {
   .grid {
-    columns: 2 280px;
+    grid-template-columns: 1fr;
   }
 
   .card--wide,
   .card--advanced,
   .card--filter {
-    column-span: all;
+    grid-column: auto;
+  }
+
+  .toolbar-grid,
+  .control-split,
+  .appearance-grid,
+  .cinema-layout {
+    grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 600px) {
   .grid {
-    columns: 1;
+    grid-template-columns: 1fr;
   }
   .card--wide,
   .card--advanced,
   .card--filter {
-    column-span: none;
+    grid-column: auto;
   }
+  .field-row { grid-template-columns: 1fr; }
+  .toolbar-grid { grid-template-columns: 1fr 1fr; }
   .stat-row { flex-direction: column; gap: 16px; }
   .page { padding: 24px 16px 60px; }
 }

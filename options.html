@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Ad Skipper — Configurações</title>
+  <title>Tube Shield - Control Center</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
@@ -19,12 +19,12 @@
           <img class="header-mark-img" data-state-icon src="icon48.png" alt="" aria-hidden="true">
         </div>
         <div>
-          <h1 class="header-title">Ad Skipper</h1>
-          <span class="header-sub">Painel de Configurações</span>
+          <h1 class="header-title">Tube Shield</h1>
+          <span class="header-sub">Control Center</span>
         </div>
       </div>
       <div class="header-right">
-        <span class="header-version" id="version-tag">v3.3</span>
+        <span class="header-version" id="version-tag">v5.0.0</span>
         <button id="theme-toggle" class="theme-toggle" title="Alternar Tema">
           <!-- Sun Icon -->
           <svg class="sun-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
@@ -233,8 +233,8 @@
         </div>
         <div class="card-body">
           <p class="about-text">
-            <strong>YouTube Ad Skipper</strong> automatiza o clique no botão "Pular Anúncio" usando técnicas stealth.
-            Não é um ad-blocker — apenas automatiza o que você faria manualmente.
+            <strong>Tube Shield</strong> junta o skipper inteligente com uma base de controles para player,
+            aparência, qualidade, cinema e recursos avançados em uma extensão só.
           </p>
           <div class="about-links">
             <a href="https://github.com/OtavioBiazzi/Youtube-ad-skipper" target="_blank" rel="noopener noreferrer" class="about-link">
@@ -333,12 +333,194 @@
           <div class="opt-row">
             <div class="opt-info">
               <span class="opt-title">Player Flutuante (PiP)</span>
-              <span class="opt-desc">Adiciona um botão para fixar o vídeo na tela enquanto navega ou joga. Compatível com Enhance for YouTube.</span>
+              <span class="opt-desc">Adiciona um botão para fixar o vídeo na tela enquanto navega ou joga.</span>
             </div>
             <label class="switch">
               <input type="checkbox" id="opt-pip">
               <span class="switch-track"></span>
             </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="card card--module">
+        <div class="card-header">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg>
+          <span>Velocidade de Reprodução</span>
+          <span class="tag tag--stage">BASE</span>
+        </div>
+        <div class="card-body control-stack">
+          <label class="field-row"><span>Velocidade padrão</span><input class="control-input" type="number" value="1" min="0.25" max="16" step="0.05" disabled></label>
+          <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Substituir velocidades padrão</span></div><label class="switch"><input type="checkbox" checked disabled><span class="switch-track"></span></label></div>
+          <label class="field-row"><span>Variação por roda/botões</span><input class="control-input" type="number" value="0.02" min="0.01" max="1" step="0.01" disabled></label>
+          <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Roda do mouse + Ctrl no player</span></div><label class="switch"><input type="checkbox" checked disabled><span class="switch-track"></span></label></div>
+          <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Apenas com botão direito</span></div><label class="switch"><input type="checkbox" disabled><span class="switch-track"></span></label></div>
+        </div>
+      </div>
+
+      <div class="card card--module">
+        <div class="card-header">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+          <span>Volume</span>
+          <span class="tag tag--stage">BASE</span>
+        </div>
+        <div class="card-body control-stack">
+          <label class="field-row"><span>Volume padrão</span><input class="control-input" type="number" value="50" min="0" max="100" disabled></label>
+          <label class="field-row"><span>Amplificador</span><input class="control-input" type="number" value="2" min="1" max="8" disabled></label>
+          <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Ampliar automaticamente</span></div><label class="switch"><input type="checkbox" disabled><span class="switch-track"></span></label></div>
+          <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Volume pela roda do mouse</span></div><label class="switch"><input type="checkbox" checked disabled><span class="switch-track"></span></label></div>
+          <label class="field-row"><span>Variação de volume</span><input class="control-input" type="number" value="5" min="1" max="25" disabled></label>
+        </div>
+      </div>
+
+      <div class="card card--module">
+        <div class="card-header">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 18v3"/></svg>
+          <span>Qualidade de Reprodução</span>
+          <span class="tag tag--stage">BASE</span>
+        </div>
+        <div class="card-body control-stack">
+          <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Selecionar qualidade automaticamente</span></div><label class="switch"><input type="checkbox" disabled><span class="switch-track"></span></label></div>
+          <label class="field-row"><span>Vídeos</span><select class="control-input" disabled><option>720p</option></select></label>
+          <label class="field-row"><span>Playlists</span><select class="control-input" disabled><option>720p</option></select></label>
+          <label class="field-row"><span>Pop-up e incorporados</span><select class="control-input" disabled><option>360p</option></select></label>
+          <div class="field-group-label">Tela cheia</div>
+          <label class="field-row"><span>Vídeos</span><select class="control-input" disabled><option>1080p HD</option></select></label>
+          <label class="field-row"><span>Playlists</span><select class="control-input" disabled><option>1080p HD</option></select></label>
+          <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Restaurar qualidade ao sair</span></div><label class="switch"><input type="checkbox" checked disabled><span class="switch-track"></span></label></div>
+        </div>
+      </div>
+
+      <div class="card card--module">
+        <div class="card-header">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16"/><path d="M8 3v18M16 3v18"/></svg>
+          <span>Codecs e Formatos</span>
+          <span class="tag tag--stage">BASE</span>
+        </div>
+        <div class="card-body control-stack">
+          <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Forçar FPS padrão 24/25/30</span></div><label class="switch"><input type="checkbox" disabled><span class="switch-track"></span></label></div>
+          <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Forçar MP4 + AVC (H.264)</span></div><label class="switch"><input type="checkbox" disabled><span class="switch-track"></span></label></div>
+        </div>
+      </div>
+
+      <div class="card card--module">
+        <div class="card-header">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="13" y="11" width="6" height="4" rx="1"/></svg>
+          <span>Pop-up, PiP e Miniplayer</span>
+          <span class="tag tag--stage">BASE</span>
+        </div>
+        <div class="card-body control-stack">
+          <label class="field-row"><span>Tamanho do pop-up</span><select class="control-input" disabled><option>640x360</option></select></label>
+          <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Miniplayer ao rolar comentários</span></div><label class="switch"><input type="checkbox" checked disabled><span class="switch-track"></span></label></div>
+          <label class="field-row"><span>Tamanho do miniplayer</span><select class="control-input" disabled><option>480x270</option></select></label>
+          <label class="field-row"><span>Posição</span><select class="control-input" disabled><option>Canto superior esquerdo</option></select></label>
+        </div>
+      </div>
+
+      <div class="card card--module">
+        <div class="card-header">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4v6h6"/><path d="M20 20v-6h-6"/><path d="M20 9A8 8 0 0 0 6 5.3L4 10"/><path d="M4 15a8 8 0 0 0 14 3.7L20 14"/></svg>
+          <span>Reprodução Automática</span>
+          <span class="tag tag--stage">BASE</span>
+        </div>
+        <div class="card-body control-stack">
+          <label class="field-row"><span>Preset</span><select class="control-input" disabled><option>Bloquear abas em segundo plano</option></select></label>
+          <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Bloquear autoplay</span></div><label class="switch"><input type="checkbox" disabled><span class="switch-track"></span></label></div>
+          <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Pausar abas em segundo plano</span></div><label class="switch"><input type="checkbox" disabled><span class="switch-track"></span></label></div>
+          <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Impedir pré-carregamento</span></div><label class="switch"><input type="checkbox" disabled><span class="switch-track"></span></label></div>
+        </div>
+      </div>
+
+      <div class="card card--wide card--module">
+        <div class="card-header">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h16"/><path d="M6 16V4h12v12"/></svg>
+          <span>Barra de Controles do Player</span>
+          <span class="tag tag--stage">BASE</span>
+        </div>
+        <div class="card-body">
+          <div class="toolbar-grid">
+            <label><input type="checkbox" checked disabled><span>Loop</span></label>
+            <label><input type="checkbox" checked disabled><span>Volume boost</span></label>
+            <label><input type="checkbox" checked disabled><span>Pop-up</span></label>
+            <label><input type="checkbox" checked disabled><span>Miniplayer</span></label>
+            <label><input type="checkbox" checked disabled><span>Expandir</span></label>
+            <label><input type="checkbox" checked disabled><span>Screenshot</span></label>
+            <label><input type="checkbox" checked disabled><span>Filtros</span></label>
+            <label><input type="checkbox" checked disabled><span>Cinema</span></label>
+            <label><input type="checkbox" checked disabled><span>Script</span></label>
+            <label><input type="checkbox" checked disabled><span>Configurações</span></label>
+          </div>
+          <div class="control-split">
+            <label class="field-row"><span>Exibição</span><select class="control-input" disabled><option>Barra abaixo do vídeo</option></select></label>
+            <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Manter controles visíveis</span></div><label class="switch"><input type="checkbox" checked disabled><span class="switch-track"></span></label></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card card--module">
+        <div class="card-header">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m8 18-6-6 6-6"/><path d="m16 6 6 6-6 6"/></svg>
+          <span>Script Personalizado</span>
+          <span class="tag tag--risk">BETA</span>
+        </div>
+        <div class="card-body">
+          <div class="warning-box warning-box--alert">Use apenas scripts seus ou de fontes confiáveis.</div>
+          <div class="code-panel" aria-hidden="true"><span>1</span><code>// seu script aqui</code><span>2</span><code>document.addEventListener("yt-navigate-finish", () =&gt; {});</code></div>
+          <button class="outline-action" disabled>Salvar script</button>
+          <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Executar automaticamente</span></div><label class="switch"><input type="checkbox" disabled><span class="switch-track"></span></label></div>
+        </div>
+      </div>
+
+      <div class="card card--module">
+        <div class="card-header">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2a10 10 0 0 0 0 20 2.5 2.5 0 0 0 2.5-2.5 2 2 0 0 1 2-2H18a4 4 0 0 0 4-4 11.8 11.8 0 0 0-10-11.5Z"/></svg>
+          <span>Tema</span>
+          <span class="tag tag--stage">BASE</span>
+        </div>
+        <div class="card-body">
+          <div class="theme-tabs"><button disabled>Tema escuro</button><button disabled>YouTube</button><button disabled>Tube Shield</button><button disabled>Personalizado</button></div>
+          <div class="theme-swatches" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
+          <div class="code-panel code-panel--css"><span>1</span><code>body {</code><span>2</span><code>  --yt-spec-base-background: #0f0f0f;</code><span>3</span><code>}</code></div>
+        </div>
+      </div>
+
+      <div class="card card--module">
+        <div class="card-header">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          <span>Aparência</span>
+          <span class="tag tag--stage">BASE</span>
+        </div>
+        <div class="card-body appearance-grid">
+          <label class="field-row"><span>Vídeos por fileira</span><input class="control-input" type="number" value="4" disabled></label>
+          <label class="field-row"><span>Shorts por fileira</span><input class="control-input" type="number" value="8" disabled></label>
+          <label><input type="checkbox" checked disabled> Converter Shorts</label>
+          <label><input type="checkbox" checked disabled> Ocultar Shorts</label>
+          <label><input type="checkbox" checked disabled> Ocultar relacionados</label>
+          <label><input type="checkbox" checked disabled> Ocultar chat</label>
+          <label><input type="checkbox" checked disabled> Ocultar comentários</label>
+          <label><input type="checkbox" checked disabled> Ocultar cards finais</label>
+          <label><input type="checkbox" checked disabled> Ativar modo teatro</label>
+          <label><input type="checkbox" checked disabled> Usar todo o viewport</label>
+        </div>
+      </div>
+
+      <div class="card card--wide card--module">
+        <div class="card-header">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M7 9h10v6H7z"/></svg>
+          <span>Modo Cinema e Ultrawide</span>
+          <span class="tag tag--stage">BASE</span>
+        </div>
+        <div class="card-body cinema-layout">
+          <div class="control-stack">
+            <label class="field-row"><span>Cor de fundo</span><input class="control-input" type="text" value="#000000" disabled></label>
+            <label class="field-row"><span>Opacidade</span><input class="control-input" type="number" value="85" disabled></label>
+            <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Usar cinema por padrão</span></div><label class="switch"><input type="checkbox" disabled><span class="switch-track"></span></label></div>
+            <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Modo ultrawide 21:9 / 32:9</span></div><label class="switch"><input type="checkbox" disabled><span class="switch-track"></span></label></div>
+            <label class="field-row"><span>Ajuste de encaixe</span><select class="control-input" disabled><option>Crop inteligente</option><option>Contain</option><option>Stretch</option></select></label>
+          </div>
+          <div class="cinema-preview">
+            <div class="preview-player"><span></span></div>
+            <div class="preview-side"></div>
           </div>
         </div>
       </div>

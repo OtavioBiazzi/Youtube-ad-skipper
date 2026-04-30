@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "YouTube Ad Skipper",
-  "version": "4.3.8",
-  "description": "Pula automaticamente os anúncios do YouTube. Não é um ad blocker — apenas automatiza o clique no botão 'Pular anúncio'.",
+  "name": "Tube Shield",
+  "version": "5.0.0",
+  "description": "Central de controle para YouTube com skipper inteligente, ajustes do player, aparência e recursos avançados em uma única extensão.",
   "permissions": ["storage"],
   "host_permissions": [
     "*://*.youtube.com/*"
@@ -14,7 +14,7 @@
       "48": "icon48.png",
       "128": "icon128.png"
     },
-    "default_title": "YouTube Ad Skipper"
+    "default_title": "Tube Shield"
   },
   "background": {
     "service_worker": "background.js"
