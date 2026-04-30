@@ -22,6 +22,8 @@ type OptionsSettings = {
   instantSkip: boolean;
   pipEnabled: boolean;
   adSpeedRate: number;
+  customSpeedEnabled: boolean;
+  adaptiveSpeedEnabled: boolean;
 };
 
 const DEFAULT: OptionsSettings = {
@@ -42,6 +44,8 @@ const DEFAULT: OptionsSettings = {
   instantSkip: false,
   pipEnabled: false,
   adSpeedRate: 3,
+  customSpeedEnabled: false,
+  adaptiveSpeedEnabled: false,
 };
 
 const SAFE_AD_SPEED_RATE = 3;
@@ -89,8 +93,12 @@ const optShortcut = byId<HTMLInputElement>("opt-shortcut");
 const optInstant  = byId<HTMLInputElement>("opt-instant");
 const optPip      = byId<HTMLInputElement>("opt-pip");
 const optAdSpeed  = byId<HTMLInputElement>("opt-ad-speed");
+const optCustomSpeed = byId<HTMLInputElement>("opt-custom-speed");
+const optAdaptiveSpeed = byId<HTMLInputElement>("opt-adaptive-speed");
 const adSpeedControl = byId<HTMLElement>("ad-speed-control");
+const manualSpeedControl = byId<HTMLElement>("manual-speed-control");
 const adSpeedValue = byId<HTMLElement>("opt-ad-speed-value");
+const adSpeedBetaHint = byId<HTMLElement>("ad-speed-beta-hint");
 const f5Banner    = byId<HTMLElement>("f5-banner");
 
 let currentWhitelist: string[] = [];
@@ -109,10 +117,16 @@ chrome.storage.local.get(DEFAULT, (s: OptionsSettings) => {
   
   optToast.checked      = !!s.showToast;
   optShortcut.checked   = !!s.shortcutEnabled;
-  optInstant.checked    = !!s.instantSkip;
+  optInstant.checked    = !!s.aggressiveSkip && !!s.instantSkip;
   optPip.checked        = !!s.pipEnabled;
   optAdSpeed.value      = String(normalizeAdSpeed(s.adSpeedRate));
+  optCustomSpeed.checked = !!s.customSpeedEnabled;
+  optAdaptiveSpeed.checked = !!s.adaptiveSpeedEnabled;
   optListMode.checked   = s.listMode === 'blacklist';
+
+  if (!s.aggressiveSkip && s.instantSkip) {
+    chrome.storage.local.set({ instantSkip: false });
+  }
 
   applyTheme(s.theme);
   renderStatus(s.enabled);
@@ -176,7 +190,12 @@ optOverlay.addEventListener("change", () => {
 
 optAggressive.addEventListener("change", () => {
   const on = optAggressive.checked;
-  chrome.storage.local.set({ aggressiveSkip: on });
+  if (!on && optInstant.checked) {
+    optInstant.checked = false;
+    chrome.storage.local.set({ aggressiveSkip: on, instantSkip: false });
+  } else {
+    chrome.storage.local.set({ aggressiveSkip: on });
+  }
   renderMode(on);
   renderTimingControls();
 });
@@ -208,6 +227,16 @@ optInstant.addEventListener("change", () => {
 
 optPip.addEventListener("change", () => {
   chrome.storage.local.set({ pipEnabled: optPip.checked });
+});
+
+optCustomSpeed.addEventListener("change", () => {
+  chrome.storage.local.set({ customSpeedEnabled: optCustomSpeed.checked });
+  renderTimingControls();
+});
+
+optAdaptiveSpeed.addEventListener("change", () => {
+  chrome.storage.local.set({ adaptiveSpeedEnabled: optAdaptiveSpeed.checked });
+  renderTimingControls();
 });
 
 optAdSpeed.addEventListener("input", () => {
@@ -362,13 +391,35 @@ function normalizeAdSpeed(value: unknown) {
   return Math.min(MAX_AD_SPEED_RATE, Math.max(MIN_AD_SPEED_RATE, n));
 }
 
+function getSafeAdaptiveSpeed(delay: number) {
+  if (delay <= 3) return SAFE_AD_SPEED_RATE;
+  if (delay <= 6) return 2.5;
+  if (delay <= 10) return 2;
+  if (delay <= 20) return 1.5;
+  return 1.25;
+}
+
+function getRiskAdaptiveSpeed(delay: number) {
+  if (delay <= 1) return 8;
+  if (delay <= 2) return 6;
+  if (delay <= 3) return 5;
+  if (delay <= 5) return 4;
+  if (delay <= 10) return 3;
+  if (delay <= 20) return 2;
+  return 1.5;
+}
+
 function getTimingState() {
   const aggressive = optAggressive.checked;
   const instant = aggressive && optInstant.checked;
+  const customSpeed = optCustomSpeed.checked;
+  const adaptiveSpeed = customSpeed && optAdaptiveSpeed.checked;
   return {
     aggressive,
     instant,
     locked: !aggressive || instant,
+    customSpeed,
+    adaptiveSpeed,
   };
 }
 
@@ -382,27 +433,47 @@ function renderTimingControls() {
   const state = getTimingState();
 
   optDelay.disabled = state.locked;
-  optAdSpeed.disabled = state.locked;
+  optInstant.disabled = !state.aggressive;
+  optCustomSpeed.disabled = !state.aggressive || state.instant;
+  optAdaptiveSpeed.disabled = !state.aggressive || state.instant || !state.customSpeed;
+  optAdSpeed.disabled = !state.aggressive || state.instant || !state.customSpeed || state.adaptiveSpeed;
   timingCard.classList.toggle("card--locked", state.locked);
   delayControl.classList.toggle("control-locked", state.locked);
-  adSpeedControl.classList.toggle("control-locked", state.locked);
+  adSpeedControl.classList.toggle("is-open", state.customSpeed);
+  adSpeedControl.classList.toggle("control-locked", !state.aggressive || state.instant);
+  manualSpeedControl.classList.toggle("is-hidden", state.adaptiveSpeed);
 
   renderDelay(delay, state.aggressive, state.instant);
   renderSlider();
-  renderAdSpeed(speed, state.instant);
+  renderAdSpeed(delay, speed, state);
 }
 
-function renderAdSpeed(value: number, instant = false) {
-  const speed = instant ? INSTANT_AD_SPEED_RATE : normalizeAdSpeed(value);
+function renderAdSpeed(delay: number, manualSpeed: number, state = getTimingState()) {
+  let speed = getSafeAdaptiveSpeed(delay);
+  let labelPrefix = "auto ";
+  if (state.instant) {
+    speed = INSTANT_AD_SPEED_RATE;
+    labelPrefix = "";
+  } else if (state.customSpeed && state.adaptiveSpeed) {
+    speed = getRiskAdaptiveSpeed(delay);
+    labelPrefix = "adapt ";
+  } else if (state.customSpeed) {
+    speed = normalizeAdSpeed(manualSpeed);
+    labelPrefix = "";
+  }
+
   const isRisk = speed > SAFE_AD_SPEED_RATE;
-  adSpeedValue.textContent = instant ? formatSpeed(speed) + " max" : formatSpeed(speed);
+  adSpeedValue.textContent = state.instant ? formatSpeed(speed) + " max" : labelPrefix + formatSpeed(speed);
   adSpeedValue.classList.toggle("tag--safe", !isRisk);
   adSpeedValue.classList.toggle("tag--risk", isRisk);
   const min = parseFloat(optAdSpeed.min);
   const max = parseFloat(optAdSpeed.max);
-  const visualSpeed = instant ? max : speed;
+  const visualSpeed = state.instant ? max : Math.min(max, speed);
   const pct = ((visualSpeed - min) / (max - min)) * 100;
   optAdSpeed.style.background = "linear-gradient(90deg, hsl(355,65%,52%) " + pct + "%, #1c1c1f " + pct + "%)";
+  adSpeedBetaHint.textContent = state.adaptiveSpeed
+    ? "Adaptação beta ativa: " + delay + "s usa " + formatSpeed(speed) + ". Acima de 3x pode aumentar o risco de identificação."
+    : "Acima de 3x pode aumentar o risco de identificação.";
 }
 
 function animateCounter(el: HTMLElement, target: number) {
@@ -439,7 +510,7 @@ function renderWarnings(count: number) {
 function checkRestartWarning() {
   if (!initialState) return;
   chrome.storage.local.get(DEFAULT, (current: OptionsSettings) => {
-    const needsReload: Array<keyof OptionsSettings> = ['enabled', 'skipDelay', 'muteAds', 'showOverlay', 'aggressiveSkip', 'listMode', 'instantSkip', 'pipEnabled', 'adSpeedRate'];
+    const needsReload: Array<keyof OptionsSettings> = ['enabled', 'skipDelay', 'muteAds', 'showOverlay', 'aggressiveSkip', 'listMode', 'instantSkip', 'pipEnabled', 'adSpeedRate', 'customSpeedEnabled', 'adaptiveSpeedEnabled'];
     let changed = false;
     
     for (const key of needsReload) {
@@ -452,9 +523,18 @@ function checkRestartWarning() {
 
     const initialSpeed = normalizeAdSpeed(initialState.adSpeedRate);
     const currentSpeed = normalizeAdSpeed(current.adSpeedRate);
+    const currentDelay = Number(current.skipDelay) || DEFAULT.skipDelay;
+    const effectiveCurrentSpeed = current.customSpeedEnabled
+      ? (current.adaptiveSpeedEnabled ? getRiskAdaptiveSpeed(currentDelay) : currentSpeed)
+      : getSafeAdaptiveSpeed(currentDelay);
     const riskySpeedChange = (
       (current.instantSkip && current.aggressiveSkip && current.instantSkip !== initialState.instantSkip) ||
-      (currentSpeed > SAFE_AD_SPEED_RATE && currentSpeed !== initialSpeed)
+      (effectiveCurrentSpeed > SAFE_AD_SPEED_RATE && (
+        currentSpeed !== initialSpeed ||
+        current.customSpeedEnabled !== initialState.customSpeedEnabled ||
+        current.adaptiveSpeedEnabled !== initialState.adaptiveSpeedEnabled ||
+        current.skipDelay !== initialState.skipDelay
+      ))
     );
     renderRestartBanner(changed, riskySpeedChange);
   });
@@ -499,6 +579,14 @@ chrome.storage.onChanged.addListener((changes) => {
   if (changes.shortcutEnabled) optShortcut.checked = !!changes.shortcutEnabled.newValue;
   if (changes.instantSkip) {
     optInstant.checked = !!changes.instantSkip.newValue;
+    renderTimingControls();
+  }
+  if (changes.customSpeedEnabled) {
+    optCustomSpeed.checked = !!changes.customSpeedEnabled.newValue;
+    renderTimingControls();
+  }
+  if (changes.adaptiveSpeedEnabled) {
+    optAdaptiveSpeed.checked = !!changes.adaptiveSpeedEnabled.newValue;
     renderTimingControls();
   }
   if (changes.pipEnabled) optPip.checked = !!changes.pipEnabled.newValue;

@@ -3,11 +3,11 @@
    ══════════════════════════════════════════════════ */
 
 :root {
-  --bg:        #060a12;
-  --surface:   #121722;
-  --surface-2: #171d2a;
-  --border:    #263041;
-  --border-hi: #3b465a;
+  --bg:        #09090b;
+  --surface:   #151519;
+  --surface-2: #1c1c22;
+  --border:    #28282f;
+  --border-hi: #3d3d47;
   --text:      #fafafa;
   --text-dim:  #a1a1aa;
   --text-muted:#71717a;
@@ -42,8 +42,8 @@ body.theme-light {
 body {
   font-family: "Outfit", system-ui, sans-serif;
   background:
-    radial-gradient(circle at 12% 2%, hsla(355, 65%, 52%, 0.18), transparent 32%),
-    radial-gradient(circle at 88% 8%, hsla(214, 76%, 44%, 0.16), transparent 34%),
+    radial-gradient(circle at 12% 2%, hsla(355, 55%, 42%, 0.075), transparent 34%),
+    radial-gradient(circle at 88% 8%, hsla(214, 58%, 38%, 0.065), transparent 36%),
     var(--bg);
   color: var(--text);
   min-height: 100vh;
@@ -187,23 +187,26 @@ body.theme-light .theme-toggle:hover {
 
 /* ── Grid ── */
 .grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
-  grid-auto-flow: dense;
+  display: block;
+  columns: 3 300px;
+  column-gap: 16px;
 }
 
 .card--wide {
-  grid-column: 1 / -1;
+  column-span: all;
 }
 
 .card--advanced,
 .card--filter {
-  grid-column: span 2;
+  column-span: none;
 }
 
 /* ── Cards ── */
 .card {
+  display: inline-block;
+  width: 100%;
+  margin: 0 0 16px;
+  align-self: start;
   background:
     linear-gradient(145deg, color-mix(in srgb, var(--surface) 92%, #ffffff 8%), var(--surface));
   border: 1px solid var(--border);
@@ -215,6 +218,11 @@ body.theme-light .theme-toggle:hover {
 
 .card:hover {
   border-color: var(--border-hi);
+}
+
+.card--wide {
+  display: block;
+  column-span: all;
 }
 
 .card-header {
@@ -327,6 +335,11 @@ body.theme-light .theme-toggle:hover {
 
 .switch input:checked + .switch-track::after {
   transform: translateX(18px);
+}
+
+.switch input:disabled + .switch-track {
+  opacity: 0.48;
+  cursor: not-allowed;
 }
 
 /* ── Delay Display ── */
@@ -521,6 +534,18 @@ body.extension-disabled .process-status {
   color: var(--red);
 }
 
+.beta-speed-panel {
+  display: none;
+}
+
+.beta-speed-panel.is-open {
+  display: block;
+}
+
+.manual-speed-control.is-hidden {
+  display: none;
+}
+
 .card--locked .delay-display,
 .control-locked {
   opacity: 0.52;
@@ -684,6 +709,7 @@ kbd {
 
 .about-links {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
 }
 
@@ -700,6 +726,7 @@ kbd {
   font-family: "Outfit", system-ui, sans-serif;
   text-decoration: none;
   cursor: pointer;
+  flex: 1 1 120px;
   transition: all 0.2s;
 }
 
@@ -722,24 +749,24 @@ kbd {
 /* ── Responsive ── */
 @media (max-width: 900px) {
   .grid {
-    grid-template-columns: 1fr 1fr;
+    columns: 2 280px;
   }
 
   .card--wide,
   .card--advanced,
   .card--filter {
-    grid-column: 1 / -1;
+    column-span: all;
   }
 }
 
 @media (max-width: 600px) {
   .grid {
-    grid-template-columns: 1fr;
+    columns: 1;
   }
   .card--wide,
   .card--advanced,
   .card--filter {
-    grid-column: 1;
+    column-span: none;
   }
   .stat-row { flex-direction: column; gap: 16px; }
   .page { padding: 24px 16px 60px; }

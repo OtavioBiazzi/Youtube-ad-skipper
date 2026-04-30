@@ -19,7 +19,9 @@
       listMode: "whitelist",
       whitelist: [],
       pipEnabled: false,
-      adSpeedRate: 3
+      adSpeedRate: 3,
+      customSpeedEnabled: false,
+      adaptiveSpeedEnabled: false
     };
     const CHECK_INTERVAL = 500;
     const FORCE_SKIP_RETRY_MS = 120;
@@ -27,6 +29,7 @@
     const DEFAULT_SPEED_THROUGH_RATE = 3;
     const MIN_SPEED_THROUGH_RATE = 1;
     const MAX_SPEED_THROUGH_RATE = 8;
+    const SAFE_SPEED_THROUGH_RATE = 3;
     const INSTANT_SPEED_THROUGH_RATE = 16;
     const MIN_PLAYBACK_RATE = 0.0625;
     const MAX_PLAYBACK_RATE = 16;
@@ -85,7 +88,9 @@
               adsSkippedToday: 0,
               todayDate: null,
               pipEnabled: false,
-              adSpeedRate: DEFAULT_SPEED_THROUGH_RATE
+              adSpeedRate: DEFAULT_SPEED_THROUGH_RATE,
+              customSpeedEnabled: false,
+              adaptiveSpeedEnabled: false
             },
             (s) => {
               config.enabled = !!s.enabled;
@@ -101,6 +106,8 @@
               config.whitelist = Array.isArray(s.whitelist) ? s.whitelist : [];
               config.pipEnabled = !!s.pipEnabled;
               config.adSpeedRate = normalizeSpeedRate(s.adSpeedRate);
+              config.customSpeedEnabled = !!s.customSpeedEnabled;
+              config.adaptiveSpeedEnabled = !!s.adaptiveSpeedEnabled;
               adState.warningCount = s.warningCount || 0;
               adState.totalSkipped = s.totalAdsSkipped || 0;
               adState.adsSkippedToday = s.adsSkippedToday || 0;
@@ -150,6 +157,8 @@
           }
         }
         if (changes.adSpeedRate) config.adSpeedRate = normalizeSpeedRate(changes.adSpeedRate.newValue);
+        if (changes.customSpeedEnabled) config.customSpeedEnabled = !!changes.customSpeedEnabled.newValue;
+        if (changes.adaptiveSpeedEnabled) config.adaptiveSpeedEnabled = !!changes.adaptiveSpeedEnabled.newValue;
       });
     }
     window.addEventListener("message", (event) => {
@@ -247,14 +256,42 @@
       if (!Number.isFinite(n)) return DEFAULT_SPEED_THROUGH_RATE;
       return Math.min(MAX_SPEED_THROUGH_RATE, Math.max(MIN_SPEED_THROUGH_RATE, n));
     }
+    function normalizeSkipDelay(delay = config.skipDelay) {
+      const n = Number(delay);
+      if (!Number.isFinite(n)) return 1;
+      return Math.min(30, Math.max(1, n));
+    }
+    function getSafeAdaptiveSpeed(delay = config.skipDelay) {
+      const d = normalizeSkipDelay(delay);
+      if (d <= 3) return SAFE_SPEED_THROUGH_RATE;
+      if (d <= 6) return 2.5;
+      if (d <= 10) return 2;
+      if (d <= 20) return 1.5;
+      return 1.25;
+    }
+    function getRiskAdaptiveSpeed(delay = config.skipDelay) {
+      const d = normalizeSkipDelay(delay);
+      if (d <= 1) return 8;
+      if (d <= 2) return 6;
+      if (d <= 3) return 5;
+      if (d <= 5) return 4;
+      if (d <= 10) return 3;
+      if (d <= 20) return 2;
+      return 1.5;
+    }
+    function isInstantSkipEnabled() {
+      return config.aggressiveSkip && config.instantSkip;
+    }
     function normalizePlaybackRate(rate, fallback = 1) {
       const n = Number(rate);
       if (!Number.isFinite(n) || n <= 0) return fallback;
       return Math.min(MAX_PLAYBACK_RATE, Math.max(MIN_PLAYBACK_RATE, n));
     }
     function getSpeedThroughRate() {
-      if (config.instantSkip) return INSTANT_SPEED_THROUGH_RATE;
-      return normalizeSpeedRate(config.adSpeedRate);
+      if (isInstantSkipEnabled()) return INSTANT_SPEED_THROUGH_RATE;
+      if (config.customSpeedEnabled && config.adaptiveSpeedEnabled) return getRiskAdaptiveSpeed();
+      if (config.customSpeedEnabled) return normalizeSpeedRate(config.adSpeedRate);
+      return getSafeAdaptiveSpeed();
     }
     function requestMainWorldSkip() {
       window.postMessage({
@@ -696,7 +733,7 @@
       clearInterval(adState.countdownInterval);
     }
     function getEffectiveDelay() {
-      return config.instantSkip ? 0 : config.skipDelay;
+      return isInstantSkipEnabled() ? 0 : config.skipDelay;
     }
     function scheduleSkip() {
       clearInterval(adState.countdownInterval);
@@ -895,7 +932,7 @@
       }
     }
     document.addEventListener("keydown", (e) => {
-      if (!config.enabled || !config.shortcutEnabled) return;
+      if (!config.enabled || !config.shortcutEnabled || !config.aggressiveSkip) return;
       if (e.shiftKey && (e.key === "S" || e.key === "s")) {
         e.preventDefault();
         if (adState.active && !adState.watching) {
