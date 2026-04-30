@@ -49,7 +49,10 @@
       appearanceHideRelated: false,
       appearanceHideChat: false,
       appearanceHideComments: false,
-      appearanceHideEndcards: false
+      appearanceHideEndcards: false,
+      miniplayerEnabled: true,
+      miniplayerSize: "480x270",
+      miniplayerPosition: "top-left"
     };
     const CHECK_INTERVAL = 500;
     const FORCE_SKIP_RETRY_MS = 120;
@@ -110,6 +113,8 @@
     let adblockBodyWaitObserver = null;
     let skipButtonObserver = null;
     let appearanceSignature = "";
+    let miniplayerSignature = "";
+    let miniplayerUpdateRaf = 0;
     function humanDelay(baseMs) {
       if (baseMs <= 0) return 0;
       const jitter = baseMs * (0.85 + Math.random() * 0.3);
@@ -165,7 +170,10 @@
               appearanceHideRelated: false,
               appearanceHideChat: false,
               appearanceHideComments: false,
-              appearanceHideEndcards: false
+              appearanceHideEndcards: false,
+              miniplayerEnabled: true,
+              miniplayerSize: "480x270",
+              miniplayerPosition: "top-left"
             },
             (s) => {
               config.enabled = !!s.enabled;
@@ -210,6 +218,9 @@
               config.appearanceHideChat = !!s.appearanceHideChat;
               config.appearanceHideComments = !!s.appearanceHideComments;
               config.appearanceHideEndcards = !!s.appearanceHideEndcards;
+              config.miniplayerEnabled = s.miniplayerEnabled !== false;
+              config.miniplayerSize = normalizeMiniplayerSize(s.miniplayerSize);
+              config.miniplayerPosition = normalizeMiniplayerPosition(s.miniplayerPosition);
               adState.warningCount = s.warningCount || 0;
               adState.totalSkipped = s.totalAdsSkipped || 0;
               adState.adsSkippedToday = s.adsSkippedToday || 0;
@@ -235,6 +246,7 @@
             removePipButton();
           }
           applyAppearanceFilters();
+          updateMiniplayer();
         }
         if (changes.skipDelay) {
           config.skipDelay = normalizeSkipDelay(changes.skipDelay.newValue);
@@ -336,6 +348,18 @@
         if (changes.appearanceHideEndcards) {
           config.appearanceHideEndcards = !!changes.appearanceHideEndcards.newValue;
           applyAppearanceFilters();
+        }
+        if (changes.miniplayerEnabled) {
+          config.miniplayerEnabled = changes.miniplayerEnabled.newValue !== false;
+          updateMiniplayer();
+        }
+        if (changes.miniplayerSize) {
+          config.miniplayerSize = normalizeMiniplayerSize(changes.miniplayerSize.newValue);
+          updateMiniplayer();
+        }
+        if (changes.miniplayerPosition) {
+          config.miniplayerPosition = normalizeMiniplayerPosition(changes.miniplayerPosition.newValue);
+          updateMiniplayer();
         }
         if (changes.tubeShieldActivePlayback) {
           handleExternalPlaybackSignal(changes.tubeShieldActivePlayback.newValue);
@@ -489,6 +513,21 @@
       const n = Number(step);
       if (!Number.isFinite(n) || n <= 0) return 5;
       return Math.min(25, Math.max(1, Math.round(n)));
+    }
+    function normalizeMiniplayerSize(size) {
+      const value = String(size || "");
+      return ["360x203", "480x270", "640x360"].includes(value) ? value : "480x270";
+    }
+    function normalizeMiniplayerPosition(position) {
+      const value = String(position || "");
+      return ["top-left", "top-right", "bottom-left", "bottom-right"].includes(value) ? value : "top-left";
+    }
+    function parseMiniplayerSize(size = config.miniplayerSize) {
+      const [width, height] = normalizeMiniplayerSize(size).split("x").map((part) => parseInt(part, 10));
+      return {
+        width: Number.isFinite(width) ? width : 480,
+        height: Number.isFinite(height) ? height : 270
+      };
     }
     function getActiveVideo() {
       return document.querySelector("video");
@@ -789,6 +828,101 @@
     function runAppearanceTasks() {
       applyAppearanceFilters();
       convertShortsUrlIfNeeded();
+    }
+    const MINIPLAYER_STYLE_ID = "tube-shield-miniplayer-style";
+    const MINIPLAYER_ACTIVE_CLASS = "tube-shield-miniplayer-active";
+    function getPlayerAnchor() {
+      return document.querySelector("#player-container-outer") || document.querySelector("#player") || document.querySelector("ytd-player") || getYouTubePlayer();
+    }
+    function getMiniplayerPositionCss() {
+      const margin = "18px";
+      switch (normalizeMiniplayerPosition(config.miniplayerPosition)) {
+        case "top-right":
+          return `top: ${margin}; right: ${margin};`;
+        case "bottom-left":
+          return `bottom: ${margin}; left: ${margin};`;
+        case "bottom-right":
+          return `bottom: ${margin}; right: ${margin};`;
+        case "top-left":
+        default:
+          return `top: ${margin}; left: ${margin};`;
+      }
+    }
+    function buildMiniplayerCss() {
+      const size = parseMiniplayerSize();
+      return `
+      html.${MINIPLAYER_ACTIVE_CLASS} #movie_player.html5-video-player {
+        position: fixed !important;
+        ${getMiniplayerPositionCss()}
+        width: min(${size.width}px, calc(100vw - 36px)) !important;
+        height: min(${size.height}px, calc(100vh - 36px)) !important;
+        z-index: 2147483000 !important;
+        border-radius: 10px !important;
+        overflow: hidden !important;
+        box-shadow: 0 22px 60px rgba(0, 0, 0, 0.48), 0 0 0 1px rgba(255, 255, 255, 0.14) !important;
+        background: #000 !important;
+        transform: translateZ(0) !important;
+      }
+
+      html.${MINIPLAYER_ACTIVE_CLASS} #movie_player .html5-video-container,
+      html.${MINIPLAYER_ACTIVE_CLASS} #movie_player .html5-main-video,
+      html.${MINIPLAYER_ACTIVE_CLASS} #movie_player video {
+        width: 100% !important;
+        height: 100% !important;
+      }
+
+      html.${MINIPLAYER_ACTIVE_CLASS} #movie_player video.html5-main-video {
+        left: 0 !important;
+        top: 0 !important;
+        object-fit: contain !important;
+        transform: none !important;
+      }
+    `;
+    }
+    function ensureMiniplayerStyle() {
+      const signature = [
+        normalizeMiniplayerSize(config.miniplayerSize),
+        normalizeMiniplayerPosition(config.miniplayerPosition)
+      ].join(":");
+      const existing = document.getElementById(MINIPLAYER_STYLE_ID);
+      if (existing && signature === miniplayerSignature) return;
+      miniplayerSignature = signature;
+      const style = existing || document.createElement("style");
+      style.id = MINIPLAYER_STYLE_ID;
+      style.textContent = buildMiniplayerCss();
+      if (!existing) (document.head || document.documentElement).appendChild(style);
+    }
+    function isWatchPage() {
+      return location.pathname === "/watch" || location.pathname === "/live";
+    }
+    function shouldUseMiniplayer() {
+      if (!config.enabled || !config.miniplayerEnabled || !isWatchPage()) return false;
+      if (document.fullscreenElement || document.pictureInPictureElement) return false;
+      const player = getYouTubePlayer();
+      const video = getActiveVideo();
+      const anchor = getPlayerAnchor();
+      if (!player || !video || !anchor?.getBoundingClientRect) return false;
+      const rect = anchor.getBoundingClientRect();
+      return window.scrollY > 320 && rect.bottom < 80;
+    }
+    function updateMiniplayer() {
+      const root = document.documentElement;
+      const active = shouldUseMiniplayer();
+      if (!config.enabled || !config.miniplayerEnabled) {
+        root.classList.remove(MINIPLAYER_ACTIVE_CLASS);
+        document.getElementById(MINIPLAYER_STYLE_ID)?.remove();
+        miniplayerSignature = "";
+        return;
+      }
+      ensureMiniplayerStyle();
+      root.classList.toggle(MINIPLAYER_ACTIVE_CLASS, active);
+    }
+    function scheduleMiniplayerUpdate() {
+      if (miniplayerUpdateRaf) return;
+      miniplayerUpdateRaf = requestAnimationFrame(() => {
+        miniplayerUpdateRaf = 0;
+        updateMiniplayer();
+      });
     }
     function applyPlayerPreferences() {
       if (!config.enabled || adState.active || getAdPlaying()) return;
@@ -1579,6 +1713,7 @@
     }
     function mainLoop() {
       runAppearanceTasks();
+      updateMiniplayer();
       if (!config.enabled) {
         if (adState.active || adState.overlayEl) cleanupRuntimeState();
         return;
@@ -1664,6 +1799,8 @@
     document.addEventListener("visibilitychange", () => {
       enforceAutoplayGuards();
     });
+    window.addEventListener("scroll", scheduleMiniplayerUpdate, { passive: true });
+    window.addEventListener("resize", scheduleMiniplayerUpdate);
     const PIP_BTN_ID = "ytp-pip-float-btn";
     const PIP_STYLE_ID = "ytp-pip-style";
     function injectPipStyles() {
@@ -1790,6 +1927,7 @@
         if (config.enabled && config.pipEnabled) {
           setTimeout(injectPipButton, 1500);
         }
+        setTimeout(updateMiniplayer, 500);
       }
     });
     _pipNavObserver.observe(document.documentElement, { childList: true, subtree: true });

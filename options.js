@@ -47,7 +47,10 @@
     appearanceHideRelated: false,
     appearanceHideChat: false,
     appearanceHideComments: false,
-    appearanceHideEndcards: false
+    appearanceHideEndcards: false,
+    miniplayerEnabled: true,
+    miniplayerSize: "480x270",
+    miniplayerPosition: "top-left"
   };
   const SAFE_AD_SPEED_RATE = 3;
   const MIN_AD_SPEED_RATE = 1;
@@ -121,6 +124,9 @@
   const optAppearanceHideChat = byId("opt-appearance-hide-chat");
   const optAppearanceHideComments = byId("opt-appearance-hide-comments");
   const optAppearanceHideEndcards = byId("opt-appearance-hide-endcards");
+  const optMiniplayerEnabled = byId("opt-miniplayer-enabled");
+  const optMiniplayerSize = byId("opt-miniplayer-size");
+  const optMiniplayerPosition = byId("opt-miniplayer-position");
   let currentWhitelist = [];
   let initialState = null;
   chrome.storage.local.get(DEFAULT, (s) => {
@@ -166,6 +172,9 @@
     optAppearanceHideChat.checked = !!s.appearanceHideChat;
     optAppearanceHideComments.checked = !!s.appearanceHideComments;
     optAppearanceHideEndcards.checked = !!s.appearanceHideEndcards;
+    optMiniplayerEnabled.checked = s.miniplayerEnabled !== false;
+    optMiniplayerSize.value = normalizeMiniplayerSize(s.miniplayerSize);
+    optMiniplayerPosition.value = normalizeMiniplayerPosition(s.miniplayerPosition);
     if (!s.aggressiveSkip && s.instantSkip) {
       chrome.storage.local.set({ instantSkip: false });
     }
@@ -179,6 +188,7 @@
     renderPlayerControlLocks();
     renderAutoplayControlLocks();
     renderQualityControlLocks();
+    renderMiniplayerControlLocks();
     const now = /* @__PURE__ */ new Date();
     const today = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0");
     const todayCount = s.todayDate === today ? s.adsSkippedToday || 0 : 0;
@@ -372,6 +382,16 @@
   optAppearanceHideEndcards.addEventListener("change", () => {
     chrome.storage.local.set({ appearanceHideEndcards: optAppearanceHideEndcards.checked });
   });
+  optMiniplayerEnabled.addEventListener("change", () => {
+    chrome.storage.local.set({ miniplayerEnabled: optMiniplayerEnabled.checked });
+    renderMiniplayerControlLocks();
+  });
+  optMiniplayerSize.addEventListener("change", () => {
+    chrome.storage.local.set({ miniplayerSize: normalizeMiniplayerSize(optMiniplayerSize.value) });
+  });
+  optMiniplayerPosition.addEventListener("change", () => {
+    chrome.storage.local.set({ miniplayerPosition: normalizeMiniplayerPosition(optMiniplayerPosition.value) });
+  });
   btnReset.addEventListener("click", () => {
     if (confirm("Isso vai resetar todas as configurações e zerar o contador de anúncios e avisos. Continuar?")) {
       chrome.storage.local.set(DEFAULT, () => {
@@ -520,6 +540,14 @@
     const valid = ["auto", "large", "hd720", "hd1080", "hd1440", "hd2160", "highres"];
     return valid.includes(value) ? value : DEFAULT.qualityVideo;
   }
+  function normalizeMiniplayerSize(value) {
+    const valid = ["360x203", "480x270", "640x360"];
+    return valid.includes(value) ? value : DEFAULT.miniplayerSize;
+  }
+  function normalizeMiniplayerPosition(value) {
+    const valid = ["top-left", "top-right", "bottom-left", "bottom-right"];
+    return valid.includes(value) ? value : DEFAULT.miniplayerPosition;
+  }
   function formatControlNumber(value) {
     return value.toFixed(2).replace(/\.?0+$/, "");
   }
@@ -589,6 +617,10 @@
     optQualityFullscreenVideo.disabled = !optQualityFullscreenEnabled.checked;
     optQualityFullscreenPlaylist.disabled = !optQualityFullscreenEnabled.checked;
     optQualityRestore.disabled = !optQualityFullscreenEnabled.checked;
+  }
+  function renderMiniplayerControlLocks() {
+    optMiniplayerSize.disabled = !optMiniplayerEnabled.checked;
+    optMiniplayerPosition.disabled = !optMiniplayerEnabled.checked;
   }
   function renderAdSpeed(delay, manualSpeed, state = getTimingState()) {
     let speed = getSafeAdaptiveSpeed(delay);
@@ -787,6 +819,12 @@
     if (changes.appearanceHideChat) optAppearanceHideChat.checked = !!changes.appearanceHideChat.newValue;
     if (changes.appearanceHideComments) optAppearanceHideComments.checked = !!changes.appearanceHideComments.newValue;
     if (changes.appearanceHideEndcards) optAppearanceHideEndcards.checked = !!changes.appearanceHideEndcards.newValue;
+    if (changes.miniplayerEnabled) {
+      optMiniplayerEnabled.checked = changes.miniplayerEnabled.newValue !== false;
+      renderMiniplayerControlLocks();
+    }
+    if (changes.miniplayerSize) optMiniplayerSize.value = normalizeMiniplayerSize(changes.miniplayerSize.newValue);
+    if (changes.miniplayerPosition) optMiniplayerPosition.value = normalizeMiniplayerPosition(changes.miniplayerPosition.newValue);
     if (changes.totalAdsSkipped) {
       animateCounter(statTotal, Number(changes.totalAdsSkipped.newValue) || 0);
     }

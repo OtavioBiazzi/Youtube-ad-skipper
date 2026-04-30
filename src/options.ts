@@ -4,6 +4,8 @@
 
 type ListMode = 'whitelist' | 'blacklist';
 type QualityLevel = 'auto' | 'large' | 'hd720' | 'hd1080' | 'hd1440' | 'hd2160' | 'highres';
+type MiniplayerSize = '360x203' | '480x270' | '640x360';
+type MiniplayerPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 
 type OptionsSettings = {
   enabled: boolean;
@@ -53,6 +55,9 @@ type OptionsSettings = {
   appearanceHideChat: boolean;
   appearanceHideComments: boolean;
   appearanceHideEndcards: boolean;
+  miniplayerEnabled: boolean;
+  miniplayerSize: MiniplayerSize;
+  miniplayerPosition: MiniplayerPosition;
 };
 
 const DEFAULT: OptionsSettings = {
@@ -103,6 +108,9 @@ const DEFAULT: OptionsSettings = {
   appearanceHideChat: false,
   appearanceHideComments: false,
   appearanceHideEndcards: false,
+  miniplayerEnabled: true,
+  miniplayerSize: '480x270',
+  miniplayerPosition: 'top-left',
 };
 
 const SAFE_AD_SPEED_RATE = 3;
@@ -186,6 +194,9 @@ const optAppearanceHideRelated = byId<HTMLInputElement>("opt-appearance-hide-rel
 const optAppearanceHideChat = byId<HTMLInputElement>("opt-appearance-hide-chat");
 const optAppearanceHideComments = byId<HTMLInputElement>("opt-appearance-hide-comments");
 const optAppearanceHideEndcards = byId<HTMLInputElement>("opt-appearance-hide-endcards");
+const optMiniplayerEnabled = byId<HTMLInputElement>("opt-miniplayer-enabled");
+const optMiniplayerSize = byId<HTMLSelectElement>("opt-miniplayer-size");
+const optMiniplayerPosition = byId<HTMLSelectElement>("opt-miniplayer-position");
 
 let currentWhitelist: string[] = [];
 let initialState: OptionsSettings | null = null;
@@ -237,6 +248,9 @@ chrome.storage.local.get(DEFAULT, (s: OptionsSettings) => {
   optAppearanceHideChat.checked = !!s.appearanceHideChat;
   optAppearanceHideComments.checked = !!s.appearanceHideComments;
   optAppearanceHideEndcards.checked = !!s.appearanceHideEndcards;
+  optMiniplayerEnabled.checked = s.miniplayerEnabled !== false;
+  optMiniplayerSize.value = normalizeMiniplayerSize(s.miniplayerSize);
+  optMiniplayerPosition.value = normalizeMiniplayerPosition(s.miniplayerPosition);
 
   if (!s.aggressiveSkip && s.instantSkip) {
     chrome.storage.local.set({ instantSkip: false });
@@ -252,6 +266,7 @@ chrome.storage.local.get(DEFAULT, (s: OptionsSettings) => {
   renderPlayerControlLocks();
   renderAutoplayControlLocks();
   renderQualityControlLocks();
+  renderMiniplayerControlLocks();
   
   // Stats
   const now = new Date();
@@ -502,6 +517,19 @@ optAppearanceHideEndcards.addEventListener("change", () => {
   chrome.storage.local.set({ appearanceHideEndcards: optAppearanceHideEndcards.checked });
 });
 
+optMiniplayerEnabled.addEventListener("change", () => {
+  chrome.storage.local.set({ miniplayerEnabled: optMiniplayerEnabled.checked });
+  renderMiniplayerControlLocks();
+});
+
+optMiniplayerSize.addEventListener("change", () => {
+  chrome.storage.local.set({ miniplayerSize: normalizeMiniplayerSize(optMiniplayerSize.value) });
+});
+
+optMiniplayerPosition.addEventListener("change", () => {
+  chrome.storage.local.set({ miniplayerPosition: normalizeMiniplayerPosition(optMiniplayerPosition.value) });
+});
+
 btnReset.addEventListener("click", () => {
   if (confirm("Isso vai resetar todas as configurações e zerar o contador de anúncios e avisos. Continuar?")) {
     chrome.storage.local.set(DEFAULT, () => {
@@ -677,6 +705,16 @@ function normalizeQuality(value: unknown): QualityLevel {
   return valid.includes(value as QualityLevel) ? value as QualityLevel : DEFAULT.qualityVideo;
 }
 
+function normalizeMiniplayerSize(value: unknown): MiniplayerSize {
+  const valid: MiniplayerSize[] = ['360x203', '480x270', '640x360'];
+  return valid.includes(value as MiniplayerSize) ? value as MiniplayerSize : DEFAULT.miniplayerSize;
+}
+
+function normalizeMiniplayerPosition(value: unknown): MiniplayerPosition {
+  const valid: MiniplayerPosition[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
+  return valid.includes(value as MiniplayerPosition) ? value as MiniplayerPosition : DEFAULT.miniplayerPosition;
+}
+
 function formatControlNumber(value: number) {
   return value.toFixed(2).replace(/\.?0+$/, "");
 }
@@ -756,6 +794,11 @@ function renderQualityControlLocks() {
   optQualityFullscreenVideo.disabled = !optQualityFullscreenEnabled.checked;
   optQualityFullscreenPlaylist.disabled = !optQualityFullscreenEnabled.checked;
   optQualityRestore.disabled = !optQualityFullscreenEnabled.checked;
+}
+
+function renderMiniplayerControlLocks() {
+  optMiniplayerSize.disabled = !optMiniplayerEnabled.checked;
+  optMiniplayerPosition.disabled = !optMiniplayerEnabled.checked;
 }
 
 function renderAdSpeed(delay: number, manualSpeed: number, state = getTimingState()) {
@@ -968,6 +1011,12 @@ chrome.storage.onChanged.addListener((changes) => {
   if (changes.appearanceHideChat) optAppearanceHideChat.checked = !!changes.appearanceHideChat.newValue;
   if (changes.appearanceHideComments) optAppearanceHideComments.checked = !!changes.appearanceHideComments.newValue;
   if (changes.appearanceHideEndcards) optAppearanceHideEndcards.checked = !!changes.appearanceHideEndcards.newValue;
+  if (changes.miniplayerEnabled) {
+    optMiniplayerEnabled.checked = changes.miniplayerEnabled.newValue !== false;
+    renderMiniplayerControlLocks();
+  }
+  if (changes.miniplayerSize) optMiniplayerSize.value = normalizeMiniplayerSize(changes.miniplayerSize.newValue);
+  if (changes.miniplayerPosition) optMiniplayerPosition.value = normalizeMiniplayerPosition(changes.miniplayerPosition.newValue);
   
   if (changes.totalAdsSkipped) {
     animateCounter(statTotal, Number(changes.totalAdsSkipped.newValue) || 0);

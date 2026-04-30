@@ -301,11 +301,12 @@
             </div>
           </article>
           <article class="card card--module">
-            <div class="card-header"><span>Pop-up, PiP e Miniplayer</span><span class="tag tag--stage">BASE</span></div>
+            <div class="card-header"><span>Pop-up, PiP e Miniplayer</span><span class="tag tag--safe">ATIVO</span></div>
             <div class="card-body control-stack">
-              <label class="field-row"><span>Tamanho do pop-up</span><select class="control-input" disabled><option>640x360</option></select></label>
-              <label class="field-row"><span>Tamanho do miniplayer</span><select class="control-input" disabled><option>480x270</option></select></label>
-              <label class="field-row"><span>Posicao</span><select class="control-input" disabled><option>Canto superior esquerdo</option></select></label>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Miniplayer ao rolar</span><span class="opt-desc">Quando voce desce para comentarios, o player fica flutuante.</span></div><label class="switch"><input type="checkbox" id="opt-miniplayer-enabled" checked><span class="switch-track"></span></label></div>
+              <label class="field-row"><span>Tamanho do miniplayer</span><select class="control-input" id="opt-miniplayer-size"><option value="360x203">360x203</option><option value="480x270" selected>480x270</option><option value="640x360">640x360</option></select></label>
+              <label class="field-row"><span>Posicao</span><select class="control-input" id="opt-miniplayer-position"><option value="top-left">Canto superior esquerdo</option><option value="top-right">Canto superior direito</option><option value="bottom-left">Canto inferior esquerdo</option><option value="bottom-right">Canto inferior direito</option></select></label>
+              <div class="module-note">Pop-up em janela separada e barra de controles dedicada entram depois, junto com os icones do player.</div>
             </div>
           </article>
         </div>
