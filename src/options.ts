@@ -35,6 +35,10 @@ type OptionsSettings = {
   playerVolumeWheel: boolean;
   playerVolumeWheelRightButton: boolean;
   playerWheelInvert: boolean;
+  autoplayBlockBackground: boolean;
+  autoplayBlockForeground: boolean;
+  autoplayAllowPlaylists: boolean;
+  pauseBackgroundTabs: boolean;
 };
 
 const DEFAULT: OptionsSettings = {
@@ -68,6 +72,10 @@ const DEFAULT: OptionsSettings = {
   playerVolumeWheel: false,
   playerVolumeWheelRightButton: false,
   playerWheelInvert: false,
+  autoplayBlockBackground: false,
+  autoplayBlockForeground: false,
+  autoplayAllowPlaylists: true,
+  pauseBackgroundTabs: false,
 };
 
 const SAFE_AD_SPEED_RATE = 3;
@@ -134,6 +142,10 @@ const optPlayerVolumeStep = byId<HTMLInputElement>("opt-player-volume-step");
 const optPlayerVolumeWheel = byId<HTMLInputElement>("opt-player-volume-wheel");
 const optPlayerVolumeRightButton = byId<HTMLInputElement>("opt-player-volume-right-button");
 const optPlayerWheelInvert = byId<HTMLInputElement>("opt-player-wheel-invert");
+const optAutoplayBackground = byId<HTMLInputElement>("opt-autoplay-background");
+const optAutoplayForeground = byId<HTMLInputElement>("opt-autoplay-foreground");
+const optAutoplayAllowPlaylists = byId<HTMLInputElement>("opt-autoplay-allow-playlists");
+const optPauseBackgroundTabs = byId<HTMLInputElement>("opt-pause-background-tabs");
 
 let currentWhitelist: string[] = [];
 let initialState: OptionsSettings | null = null;
@@ -168,6 +180,10 @@ chrome.storage.local.get(DEFAULT, (s: OptionsSettings) => {
   optPlayerVolumeWheel.checked = !!s.playerVolumeWheel;
   optPlayerVolumeRightButton.checked = !!s.playerVolumeWheelRightButton;
   optPlayerWheelInvert.checked = !!s.playerWheelInvert;
+  optAutoplayBackground.checked = !!s.autoplayBlockBackground;
+  optAutoplayForeground.checked = !!s.autoplayBlockForeground;
+  optAutoplayAllowPlaylists.checked = s.autoplayAllowPlaylists !== false;
+  optPauseBackgroundTabs.checked = !!s.pauseBackgroundTabs;
 
   if (!s.aggressiveSkip && s.instantSkip) {
     chrome.storage.local.set({ instantSkip: false });
@@ -181,6 +197,7 @@ chrome.storage.local.get(DEFAULT, (s: OptionsSettings) => {
   renderListMode(s.listMode || 'whitelist');
   renderTimingControls();
   renderPlayerControlLocks();
+  renderAutoplayControlLocks();
   
   // Stats
   const now = new Date();
@@ -357,6 +374,24 @@ optPlayerVolumeRightButton.addEventListener("change", () => {
 
 optPlayerWheelInvert.addEventListener("change", () => {
   chrome.storage.local.set({ playerWheelInvert: optPlayerWheelInvert.checked });
+});
+
+optAutoplayBackground.addEventListener("change", () => {
+  chrome.storage.local.set({ autoplayBlockBackground: optAutoplayBackground.checked });
+  renderAutoplayControlLocks();
+});
+
+optAutoplayForeground.addEventListener("change", () => {
+  chrome.storage.local.set({ autoplayBlockForeground: optAutoplayForeground.checked });
+  renderAutoplayControlLocks();
+});
+
+optAutoplayAllowPlaylists.addEventListener("change", () => {
+  chrome.storage.local.set({ autoplayAllowPlaylists: optAutoplayAllowPlaylists.checked });
+});
+
+optPauseBackgroundTabs.addEventListener("change", () => {
+  chrome.storage.local.set({ pauseBackgroundTabs: optPauseBackgroundTabs.checked });
 });
 
 btnReset.addEventListener("click", () => {
@@ -597,6 +632,11 @@ function renderPlayerControlLocks() {
   optPlayerVolumeRightButton.disabled = !optPlayerVolumeWheel.checked;
 }
 
+function renderAutoplayControlLocks() {
+  const blockingAutoplay = optAutoplayBackground.checked || optAutoplayForeground.checked;
+  optAutoplayAllowPlaylists.disabled = !blockingAutoplay;
+}
+
 function renderAdSpeed(delay: number, manualSpeed: number, state = getTimingState()) {
   let speed = getSafeAdaptiveSpeed(delay);
   let labelPrefix = "auto ";
@@ -778,6 +818,16 @@ chrome.storage.onChanged.addListener((changes) => {
   }
   if (changes.playerVolumeWheelRightButton) optPlayerVolumeRightButton.checked = !!changes.playerVolumeWheelRightButton.newValue;
   if (changes.playerWheelInvert) optPlayerWheelInvert.checked = !!changes.playerWheelInvert.newValue;
+  if (changes.autoplayBlockBackground) {
+    optAutoplayBackground.checked = !!changes.autoplayBlockBackground.newValue;
+    renderAutoplayControlLocks();
+  }
+  if (changes.autoplayBlockForeground) {
+    optAutoplayForeground.checked = !!changes.autoplayBlockForeground.newValue;
+    renderAutoplayControlLocks();
+  }
+  if (changes.autoplayAllowPlaylists) optAutoplayAllowPlaylists.checked = changes.autoplayAllowPlaylists.newValue !== false;
+  if (changes.pauseBackgroundTabs) optPauseBackgroundTabs.checked = !!changes.pauseBackgroundTabs.newValue;
   
   if (changes.totalAdsSkipped) {
     animateCounter(statTotal, Number(changes.totalAdsSkipped.newValue) || 0);

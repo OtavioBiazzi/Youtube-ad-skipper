@@ -32,7 +32,11 @@
       playerVolumeStep: 5,
       playerVolumeWheel: false,
       playerVolumeWheelRightButton: false,
-      playerWheelInvert: false
+      playerWheelInvert: false,
+      autoplayBlockBackground: false,
+      autoplayBlockForeground: false,
+      autoplayAllowPlaylists: true,
+      pauseBackgroundTabs: false
     };
     const CHECK_INTERVAL = 500;
     const FORCE_SKIP_RETRY_MS = 120;
@@ -77,7 +81,10 @@
       playerVideoKey: "",
       defaultSpeedAppliedKey: "",
       defaultVolumeAppliedKey: "",
-      rightMouseDown: false
+      rightMouseDown: false,
+      lastUserPlaybackIntentAt: 0,
+      autoplayVideo: null,
+      tabPlaybackToken: Date.now() + "-" + Math.random().toString(36).slice(2)
     };
     let adblockObserver = null;
     let adblockBodyWaitObserver = null;
@@ -120,7 +127,11 @@
               playerVolumeStep: 5,
               playerVolumeWheel: false,
               playerVolumeWheelRightButton: false,
-              playerWheelInvert: false
+              playerWheelInvert: false,
+              autoplayBlockBackground: false,
+              autoplayBlockForeground: false,
+              autoplayAllowPlaylists: true,
+              pauseBackgroundTabs: false
             },
             (s) => {
               config.enabled = !!s.enabled;
@@ -148,6 +159,10 @@
               config.playerVolumeWheel = !!s.playerVolumeWheel;
               config.playerVolumeWheelRightButton = !!s.playerVolumeWheelRightButton;
               config.playerWheelInvert = !!s.playerWheelInvert;
+              config.autoplayBlockBackground = !!s.autoplayBlockBackground;
+              config.autoplayBlockForeground = !!s.autoplayBlockForeground;
+              config.autoplayAllowPlaylists = s.autoplayAllowPlaylists !== false;
+              config.pauseBackgroundTabs = !!s.pauseBackgroundTabs;
               adState.warningCount = s.warningCount || 0;
               adState.totalSkipped = s.totalAdsSkipped || 0;
               adState.adsSkippedToday = s.adsSkippedToday || 0;
@@ -221,6 +236,13 @@
         if (changes.playerVolumeWheel) config.playerVolumeWheel = !!changes.playerVolumeWheel.newValue;
         if (changes.playerVolumeWheelRightButton) config.playerVolumeWheelRightButton = !!changes.playerVolumeWheelRightButton.newValue;
         if (changes.playerWheelInvert) config.playerWheelInvert = !!changes.playerWheelInvert.newValue;
+        if (changes.autoplayBlockBackground) config.autoplayBlockBackground = !!changes.autoplayBlockBackground.newValue;
+        if (changes.autoplayBlockForeground) config.autoplayBlockForeground = !!changes.autoplayBlockForeground.newValue;
+        if (changes.autoplayAllowPlaylists) config.autoplayAllowPlaylists = changes.autoplayAllowPlaylists.newValue !== false;
+        if (changes.pauseBackgroundTabs) config.pauseBackgroundTabs = !!changes.pauseBackgroundTabs.newValue;
+        if (changes.tubeShieldActivePlayback) {
+          handleExternalPlaybackSignal(changes.tubeShieldActivePlayback.newValue);
+        }
       });
     }
     window.addEventListener("message", (event) => {
@@ -472,6 +494,97 @@
         const current = video ? Math.round(video.volume * 100) : 50;
         const next = normalizeVolumePercent(current + direction * normalizeVolumeStep(config.playerVolumeStep));
         setUserVolume(next, true, video);
+      }
+    }
+    function isPlaylistContext() {
+      try {
+        const url = new URL(location.href);
+        if (url.searchParams.has("list")) return true;
+      } catch (err) {
+      }
+      return !!document.querySelector("ytd-playlist-panel-renderer, ytd-playlist-video-list-renderer");
+    }
+    function markUserPlaybackIntent() {
+      adState.lastUserPlaybackIntentAt = Date.now();
+    }
+    function hasRecentPlaybackIntent() {
+      return Date.now() - (adState.lastUserPlaybackIntentAt || 0) < 2600;
+    }
+    function isNearVideoStart(video) {
+      const current = Number(video?.currentTime || 0);
+      return !Number.isFinite(current) || current < 4;
+    }
+    function shouldBlockAutoplay(video = getActiveVideo()) {
+      if (!video || !config.enabled || adState.active || getAdPlaying()) return false;
+      if (!isNearVideoStart(video)) return false;
+      if (config.autoplayAllowPlaylists && isPlaylistContext()) return false;
+      if (document.hidden) return !!config.autoplayBlockBackground;
+      return !!config.autoplayBlockForeground && !hasRecentPlaybackIntent();
+    }
+    function pauseVideo(video = getActiveVideo()) {
+      if (!video) return false;
+      let paused = false;
+      try {
+        video.pause();
+        paused = true;
+      } catch (err) {
+      }
+      const player = getYouTubePlayer();
+      try {
+        if (player && typeof player.pauseVideo === "function") {
+          player.pauseVideo();
+          paused = true;
+        }
+      } catch (err) {
+      }
+      return paused;
+    }
+    function announceForegroundPlayback() {
+      if (!config.enabled || !config.pauseBackgroundTabs || document.hidden || adState.active || getAdPlaying()) return;
+      if (!chrome?.storage?.local) return;
+      chrome.storage.local.set({
+        tubeShieldActivePlayback: {
+          token: adState.tabPlaybackToken,
+          time: Date.now(),
+          url: location.href
+        }
+      });
+    }
+    function handleVideoPlayEvent() {
+      const video = getActiveVideo();
+      if (!video) return;
+      if (shouldBlockAutoplay(video)) {
+        pauseVideo(video);
+        return;
+      }
+      announceForegroundPlayback();
+    }
+    function handleExternalPlaybackSignal(signal) {
+      if (!config.enabled || !config.pauseBackgroundTabs || !document.hidden) return;
+      if (!signal || signal.token === adState.tabPlaybackToken) return;
+      const video = getActiveVideo();
+      if (video && !video.paused && !adState.active && !getAdPlaying()) {
+        pauseVideo(video);
+      }
+    }
+    function bindAutoplayGuards() {
+      const video = getActiveVideo();
+      if (!video || adState.autoplayVideo === video) return;
+      adState.autoplayVideo = video;
+      video.addEventListener("play", handleVideoPlayEvent, true);
+      video.addEventListener("playing", handleVideoPlayEvent, true);
+      if (!video.paused && shouldBlockAutoplay(video)) {
+        pauseVideo(video);
+      }
+    }
+    function enforceAutoplayGuards() {
+      bindAutoplayGuards();
+      const video = getActiveVideo();
+      if (!video || video.paused) return;
+      if (shouldBlockAutoplay(video)) {
+        pauseVideo(video);
+      } else {
+        announceForegroundPlayback();
       }
     }
     function getSpeedThroughRate() {
@@ -1125,6 +1238,7 @@
       }
       dismissAdblockWarning();
       const adPlaying = getAdPlaying();
+      if (!adPlaying) enforceAutoplayGuards();
       if (adPlaying && !adState.active) {
         if (isChannelWhitelisted()) return;
         adState.active = true;
@@ -1193,6 +1307,16 @@
       adState.rightMouseDown = false;
     });
     document.addEventListener("wheel", handlePlayerWheel, { capture: true, passive: false });
+    document.addEventListener("pointerdown", () => {
+      markUserPlaybackIntent();
+    }, true);
+    document.addEventListener("keydown", (event) => {
+      const playbackKeys = [" ", "Enter", "k", "K", "MediaPlayPause", "MediaPlay"];
+      if (playbackKeys.includes(event.key)) markUserPlaybackIntent();
+    }, true);
+    document.addEventListener("visibilitychange", () => {
+      enforceAutoplayGuards();
+    });
     const PIP_BTN_ID = "ytp-pip-float-btn";
     const PIP_STYLE_ID = "ytp-pip-style";
     function injectPipStyles() {

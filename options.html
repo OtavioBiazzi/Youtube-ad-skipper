@@ -241,11 +241,11 @@
       <section class="panel-section" id="player">
         <div class="section-heading section-heading--row">
           <div>
-            <span class="section-kicker">Proximos modulos</span>
+            <span class="section-kicker">Modulo em expansao</span>
             <h2>Player, audio e reproducao</h2>
-            <p>Area preparada para implementar as funcoes do tipo enhancer sem misturar com o skipper.</p>
+            <p>Velocidade, volume e autoplay ja estao ativos; qualidade, miniplayer e pre-carregamento entram nas proximas etapas.</p>
           </div>
-          <span class="module-state">Preparado</span>
+          <span class="module-state">Em etapas</span>
         </div>
         <div class="section-grid section-grid--three">
           <article class="card card--module">
@@ -269,16 +269,25 @@
             </div>
           </article>
           <article class="card card--module">
-            <div class="card-header"><span>Mouse e reproducao</span><span class="tag tag--safe">ATIVO</span></div>
+            <div class="card-header"><span>Mouse</span><span class="tag tag--safe">ATIVO</span></div>
             <div class="card-body control-stack">
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Inverter direcao da roda</span><span class="opt-desc">Troca subir/descer nos controles de volume e velocidade.</span></div><label class="switch"><input type="checkbox" id="opt-player-wheel-invert"><span class="switch-track"></span></label></div>
-              <div class="module-note">Autoplay, pausa em abas de fundo e bloqueio de pre-carregamento entram na proxima etapa.</div>
-              <label class="field-row"><span>Preset futuro</span><select class="control-input" disabled><option>Bloquear abas em segundo plano</option></select></label>
+              <div class="module-note">Os atalhos de teclado completos entram depois, junto com o editor de atalhos.</div>
             </div>
           </article>
         </div>
 
         <div class="section-grid section-grid--split">
+          <article class="card card--module">
+            <div class="card-header"><span>Autoplay e abas</span><span class="tag tag--safe">ATIVO</span></div>
+            <div class="card-body control-stack">
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Bloquear autoplay em abas de fundo</span><span class="opt-desc">Pausa videos que comecam sozinhos enquanto a aba esta oculta.</span></div><label class="switch"><input type="checkbox" id="opt-autoplay-background"><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Bloquear autoplay na aba atual</span><span class="opt-desc">Pausa reproducoes sem clique ou tecla recente.</span></div><label class="switch"><input type="checkbox" id="opt-autoplay-foreground"><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Permitir em playlists</span><span class="opt-desc">Nao interrompe sequencias quando existe uma playlist ativa.</span></div><label class="switch"><input type="checkbox" id="opt-autoplay-allow-playlists"><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Pausar abas de fundo</span><span class="opt-desc">Ao tocar um video nesta aba, pausa YouTube em abas ocultas.</span></div><label class="switch"><input type="checkbox" id="opt-pause-background-tabs"><span class="switch-track"></span></label></div>
+              <div class="module-note">Bloqueio total de pre-carregamento fica para uma etapa separada, porque mexe direto no carregamento do player.</div>
+            </div>
+          </article>
           <article class="card card--module">
             <div class="card-header"><span>Qualidade de reproducao</span><span class="tag tag--stage">BASE</span></div>
             <div class="card-body control-stack">
