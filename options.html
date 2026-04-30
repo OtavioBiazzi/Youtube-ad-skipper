@@ -314,24 +314,23 @@
       <section class="panel-section" id="appearance">
         <div class="section-heading section-heading--row">
           <div>
-            <span class="section-kicker">Visual</span>
+            <span class="section-kicker">Visual em etapas</span>
             <h2>Aparencia, tema, cinema e ultrawide</h2>
-            <p>Preparado para ocultar partes do YouTube, controlar temas e melhorar telas grandes.</p>
+            <p>Filtros visuais ja podem limpar Shorts, chat, comentarios, relacionados e cards finais.</p>
           </div>
-          <span class="module-state">Preparado</span>
+          <span class="module-state">Em etapas</span>
         </div>
         <div class="section-grid section-grid--split">
           <article class="card card--module">
-            <div class="card-header"><span>Aparencia do YouTube</span><span class="tag tag--stage">BASE</span></div>
-            <div class="card-body appearance-grid">
-              <label class="field-row"><span>Videos por fileira</span><input class="control-input" type="number" value="4" disabled></label>
-              <label class="field-row"><span>Shorts por fileira</span><input class="control-input" type="number" value="8" disabled></label>
-              <label><input type="checkbox" checked disabled> Converter Shorts</label>
-              <label><input type="checkbox" checked disabled> Ocultar Shorts</label>
-              <label><input type="checkbox" checked disabled> Ocultar relacionados</label>
-              <label><input type="checkbox" checked disabled> Ocultar chat</label>
-              <label><input type="checkbox" checked disabled> Ocultar comentarios</label>
-              <label><input type="checkbox" checked disabled> Ocultar cards finais</label>
+            <div class="card-header"><span>Aparencia do YouTube</span><span class="tag tag--safe">ATIVO</span></div>
+            <div class="card-body control-stack">
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Converter Shorts</span><span class="opt-desc">Abre links /shorts no player normal do YouTube.</span></div><label class="switch"><input type="checkbox" id="opt-appearance-convert-shorts"><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Ocultar Shorts</span><span class="opt-desc">Remove prateleiras e cards de Shorts da navegacao.</span></div><label class="switch"><input type="checkbox" id="opt-appearance-hide-shorts"><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Ocultar videos relacionados</span><span class="opt-desc">Limpa a coluna lateral da pagina de exibicao.</span></div><label class="switch"><input type="checkbox" id="opt-appearance-hide-related"><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Ocultar chat</span><span class="opt-desc">Remove chat ao vivo e replay de chat.</span></div><label class="switch"><input type="checkbox" id="opt-appearance-hide-chat"><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Ocultar comentarios</span><span class="opt-desc">Esconde o bloco de comentarios abaixo do video.</span></div><label class="switch"><input type="checkbox" id="opt-appearance-hide-comments"><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Ocultar cards finais</span><span class="opt-desc">Remove cards, telas finais e teasers sobre o player.</span></div><label class="switch"><input type="checkbox" id="opt-appearance-hide-endcards"><span class="switch-track"></span></label></div>
+              <div class="module-note">Controles de videos por fileira e layout de grade ficam para uma etapa separada.</div>
             </div>
           </article>
           <article class="card card--module">

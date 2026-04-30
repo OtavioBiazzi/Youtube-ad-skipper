@@ -57,6 +57,12 @@ declare global {
     qualityFullscreenVideo: "hd1080",
     qualityFullscreenPlaylist: "hd1080",
     qualityRestoreOnExit: true,
+    appearanceConvertShorts: false,
+    appearanceHideShorts: false,
+    appearanceHideRelated: false,
+    appearanceHideChat: false,
+    appearanceHideComments: false,
+    appearanceHideEndcards: false,
   };
 
   const CHECK_INTERVAL = 500;
@@ -119,6 +125,7 @@ declare global {
   let adblockObserver: MutationObserver | null = null;
   let adblockBodyWaitObserver: MutationObserver | null = null;
   let skipButtonObserver: MutationObserver | null = null;
+  let appearanceSignature = "";
 
   // ── Humanização — jitter aleatório ────────────────────
 
@@ -150,6 +157,9 @@ declare global {
             qualityEnabled: false, qualityVideo: "hd720", qualityPlaylist: "hd720",
             qualityFullscreenEnabled: false, qualityFullscreenVideo: "hd1080",
             qualityFullscreenPlaylist: "hd1080", qualityRestoreOnExit: true,
+            appearanceConvertShorts: false, appearanceHideShorts: false,
+            appearanceHideRelated: false, appearanceHideChat: false,
+            appearanceHideComments: false, appearanceHideEndcards: false,
           },
           (s) => {
             config.enabled = !!s.enabled;
@@ -188,6 +198,12 @@ declare global {
             config.qualityFullscreenVideo = normalizeQualityLevel(s.qualityFullscreenVideo, "hd1080");
             config.qualityFullscreenPlaylist = normalizeQualityLevel(s.qualityFullscreenPlaylist, "hd1080");
             config.qualityRestoreOnExit = s.qualityRestoreOnExit !== false;
+            config.appearanceConvertShorts = !!s.appearanceConvertShorts;
+            config.appearanceHideShorts = !!s.appearanceHideShorts;
+            config.appearanceHideRelated = !!s.appearanceHideRelated;
+            config.appearanceHideChat = !!s.appearanceHideChat;
+            config.appearanceHideComments = !!s.appearanceHideComments;
+            config.appearanceHideEndcards = !!s.appearanceHideEndcards;
             adState.warningCount = s.warningCount || 0;
             adState.totalSkipped = s.totalAdsSkipped || 0;
             adState.adsSkippedToday = s.adsSkippedToday || 0;
@@ -213,6 +229,7 @@ declare global {
           stopAdblockProtection();
           removePipButton();
         }
+        applyAppearanceFilters();
       }
       if (changes.skipDelay) {
         config.skipDelay = normalizeSkipDelay(changes.skipDelay.newValue);
@@ -287,6 +304,30 @@ declare global {
         resetQualityState();
       }
       if (changes.qualityRestoreOnExit) config.qualityRestoreOnExit = changes.qualityRestoreOnExit.newValue !== false;
+      if (changes.appearanceConvertShorts) {
+        config.appearanceConvertShorts = !!changes.appearanceConvertShorts.newValue;
+        convertShortsUrlIfNeeded();
+      }
+      if (changes.appearanceHideShorts) {
+        config.appearanceHideShorts = !!changes.appearanceHideShorts.newValue;
+        applyAppearanceFilters();
+      }
+      if (changes.appearanceHideRelated) {
+        config.appearanceHideRelated = !!changes.appearanceHideRelated.newValue;
+        applyAppearanceFilters();
+      }
+      if (changes.appearanceHideChat) {
+        config.appearanceHideChat = !!changes.appearanceHideChat.newValue;
+        applyAppearanceFilters();
+      }
+      if (changes.appearanceHideComments) {
+        config.appearanceHideComments = !!changes.appearanceHideComments.newValue;
+        applyAppearanceFilters();
+      }
+      if (changes.appearanceHideEndcards) {
+        config.appearanceHideEndcards = !!changes.appearanceHideEndcards.newValue;
+        applyAppearanceFilters();
+      }
       if (changes.tubeShieldActivePlayback) {
         handleExternalPlaybackSignal(changes.tubeShieldActivePlayback.newValue);
       }
@@ -719,6 +760,123 @@ declare global {
     }
 
     applyQualityTarget(getQualityTarget(false), key + ":normal");
+  }
+
+  const APPEARANCE_STYLE_ID = "tube-shield-appearance-style";
+
+  function buildAppearanceCss() {
+    const blocks: string[] = [];
+
+    if (config.appearanceHideShorts) {
+      blocks.push(`
+        ytd-reel-shelf-renderer,
+        ytd-rich-section-renderer:has(a[href^="/shorts/"]),
+        ytd-rich-item-renderer:has(a[href^="/shorts/"]),
+        ytd-video-renderer:has(a[href^="/shorts/"]),
+        ytd-grid-video-renderer:has(a[href^="/shorts/"]),
+        ytd-compact-video-renderer:has(a[href^="/shorts/"]),
+        ytd-guide-entry-renderer:has(a[href^="/shorts"]),
+        ytd-mini-guide-entry-renderer:has(a[href^="/shorts"]),
+        ytd-browse[page-subtype="shorts"] {
+          display: none !important;
+        }
+      `);
+    }
+
+    if (config.appearanceHideRelated) {
+      blocks.push(`
+        ytd-watch-flexy #related,
+        ytd-watch-flexy ytd-watch-next-secondary-results-renderer {
+          display: none !important;
+        }
+        ytd-watch-flexy #primary.ytd-watch-flexy {
+          max-width: min(100%, 1200px) !important;
+        }
+      `);
+    }
+
+    if (config.appearanceHideChat) {
+      blocks.push(`
+        ytd-live-chat-frame,
+        #chat,
+        #chat-container,
+        ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-live-chat"] {
+          display: none !important;
+        }
+      `);
+    }
+
+    if (config.appearanceHideComments) {
+      blocks.push(`
+        #comments,
+        ytd-comments,
+        ytd-item-section-renderer#comments {
+          display: none !important;
+        }
+      `);
+    }
+
+    if (config.appearanceHideEndcards) {
+      blocks.push(`
+        .ytp-ce-element,
+        .ytp-ce-covering-overlay,
+        .ytp-ce-expanding-overlay,
+        .ytp-cards-teaser,
+        .ytp-cards-button,
+        .ytp-endscreen-content,
+        .ytp-endscreen-previous,
+        .ytp-endscreen-next {
+          display: none !important;
+          opacity: 0 !important;
+          pointer-events: none !important;
+        }
+      `);
+    }
+
+    return blocks.join("\n");
+  }
+
+  function applyAppearanceFilters() {
+    const signature = [
+      config.enabled,
+      config.appearanceHideShorts,
+      config.appearanceHideRelated,
+      config.appearanceHideChat,
+      config.appearanceHideComments,
+      config.appearanceHideEndcards,
+    ].join(":");
+
+    if (signature === appearanceSignature) return;
+    appearanceSignature = signature;
+
+    const css = config.enabled ? buildAppearanceCss() : "";
+    const existing = document.getElementById(APPEARANCE_STYLE_ID);
+    if (!css) {
+      existing?.remove();
+      return;
+    }
+
+    const style = existing || document.createElement("style");
+    style.id = APPEARANCE_STYLE_ID;
+    style.textContent = css;
+    if (!existing) (document.head || document.documentElement).appendChild(style);
+  }
+
+  function convertShortsUrlIfNeeded() {
+    if (!config.enabled || !config.appearanceConvertShorts) return;
+    const match = location.pathname.match(/^\/shorts\/([^/?#]+)/);
+    if (!match?.[1]) return;
+
+    const videoId = decodeURIComponent(match[1]);
+    const target = location.origin + "/watch?v=" + encodeURIComponent(videoId);
+    if (location.href !== target) {
+      location.replace(target);
+    }
+  }
+
+  function runAppearanceTasks() {
+    applyAppearanceFilters();
+    convertShortsUrlIfNeeded();
   }
 
   function applyPlayerPreferences() {
@@ -1673,6 +1831,8 @@ declare global {
   // ── Main loop ─────────────────────────────────────────
 
   function mainLoop() {
+    runAppearanceTasks();
+
     if (!config.enabled) {
       if (adState.active || adState.overlayEl) cleanupRuntimeState();
       return;

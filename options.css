@@ -39,6 +39,10 @@ body.theme-light {
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   font-family: "Outfit", system-ui, sans-serif;
   background:
@@ -1277,5 +1281,11 @@ kbd {
 
   .overview-card {
     min-height: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
   }
 }

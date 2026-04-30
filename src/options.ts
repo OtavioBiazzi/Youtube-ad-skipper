@@ -47,6 +47,12 @@ type OptionsSettings = {
   qualityFullscreenVideo: QualityLevel;
   qualityFullscreenPlaylist: QualityLevel;
   qualityRestoreOnExit: boolean;
+  appearanceConvertShorts: boolean;
+  appearanceHideShorts: boolean;
+  appearanceHideRelated: boolean;
+  appearanceHideChat: boolean;
+  appearanceHideComments: boolean;
+  appearanceHideEndcards: boolean;
 };
 
 const DEFAULT: OptionsSettings = {
@@ -91,6 +97,12 @@ const DEFAULT: OptionsSettings = {
   qualityFullscreenVideo: 'hd1080',
   qualityFullscreenPlaylist: 'hd1080',
   qualityRestoreOnExit: true,
+  appearanceConvertShorts: false,
+  appearanceHideShorts: false,
+  appearanceHideRelated: false,
+  appearanceHideChat: false,
+  appearanceHideComments: false,
+  appearanceHideEndcards: false,
 };
 
 const SAFE_AD_SPEED_RATE = 3;
@@ -168,6 +180,12 @@ const optQualityFullscreenEnabled = byId<HTMLInputElement>("opt-quality-fullscre
 const optQualityFullscreenVideo = byId<HTMLSelectElement>("opt-quality-fullscreen-video");
 const optQualityFullscreenPlaylist = byId<HTMLSelectElement>("opt-quality-fullscreen-playlist");
 const optQualityRestore = byId<HTMLInputElement>("opt-quality-restore");
+const optAppearanceConvertShorts = byId<HTMLInputElement>("opt-appearance-convert-shorts");
+const optAppearanceHideShorts = byId<HTMLInputElement>("opt-appearance-hide-shorts");
+const optAppearanceHideRelated = byId<HTMLInputElement>("opt-appearance-hide-related");
+const optAppearanceHideChat = byId<HTMLInputElement>("opt-appearance-hide-chat");
+const optAppearanceHideComments = byId<HTMLInputElement>("opt-appearance-hide-comments");
+const optAppearanceHideEndcards = byId<HTMLInputElement>("opt-appearance-hide-endcards");
 
 let currentWhitelist: string[] = [];
 let initialState: OptionsSettings | null = null;
@@ -213,6 +231,12 @@ chrome.storage.local.get(DEFAULT, (s: OptionsSettings) => {
   optQualityFullscreenVideo.value = normalizeQuality(s.qualityFullscreenVideo);
   optQualityFullscreenPlaylist.value = normalizeQuality(s.qualityFullscreenPlaylist);
   optQualityRestore.checked = s.qualityRestoreOnExit !== false;
+  optAppearanceConvertShorts.checked = !!s.appearanceConvertShorts;
+  optAppearanceHideShorts.checked = !!s.appearanceHideShorts;
+  optAppearanceHideRelated.checked = !!s.appearanceHideRelated;
+  optAppearanceHideChat.checked = !!s.appearanceHideChat;
+  optAppearanceHideComments.checked = !!s.appearanceHideComments;
+  optAppearanceHideEndcards.checked = !!s.appearanceHideEndcards;
 
   if (!s.aggressiveSkip && s.instantSkip) {
     chrome.storage.local.set({ instantSkip: false });
@@ -452,6 +476,30 @@ optQualityFullscreenPlaylist.addEventListener("change", () => {
 
 optQualityRestore.addEventListener("change", () => {
   chrome.storage.local.set({ qualityRestoreOnExit: optQualityRestore.checked });
+});
+
+optAppearanceConvertShorts.addEventListener("change", () => {
+  chrome.storage.local.set({ appearanceConvertShorts: optAppearanceConvertShorts.checked });
+});
+
+optAppearanceHideShorts.addEventListener("change", () => {
+  chrome.storage.local.set({ appearanceHideShorts: optAppearanceHideShorts.checked });
+});
+
+optAppearanceHideRelated.addEventListener("change", () => {
+  chrome.storage.local.set({ appearanceHideRelated: optAppearanceHideRelated.checked });
+});
+
+optAppearanceHideChat.addEventListener("change", () => {
+  chrome.storage.local.set({ appearanceHideChat: optAppearanceHideChat.checked });
+});
+
+optAppearanceHideComments.addEventListener("change", () => {
+  chrome.storage.local.set({ appearanceHideComments: optAppearanceHideComments.checked });
+});
+
+optAppearanceHideEndcards.addEventListener("change", () => {
+  chrome.storage.local.set({ appearanceHideEndcards: optAppearanceHideEndcards.checked });
 });
 
 btnReset.addEventListener("click", () => {
@@ -914,6 +962,12 @@ chrome.storage.onChanged.addListener((changes) => {
   if (changes.qualityFullscreenVideo) optQualityFullscreenVideo.value = normalizeQuality(changes.qualityFullscreenVideo.newValue);
   if (changes.qualityFullscreenPlaylist) optQualityFullscreenPlaylist.value = normalizeQuality(changes.qualityFullscreenPlaylist.newValue);
   if (changes.qualityRestoreOnExit) optQualityRestore.checked = changes.qualityRestoreOnExit.newValue !== false;
+  if (changes.appearanceConvertShorts) optAppearanceConvertShorts.checked = !!changes.appearanceConvertShorts.newValue;
+  if (changes.appearanceHideShorts) optAppearanceHideShorts.checked = !!changes.appearanceHideShorts.newValue;
+  if (changes.appearanceHideRelated) optAppearanceHideRelated.checked = !!changes.appearanceHideRelated.newValue;
+  if (changes.appearanceHideChat) optAppearanceHideChat.checked = !!changes.appearanceHideChat.newValue;
+  if (changes.appearanceHideComments) optAppearanceHideComments.checked = !!changes.appearanceHideComments.newValue;
+  if (changes.appearanceHideEndcards) optAppearanceHideEndcards.checked = !!changes.appearanceHideEndcards.newValue;
   
   if (changes.totalAdsSkipped) {
     animateCounter(statTotal, Number(changes.totalAdsSkipped.newValue) || 0);
