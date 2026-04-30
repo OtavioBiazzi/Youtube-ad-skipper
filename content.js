@@ -36,7 +36,14 @@
       autoplayBlockBackground: false,
       autoplayBlockForeground: false,
       autoplayAllowPlaylists: true,
-      pauseBackgroundTabs: false
+      pauseBackgroundTabs: false,
+      qualityEnabled: false,
+      qualityVideo: "hd720",
+      qualityPlaylist: "hd720",
+      qualityFullscreenEnabled: false,
+      qualityFullscreenVideo: "hd1080",
+      qualityFullscreenPlaylist: "hd1080",
+      qualityRestoreOnExit: true
     };
     const CHECK_INTERVAL = 500;
     const FORCE_SKIP_RETRY_MS = 120;
@@ -84,7 +91,14 @@
       rightMouseDown: false,
       lastUserPlaybackIntentAt: 0,
       autoplayVideo: null,
-      tabPlaybackToken: Date.now() + "-" + Math.random().toString(36).slice(2)
+      tabPlaybackToken: Date.now() + "-" + Math.random().toString(36).slice(2),
+      qualityVideoKey: "",
+      qualityRequestKey: "",
+      qualityRequestStartedAt: 0,
+      qualityLastAttemptAt: 0,
+      qualityAppliedKey: "",
+      fullscreenQualityMode: false,
+      preFullscreenQuality: null
     };
     let adblockObserver = null;
     let adblockBodyWaitObserver = null;
@@ -131,7 +145,14 @@
               autoplayBlockBackground: false,
               autoplayBlockForeground: false,
               autoplayAllowPlaylists: true,
-              pauseBackgroundTabs: false
+              pauseBackgroundTabs: false,
+              qualityEnabled: false,
+              qualityVideo: "hd720",
+              qualityPlaylist: "hd720",
+              qualityFullscreenEnabled: false,
+              qualityFullscreenVideo: "hd1080",
+              qualityFullscreenPlaylist: "hd1080",
+              qualityRestoreOnExit: true
             },
             (s) => {
               config.enabled = !!s.enabled;
@@ -163,6 +184,13 @@
               config.autoplayBlockForeground = !!s.autoplayBlockForeground;
               config.autoplayAllowPlaylists = s.autoplayAllowPlaylists !== false;
               config.pauseBackgroundTabs = !!s.pauseBackgroundTabs;
+              config.qualityEnabled = !!s.qualityEnabled;
+              config.qualityVideo = normalizeQualityLevel(s.qualityVideo, "hd720");
+              config.qualityPlaylist = normalizeQualityLevel(s.qualityPlaylist, "hd720");
+              config.qualityFullscreenEnabled = !!s.qualityFullscreenEnabled;
+              config.qualityFullscreenVideo = normalizeQualityLevel(s.qualityFullscreenVideo, "hd1080");
+              config.qualityFullscreenPlaylist = normalizeQualityLevel(s.qualityFullscreenPlaylist, "hd1080");
+              config.qualityRestoreOnExit = s.qualityRestoreOnExit !== false;
               adState.warningCount = s.warningCount || 0;
               adState.totalSkipped = s.totalAdsSkipped || 0;
               adState.adsSkippedToday = s.adsSkippedToday || 0;
@@ -240,6 +268,31 @@
         if (changes.autoplayBlockForeground) config.autoplayBlockForeground = !!changes.autoplayBlockForeground.newValue;
         if (changes.autoplayAllowPlaylists) config.autoplayAllowPlaylists = changes.autoplayAllowPlaylists.newValue !== false;
         if (changes.pauseBackgroundTabs) config.pauseBackgroundTabs = !!changes.pauseBackgroundTabs.newValue;
+        if (changes.qualityEnabled) {
+          config.qualityEnabled = !!changes.qualityEnabled.newValue;
+          resetQualityState();
+        }
+        if (changes.qualityVideo) {
+          config.qualityVideo = normalizeQualityLevel(changes.qualityVideo.newValue, "hd720");
+          resetQualityState();
+        }
+        if (changes.qualityPlaylist) {
+          config.qualityPlaylist = normalizeQualityLevel(changes.qualityPlaylist.newValue, "hd720");
+          resetQualityState();
+        }
+        if (changes.qualityFullscreenEnabled) {
+          config.qualityFullscreenEnabled = !!changes.qualityFullscreenEnabled.newValue;
+          resetQualityState();
+        }
+        if (changes.qualityFullscreenVideo) {
+          config.qualityFullscreenVideo = normalizeQualityLevel(changes.qualityFullscreenVideo.newValue, "hd1080");
+          resetQualityState();
+        }
+        if (changes.qualityFullscreenPlaylist) {
+          config.qualityFullscreenPlaylist = normalizeQualityLevel(changes.qualityFullscreenPlaylist.newValue, "hd1080");
+          resetQualityState();
+        }
+        if (changes.qualityRestoreOnExit) config.qualityRestoreOnExit = changes.qualityRestoreOnExit.newValue !== false;
         if (changes.tubeShieldActivePlayback) {
           handleExternalPlaybackSignal(changes.tubeShieldActivePlayback.newValue);
         }
@@ -445,6 +498,152 @@
       }
       return target;
     }
+    const QUALITY_ORDER = ["tiny", "small", "medium", "large", "hd720", "hd1080", "hd1440", "hd2160", "hd2880", "highres"];
+    const QUALITY_ALLOWED = ["auto", ...QUALITY_ORDER];
+    function normalizeQualityLevel(level, fallback = "hd720") {
+      const value = String(level || "");
+      return QUALITY_ALLOWED.includes(value) ? value : fallback;
+    }
+    function resetQualityState() {
+      adState.qualityRequestKey = "";
+      adState.qualityRequestStartedAt = 0;
+      adState.qualityLastAttemptAt = 0;
+      adState.qualityAppliedKey = "";
+    }
+    function getCurrentQualityLevel() {
+      const player = getYouTubePlayer();
+      try {
+        if (player && typeof player.getPlaybackQuality === "function") {
+          return normalizeQualityLevel(player.getPlaybackQuality(), "");
+        }
+      } catch (err) {
+      }
+      return "";
+    }
+    function getAvailableQualityLevels() {
+      const player = getYouTubePlayer();
+      try {
+        if (player && typeof player.getAvailableQualityLevels === "function") {
+          const levels = player.getAvailableQualityLevels();
+          if (Array.isArray(levels)) {
+            return levels.map((level) => normalizeQualityLevel(level, "")).filter((level) => level && level !== "auto");
+          }
+        }
+      } catch (err) {
+      }
+      return [];
+    }
+    function pickAvailableQuality(target) {
+      const normalizedTarget = normalizeQualityLevel(target);
+      if (normalizedTarget === "auto") return "auto";
+      const available = getAvailableQualityLevels();
+      if (available.length === 0) return normalizedTarget;
+      if (available.includes(normalizedTarget)) return normalizedTarget;
+      const targetRank = QUALITY_ORDER.indexOf(normalizedTarget);
+      let best = "";
+      let bestRank = -1;
+      for (const level of available) {
+        const rank = QUALITY_ORDER.indexOf(level);
+        if (rank >= 0 && rank <= targetRank && rank > bestRank) {
+          best = level;
+          bestRank = rank;
+        }
+      }
+      if (best) return best;
+      return available.slice().sort((a, b) => QUALITY_ORDER.indexOf(b) - QUALITY_ORDER.indexOf(a))[0] || normalizedTarget;
+    }
+    function setPlaybackQuality(target) {
+      const player = getYouTubePlayer();
+      if (!player) return false;
+      const level = pickAvailableQuality(target);
+      let attempted = false;
+      try {
+        if (typeof player.setPlaybackQualityRange === "function") {
+          if (level === "auto") {
+            player.setPlaybackQualityRange("auto");
+          } else {
+            player.setPlaybackQualityRange(level, level);
+          }
+          attempted = true;
+        }
+      } catch (err) {
+      }
+      try {
+        if (typeof player.setPlaybackQuality === "function") {
+          player.setPlaybackQuality(level);
+          attempted = true;
+        }
+      } catch (err) {
+      }
+      return attempted;
+    }
+    function isFullscreenMode() {
+      const player = getYouTubePlayer();
+      return !!document.fullscreenElement || !!player?.classList?.contains("ytp-fullscreen");
+    }
+    function getQualityTarget(fullscreen = isFullscreenMode()) {
+      const playlist = isPlaylistContext();
+      if (fullscreen && config.qualityFullscreenEnabled) {
+        return playlist ? config.qualityFullscreenPlaylist : config.qualityFullscreenVideo;
+      }
+      if (config.qualityEnabled) {
+        return playlist ? config.qualityPlaylist : config.qualityVideo;
+      }
+      return "";
+    }
+    function applyQualityTarget(target, contextKey) {
+      if (!target) return;
+      const requestKey = contextKey + ":" + target;
+      const now = Date.now();
+      if (adState.qualityAppliedKey === requestKey) return;
+      if (adState.qualityRequestKey !== requestKey) {
+        adState.qualityRequestKey = requestKey;
+        adState.qualityRequestStartedAt = now;
+        adState.qualityLastAttemptAt = 0;
+      }
+      if (now - adState.qualityLastAttemptAt < 900) return;
+      adState.qualityLastAttemptAt = now;
+      const attempted = setPlaybackQuality(target);
+      const current = getCurrentQualityLevel();
+      const picked = pickAvailableQuality(target);
+      const matched = target === "auto" || current === picked || current === target;
+      if (matched || attempted && now - adState.qualityRequestStartedAt > 2400 || now - adState.qualityRequestStartedAt > 8e3) {
+        adState.qualityAppliedKey = requestKey;
+      }
+    }
+    function applyQualityPreferences() {
+      if (!config.enabled || adState.active || getAdPlaying()) return;
+      const video = getActiveVideo();
+      if (!video) return;
+      const key = getCurrentVideoKey();
+      const fullscreen = isFullscreenMode();
+      if (key !== adState.qualityVideoKey) {
+        adState.qualityVideoKey = key;
+        adState.fullscreenQualityMode = false;
+        adState.preFullscreenQuality = null;
+        resetQualityState();
+      }
+      if (fullscreen && config.qualityFullscreenEnabled) {
+        if (!adState.fullscreenQualityMode) {
+          adState.fullscreenQualityMode = true;
+          adState.preFullscreenQuality = getCurrentQualityLevel();
+          resetQualityState();
+        }
+        applyQualityTarget(getQualityTarget(true), key + ":fullscreen");
+        return;
+      }
+      if (adState.fullscreenQualityMode) {
+        const restoreLevel = config.qualityRestoreOnExit ? adState.preFullscreenQuality : "";
+        adState.fullscreenQualityMode = false;
+        adState.preFullscreenQuality = null;
+        resetQualityState();
+        if (restoreLevel) {
+          applyQualityTarget(restoreLevel, key + ":restore");
+          return;
+        }
+      }
+      applyQualityTarget(getQualityTarget(false), key + ":normal");
+    }
     function applyPlayerPreferences() {
       if (!config.enabled || adState.active || getAdPlaying()) return;
       const video = getActiveVideo();
@@ -463,6 +662,7 @@
         setUserVolume(config.playerVolumeDefault, false, video);
         adState.defaultVolumeAppliedKey = key;
       }
+      applyQualityPreferences();
     }
     function isPointerInsidePlayer(target) {
       if (!target || !(target instanceof Element)) return false;

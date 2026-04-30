@@ -289,12 +289,15 @@
             </div>
           </article>
           <article class="card card--module">
-            <div class="card-header"><span>Qualidade de reproducao</span><span class="tag tag--stage">BASE</span></div>
+            <div class="card-header"><span>Qualidade de reproducao</span><span class="tag tag--safe">ATIVO</span></div>
             <div class="card-body control-stack">
-              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Selecionar automaticamente</span></div><label class="switch"><input type="checkbox" disabled><span class="switch-track"></span></label></div>
-              <label class="field-row"><span>Videos</span><select class="control-input" disabled><option>720p</option></select></label>
-              <label class="field-row"><span>Playlists</span><select class="control-input" disabled><option>720p</option></select></label>
-              <label class="field-row"><span>Tela cheia</span><select class="control-input" disabled><option>1080p HD</option></select></label>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Selecionar automaticamente</span><span class="opt-desc">Escolhe a qualidade ao abrir um video novo.</span></div><label class="switch"><input type="checkbox" id="opt-quality-enabled"><span class="switch-track"></span></label></div>
+              <label class="field-row"><span>Videos</span><select class="control-input" id="opt-quality-video"><option value="auto">Auto</option><option value="large">480p</option><option value="hd720">720p HD</option><option value="hd1080">1080p HD</option><option value="hd1440">1440p</option><option value="hd2160">2160p 4K</option><option value="highres">Maxima</option></select></label>
+              <label class="field-row"><span>Playlists</span><select class="control-input" id="opt-quality-playlist"><option value="auto">Auto</option><option value="large">480p</option><option value="hd720">720p HD</option><option value="hd1080">1080p HD</option><option value="hd1440">1440p</option><option value="hd2160">2160p 4K</option><option value="highres">Maxima</option></select></label>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Qualidade para tela cheia</span><span class="opt-desc">Usa outro alvo quando o player entra em tela cheia.</span></div><label class="switch"><input type="checkbox" id="opt-quality-fullscreen-enabled"><span class="switch-track"></span></label></div>
+              <label class="field-row"><span>Videos em tela cheia</span><select class="control-input" id="opt-quality-fullscreen-video"><option value="auto">Auto</option><option value="large">480p</option><option value="hd720">720p HD</option><option value="hd1080">1080p HD</option><option value="hd1440">1440p</option><option value="hd2160">2160p 4K</option><option value="highres">Maxima</option></select></label>
+              <label class="field-row"><span>Playlists em tela cheia</span><select class="control-input" id="opt-quality-fullscreen-playlist"><option value="auto">Auto</option><option value="large">480p</option><option value="hd720">720p HD</option><option value="hd1080">1080p HD</option><option value="hd1440">1440p</option><option value="hd2160">2160p 4K</option><option value="highres">Maxima</option></select></label>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Restaurar ao sair da tela cheia</span></div><label class="switch"><input type="checkbox" id="opt-quality-restore"><span class="switch-track"></span></label></div>
             </div>
           </article>
           <article class="card card--module">

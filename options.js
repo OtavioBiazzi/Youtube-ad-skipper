@@ -34,7 +34,14 @@
     autoplayBlockBackground: false,
     autoplayBlockForeground: false,
     autoplayAllowPlaylists: true,
-    pauseBackgroundTabs: false
+    pauseBackgroundTabs: false,
+    qualityEnabled: false,
+    qualityVideo: "hd720",
+    qualityPlaylist: "hd720",
+    qualityFullscreenEnabled: false,
+    qualityFullscreenVideo: "hd1080",
+    qualityFullscreenPlaylist: "hd1080",
+    qualityRestoreOnExit: true
   };
   const SAFE_AD_SPEED_RATE = 3;
   const MIN_AD_SPEED_RATE = 1;
@@ -95,6 +102,13 @@
   const optAutoplayForeground = byId("opt-autoplay-foreground");
   const optAutoplayAllowPlaylists = byId("opt-autoplay-allow-playlists");
   const optPauseBackgroundTabs = byId("opt-pause-background-tabs");
+  const optQualityEnabled = byId("opt-quality-enabled");
+  const optQualityVideo = byId("opt-quality-video");
+  const optQualityPlaylist = byId("opt-quality-playlist");
+  const optQualityFullscreenEnabled = byId("opt-quality-fullscreen-enabled");
+  const optQualityFullscreenVideo = byId("opt-quality-fullscreen-video");
+  const optQualityFullscreenPlaylist = byId("opt-quality-fullscreen-playlist");
+  const optQualityRestore = byId("opt-quality-restore");
   let currentWhitelist = [];
   let initialState = null;
   chrome.storage.local.get(DEFAULT, (s) => {
@@ -127,6 +141,13 @@
     optAutoplayForeground.checked = !!s.autoplayBlockForeground;
     optAutoplayAllowPlaylists.checked = s.autoplayAllowPlaylists !== false;
     optPauseBackgroundTabs.checked = !!s.pauseBackgroundTabs;
+    optQualityEnabled.checked = !!s.qualityEnabled;
+    optQualityVideo.value = normalizeQuality(s.qualityVideo);
+    optQualityPlaylist.value = normalizeQuality(s.qualityPlaylist);
+    optQualityFullscreenEnabled.checked = !!s.qualityFullscreenEnabled;
+    optQualityFullscreenVideo.value = normalizeQuality(s.qualityFullscreenVideo);
+    optQualityFullscreenPlaylist.value = normalizeQuality(s.qualityFullscreenPlaylist);
+    optQualityRestore.checked = s.qualityRestoreOnExit !== false;
     if (!s.aggressiveSkip && s.instantSkip) {
       chrome.storage.local.set({ instantSkip: false });
     }
@@ -139,6 +160,7 @@
     renderTimingControls();
     renderPlayerControlLocks();
     renderAutoplayControlLocks();
+    renderQualityControlLocks();
     const now = /* @__PURE__ */ new Date();
     const today = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0");
     const todayCount = s.todayDate === today ? s.adsSkippedToday || 0 : 0;
@@ -291,6 +313,29 @@
   optPauseBackgroundTabs.addEventListener("change", () => {
     chrome.storage.local.set({ pauseBackgroundTabs: optPauseBackgroundTabs.checked });
   });
+  optQualityEnabled.addEventListener("change", () => {
+    chrome.storage.local.set({ qualityEnabled: optQualityEnabled.checked });
+    renderQualityControlLocks();
+  });
+  optQualityVideo.addEventListener("change", () => {
+    chrome.storage.local.set({ qualityVideo: normalizeQuality(optQualityVideo.value) });
+  });
+  optQualityPlaylist.addEventListener("change", () => {
+    chrome.storage.local.set({ qualityPlaylist: normalizeQuality(optQualityPlaylist.value) });
+  });
+  optQualityFullscreenEnabled.addEventListener("change", () => {
+    chrome.storage.local.set({ qualityFullscreenEnabled: optQualityFullscreenEnabled.checked });
+    renderQualityControlLocks();
+  });
+  optQualityFullscreenVideo.addEventListener("change", () => {
+    chrome.storage.local.set({ qualityFullscreenVideo: normalizeQuality(optQualityFullscreenVideo.value) });
+  });
+  optQualityFullscreenPlaylist.addEventListener("change", () => {
+    chrome.storage.local.set({ qualityFullscreenPlaylist: normalizeQuality(optQualityFullscreenPlaylist.value) });
+  });
+  optQualityRestore.addEventListener("change", () => {
+    chrome.storage.local.set({ qualityRestoreOnExit: optQualityRestore.checked });
+  });
   btnReset.addEventListener("click", () => {
     if (confirm("Isso vai resetar todas as configurações e zerar o contador de anúncios e avisos. Continuar?")) {
       chrome.storage.local.set(DEFAULT, () => {
@@ -435,6 +480,10 @@
     if (!Number.isFinite(n) || n <= 0) return DEFAULT.playerVolumeStep;
     return Math.min(25, Math.max(1, Math.round(n)));
   }
+  function normalizeQuality(value) {
+    const valid = ["auto", "large", "hd720", "hd1080", "hd1440", "hd2160", "highres"];
+    return valid.includes(value) ? value : DEFAULT.qualityVideo;
+  }
   function formatControlNumber(value) {
     return value.toFixed(2).replace(/\.?0+$/, "");
   }
@@ -497,6 +546,13 @@
   function renderAutoplayControlLocks() {
     const blockingAutoplay = optAutoplayBackground.checked || optAutoplayForeground.checked;
     optAutoplayAllowPlaylists.disabled = !blockingAutoplay;
+  }
+  function renderQualityControlLocks() {
+    optQualityVideo.disabled = !optQualityEnabled.checked;
+    optQualityPlaylist.disabled = !optQualityEnabled.checked;
+    optQualityFullscreenVideo.disabled = !optQualityFullscreenEnabled.checked;
+    optQualityFullscreenPlaylist.disabled = !optQualityFullscreenEnabled.checked;
+    optQualityRestore.disabled = !optQualityFullscreenEnabled.checked;
   }
   function renderAdSpeed(delay, manualSpeed, state = getTimingState()) {
     let speed = getSafeAdaptiveSpeed(delay);
@@ -676,6 +732,19 @@
     }
     if (changes.autoplayAllowPlaylists) optAutoplayAllowPlaylists.checked = changes.autoplayAllowPlaylists.newValue !== false;
     if (changes.pauseBackgroundTabs) optPauseBackgroundTabs.checked = !!changes.pauseBackgroundTabs.newValue;
+    if (changes.qualityEnabled) {
+      optQualityEnabled.checked = !!changes.qualityEnabled.newValue;
+      renderQualityControlLocks();
+    }
+    if (changes.qualityVideo) optQualityVideo.value = normalizeQuality(changes.qualityVideo.newValue);
+    if (changes.qualityPlaylist) optQualityPlaylist.value = normalizeQuality(changes.qualityPlaylist.newValue);
+    if (changes.qualityFullscreenEnabled) {
+      optQualityFullscreenEnabled.checked = !!changes.qualityFullscreenEnabled.newValue;
+      renderQualityControlLocks();
+    }
+    if (changes.qualityFullscreenVideo) optQualityFullscreenVideo.value = normalizeQuality(changes.qualityFullscreenVideo.newValue);
+    if (changes.qualityFullscreenPlaylist) optQualityFullscreenPlaylist.value = normalizeQuality(changes.qualityFullscreenPlaylist.newValue);
+    if (changes.qualityRestoreOnExit) optQualityRestore.checked = changes.qualityRestoreOnExit.newValue !== false;
     if (changes.totalAdsSkipped) {
       animateCounter(statTotal, Number(changes.totalAdsSkipped.newValue) || 0);
     }
