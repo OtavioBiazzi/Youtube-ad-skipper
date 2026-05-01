@@ -368,7 +368,7 @@
             </div>
           </article>
           <article class="card card--module">
-            <div class="card-header"><span>Tema e CSS customizado</span><span class="tag tag--stage">MAPA</span></div>
+            <div class="card-header"><span>Tema e CSS customizado</span><span class="tag tag--on">FUNCIONAL</span></div>
             <div class="card-body control-stack">
               <label class="field-row"><span>Motor de tema</span><select class="control-input" data-setting="themeEngine"><option value="tube-shield" selected>YouTube Extension</option><option value="youtube">YouTube oficial</option><option value="enhancer">Enhancer style</option><option value="deepdark">YouTube-DeepDark</option><option value="custom">Personalizado</option></select></label>
               <label class="field-row"><span>Variante</span><select class="control-input" data-setting="themeVariant"><option value="red" selected>Red</option><option value="deep-dark">Deep Dark</option><option value="gray">Gray</option><option value="blue">Blue</option></select></label>
@@ -382,7 +382,10 @@
               <textarea class="control-input code-textarea" data-setting="themeCustomCss" rows="5">body {
   --yt-spec-base-background: #0f0f0f;
 }</textarea>
-              <button class="outline-action" type="button" data-setting-action="themeReset">Redefinir tema</button>
+              <div class="action-row">
+                <button class="outline-action" type="button" data-setting-action="themeSave">Salvar tema/CSS</button>
+                <button class="outline-action" type="button" data-setting-action="themeReset">Redefinir tema</button>
+              </div>
             </div>
           </article>
         </div>
@@ -453,10 +456,11 @@
             </div>
           </article>
           <article class="card card--module">
-            <div class="card-header"><span>Codecs e formatos</span><span class="tag tag--stage">MAPA</span></div>
+            <div class="card-header"><span>Codecs e formatos</span><span class="tag tag--on">FUNCIONAL</span></div>
             <div class="card-body control-stack">
-              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Forcar FPS padrao 24/25/30</span></div><label class="switch"><input type="checkbox" data-setting="codecForceStandardFps"><span class="switch-track"></span></label></div>
-              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Forcar MP4 + AVC (H.264)</span><span class="opt-desc">Limita formatos WebM/VP9 quando possivel.</span></div><label class="switch"><input type="checkbox" data-setting="codecForceAvc"><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Forcar FPS padrao 24/25/30</span><span class="opt-desc">Filtra formatos acima de 30 FPS quando o player recebe as opcoes.</span></div><label class="switch"><input type="checkbox" data-setting="codecForceStandardFps"><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Forcar MP4 + AVC (H.264)</span><span class="opt-desc">Filtra WebM/VP9/AV1 quando houver MP4 AVC disponivel.</span></div><label class="switch"><input type="checkbox" data-setting="codecForceAvc"><span class="switch-track"></span></label></div>
+              <div class="module-note">Recarregue o video depois de mudar codecs para o YouTube pedir uma nova lista de formatos.</div>
             </div>
           </article>
         </div>

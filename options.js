@@ -236,7 +236,7 @@
   const optToolbarSettings = byId("opt-toolbar-settings");
   let currentWhitelist = [];
   let initialState = null;
-  chrome.storage.local.get(DEFAULT, (s) => {
+  chrome.storage.local.get({ ...DEFAULT, ...PLANNED_DEFAULTS }, (s) => {
     if ((Number(s.playerDefaultsProfileVersion) || 0) < PLAYER_DEFAULTS_PROFILE_VERSION) {
       Object.assign(s, PLAYER_DEFAULTS_PROFILE, { playerDefaultsProfileVersion: PLAYER_DEFAULTS_PROFILE_VERSION });
       chrome.storage.local.set({
@@ -683,6 +683,10 @@
             themeCustomCss: PLANNED_DEFAULTS.themeCustomCss
           };
           chrome.storage.local.set(resetValues, loadPlannedSettings);
+        } else if (action === "themeSave") {
+          persistPlannedControls();
+          updateCinemaPreview();
+          flashBorder(button, "var(--green)");
         } else if (action === "customScriptSave") {
           persistPlannedControls();
           flashBorder(button, "var(--green)");
@@ -1002,7 +1006,7 @@
   }
   function checkRestartWarning() {
     if (!initialState) return;
-    chrome.storage.local.get(DEFAULT, (current) => {
+    chrome.storage.local.get({ ...DEFAULT, ...PLANNED_DEFAULTS }, (current) => {
       const needsReload = [
         "enabled",
         "adSkipperEnabled",
@@ -1015,11 +1019,14 @@
         "pipEnabled",
         "adSpeedRate",
         "customSpeedEnabled",
-        "adaptiveSpeedEnabled"
+        "adaptiveSpeedEnabled",
+        "codecForceStandardFps",
+        "codecForceAvc"
       ];
       let changed = false;
       for (const key of needsReload) {
-        if (current[key] !== initialState[key]) {
+        const initialValue = key in initialState ? initialState[key] : PLANNED_DEFAULTS[key];
+        if (current[key] !== initialValue) {
           changed = true;
           break;
         }

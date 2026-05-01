@@ -4,12 +4,149 @@
     const MAX_AD_RATE = 16;
     const originalAddEventListener = HTMLElement.prototype.addEventListener;
     const originalRemoveEventListener = HTMLElement.prototype.removeEventListener;
+    const originalJsonParse = JSON.parse.bind(JSON);
+    const originalResponseJson = typeof Response !== "undefined" ? Response.prototype.json : null;
     const nativeCurrentTime = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, "currentTime");
     const nativePlaybackRate = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, "playbackRate");
     const wrappedListeners = /* @__PURE__ */ new WeakMap();
     const MAIN_FORCE_SKIP_MESSAGE = "yt-ad-skipper:force-skip";
     const MAIN_SPEED_THROUGH_MESSAGE = "yt-ad-skipper:speed-through";
     const MAIN_FORCE_SKIP_RESULT = "yt-ad-skipper:force-skip-result";
+    const CODEC_SETTINGS_MESSAGE = "youtube-extension:codec-settings";
+    const CODEC_SETTINGS_STORAGE_KEY = "youtubeExtensionCodecSettings";
+    let codecSettings = readCodecSettings();
+    function normalizeCodecSettings(settings = {}) {
+      return {
+        forceStandardFps: !!settings.forceStandardFps,
+        forceAvc: !!settings.forceAvc
+      };
+    }
+    function readCodecSettings() {
+      try {
+        return normalizeCodecSettings(originalJsonParse(localStorage.getItem(CODEC_SETTINGS_STORAGE_KEY) || "{}"));
+      } catch (err) {
+        return normalizeCodecSettings();
+      }
+    }
+    function hasCodecFilters() {
+      return !!codecSettings.forceStandardFps || !!codecSettings.forceAvc;
+    }
+    function isAudioFormat(format) {
+      const mime = String(format?.mimeType || "").toLowerCase();
+      return mime.startsWith("audio/") || !format?.width && !format?.height && !mime.startsWith("video/");
+    }
+    function isAvcFormat(format) {
+      const mime = String(format?.mimeType || "").toLowerCase();
+      return mime.includes("video/mp4") && mime.includes("avc1");
+    }
+    function hasStandardFps(format) {
+      const fps = Number(format?.fps || 0);
+      return !Number.isFinite(fps) || fps <= 0 || fps <= 30;
+    }
+    function formatAllowed(format) {
+      if (!format || isAudioFormat(format)) return true;
+      if (codecSettings.forceAvc && !isAvcFormat(format)) return false;
+      if (codecSettings.forceStandardFps && !hasStandardFps(format)) return false;
+      return true;
+    }
+    function filterFormatList(list) {
+      if (!Array.isArray(list) || !hasCodecFilters()) return list;
+      const filtered = list.filter(formatAllowed);
+      const keptVideo = filtered.some((format) => !isAudioFormat(format));
+      const hadVideo = list.some((format) => !isAudioFormat(format));
+      return hadVideo && !keptVideo ? list : filtered;
+    }
+    function filterStreamingData(streamingData) {
+      if (!streamingData || typeof streamingData !== "object" || !hasCodecFilters()) return streamingData;
+      if (Array.isArray(streamingData.formats)) {
+        streamingData.formats = filterFormatList(streamingData.formats);
+      }
+      if (Array.isArray(streamingData.adaptiveFormats)) {
+        streamingData.adaptiveFormats = filterFormatList(streamingData.adaptiveFormats);
+      }
+      if (codecSettings.forceAvc || codecSettings.forceStandardFps) {
+        delete streamingData.dashManifestUrl;
+        delete streamingData.hlsManifestUrl;
+      }
+      return streamingData;
+    }
+    function filterPlayerResponse(response, depth = 0) {
+      if (!response || typeof response !== "object" || !hasCodecFilters() || depth > 4) return response;
+      if (response.streamingData) {
+        filterStreamingData(response.streamingData);
+      }
+      if (response.playerResponse && typeof response.playerResponse === "string") {
+        try {
+          const parsed = originalJsonParse(response.playerResponse);
+          filterPlayerResponse(parsed, depth + 1);
+          response.playerResponse = JSON.stringify(parsed);
+        } catch (err) {
+        }
+      }
+      const keys = ["playerResponse", "response", "data"];
+      for (const key of keys) {
+        if (response[key] && typeof response[key] === "object" && response[key] !== response) {
+          filterPlayerResponse(response[key], depth + 1);
+        }
+      }
+      return response;
+    }
+    function applyCodecFiltersToKnownGlobals() {
+      if (!hasCodecFilters()) return;
+      try {
+        const pageWindow = window;
+        if (pageWindow.ytInitialPlayerResponse) filterPlayerResponse(pageWindow.ytInitialPlayerResponse);
+      } catch (err) {
+      }
+      try {
+        const pageWindow = window;
+        const args = pageWindow.ytplayer?.config?.args;
+        if (args?.raw_player_response) {
+          if (typeof args.raw_player_response === "string") {
+            const parsed = originalJsonParse(args.raw_player_response);
+            filterPlayerResponse(parsed);
+            args.raw_player_response = JSON.stringify(parsed);
+          } else {
+            filterPlayerResponse(args.raw_player_response);
+          }
+        }
+      } catch (err) {
+      }
+    }
+    function installPlayerResponseSetter() {
+      try {
+        const pageWindow = window;
+        let currentValue = pageWindow.ytInitialPlayerResponse;
+        Object.defineProperty(pageWindow, "ytInitialPlayerResponse", {
+          configurable: true,
+          get() {
+            return currentValue;
+          },
+          set(value) {
+            currentValue = filterPlayerResponse(value);
+          }
+        });
+        if (currentValue) currentValue = filterPlayerResponse(currentValue);
+      } catch (err) {
+      }
+    }
+    function updateCodecSettings(settings) {
+      codecSettings = normalizeCodecSettings(settings);
+      try {
+        localStorage.setItem(CODEC_SETTINGS_STORAGE_KEY, JSON.stringify(codecSettings));
+      } catch (err) {
+      }
+      applyCodecFiltersToKnownGlobals();
+    }
+    JSON.parse = function(text, reviver) {
+      const parsed = originalJsonParse(text, reviver);
+      return filterPlayerResponse(parsed);
+    };
+    if (originalResponseJson) {
+      Response.prototype.json = function(...args) {
+        return originalResponseJson.apply(this, args).then((result) => filterPlayerResponse(result));
+      };
+    }
     function getCapture(options) {
       return typeof options === "boolean" ? options : !!(options && options.capture);
     }
@@ -169,6 +306,10 @@
     window.addEventListener("message", (event) => {
       if (event.source !== window) return;
       const data = event.data || {};
+      if (data.source === CODEC_SETTINGS_MESSAGE) {
+        updateCodecSettings(data.settings || {});
+        return;
+      }
       if (data.source === MAIN_FORCE_SKIP_MESSAGE) {
         const result = forceSkipFromMainWorld(data.rate);
         window.postMessage({ source: MAIN_FORCE_SKIP_RESULT, ...result }, "*");
@@ -178,6 +319,16 @@
         setSpeedThrough(normalizePlaybackRate(data.rate));
       }
     });
+    installPlayerResponseSetter();
+    applyCodecFiltersToKnownGlobals();
+    document.addEventListener("yt-navigate-start", applyCodecFiltersToKnownGlobals, true);
+    document.addEventListener("yt-navigate-finish", applyCodecFiltersToKnownGlobals, true);
+    let codecGlobalChecks = 0;
+    const codecGlobalTimer = window.setInterval(() => {
+      codecGlobalChecks += 1;
+      applyCodecFiltersToKnownGlobals();
+      if (codecGlobalChecks >= 40) window.clearInterval(codecGlobalTimer);
+    }, 250);
     HTMLElement.prototype.addEventListener = function(type, listener, options) {
       let isSkipButton = false;
       try {

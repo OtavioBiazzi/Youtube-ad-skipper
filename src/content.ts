@@ -112,6 +112,15 @@ declare global {
     ultrawideFit: "smart-crop",
     toolbarInsidePlayer: false,
     toolbarAlwaysVisible: false,
+    themeEngine: "tube-shield",
+    themeVariant: "red",
+    themeDeepDarkCustom: false,
+    themeCustomAccent: "#ff334b",
+    themeCustomBackground: "#0f0f0f",
+    themeCustomText: "#f4f5f7",
+    themeCustomCss: "",
+    codecForceStandardFps: false,
+    codecForceAvc: false,
     customScriptEnabled: false,
     customScriptCode: "",
     customScriptAutoRun: false,
@@ -135,6 +144,8 @@ declare global {
   const MAIN_FORCE_SKIP_MESSAGE = "yt-ad-skipper:force-skip";
   const MAIN_SPEED_THROUGH_MESSAGE = "yt-ad-skipper:speed-through";
   const MAIN_FORCE_SKIP_RESULT = "yt-ad-skipper:force-skip-result";
+  const CODEC_SETTINGS_MESSAGE = "youtube-extension:codec-settings";
+  const CODEC_SETTINGS_STORAGE_KEY = "youtubeExtensionCodecSettings";
   const PLAYER_DEFAULTS_PROFILE_VERSION = 1;
   const PLAYER_DEFAULTS_PROFILE = {
     playerSpeedEnabled: true,
@@ -263,7 +274,10 @@ declare global {
             appearanceAutoTheater: false, appearanceAutoExpandPlayer: false, appearanceUseViewportPlayer: false,
             cinemaColor: "#000000", cinemaOpacity: 85, cinemaDefault: false, cinemaAutoResize: false,
             cinemaUseYouTubeTheater: true, ultrawideEnabled: false, ultrawideFit: "smart-crop",
-            toolbarInsidePlayer: false, toolbarAlwaysVisible: false, customScriptEnabled: false,
+            toolbarInsidePlayer: false, toolbarAlwaysVisible: false, themeEngine: "tube-shield",
+            themeVariant: "red", themeDeepDarkCustom: false, themeCustomAccent: "#ff334b",
+            themeCustomBackground: "#0f0f0f", themeCustomText: "#f4f5f7", themeCustomCss: "",
+            codecForceStandardFps: false, codecForceAvc: false, customScriptEnabled: false,
             customScriptCode: "", customScriptAutoRun: false, customScriptRunAt: 0,
           },
           (s) => {
@@ -365,6 +379,15 @@ declare global {
             config.ultrawideFit = normalizeUltrawideFit(s.ultrawideFit);
             config.toolbarInsidePlayer = !!s.toolbarInsidePlayer;
             config.toolbarAlwaysVisible = !!s.toolbarAlwaysVisible;
+            config.themeEngine = normalizeThemeEngine(s.themeEngine);
+            config.themeVariant = normalizeThemeVariant(s.themeVariant);
+            config.themeDeepDarkCustom = !!s.themeDeepDarkCustom;
+            config.themeCustomAccent = normalizeHexColor(s.themeCustomAccent, "#ff334b");
+            config.themeCustomBackground = normalizeHexColor(s.themeCustomBackground, "#0f0f0f");
+            config.themeCustomText = normalizeHexColor(s.themeCustomText, "#f4f5f7");
+            config.themeCustomCss = String(s.themeCustomCss || "");
+            config.codecForceStandardFps = !!s.codecForceStandardFps;
+            config.codecForceAvc = !!s.codecForceAvc;
             config.customScriptEnabled = !!s.customScriptEnabled;
             config.customScriptCode = String(s.customScriptCode || "");
             config.customScriptAutoRun = !!s.customScriptAutoRun;
@@ -634,6 +657,31 @@ declare global {
         config.toolbarAlwaysVisible = !!changes.toolbarAlwaysVisible.newValue;
         updatePlayerToolbar();
       }
+      const themeKeys = [
+        "themeEngine", "themeVariant", "themeDeepDarkCustom", "themeCustomAccent",
+        "themeCustomBackground", "themeCustomText", "themeCustomCss"
+      ];
+      let themeChanged = false;
+      themeKeys.forEach((key) => {
+        if (!changes[key]) return;
+        if (key === "themeEngine") config.themeEngine = normalizeThemeEngine(changes[key].newValue);
+        else if (key === "themeVariant") config.themeVariant = normalizeThemeVariant(changes[key].newValue);
+        else if (key === "themeDeepDarkCustom") config.themeDeepDarkCustom = !!changes[key].newValue;
+        else if (key === "themeCustomAccent") config.themeCustomAccent = normalizeHexColor(changes[key].newValue, "#ff334b");
+        else if (key === "themeCustomBackground") config.themeCustomBackground = normalizeHexColor(changes[key].newValue, "#0f0f0f");
+        else if (key === "themeCustomText") config.themeCustomText = normalizeHexColor(changes[key].newValue, "#f4f5f7");
+        else if (key === "themeCustomCss") config.themeCustomCss = String(changes[key].newValue || "");
+        themeChanged = true;
+      });
+      if (themeChanged) applyAppearanceFilters();
+      if (changes.codecForceStandardFps) {
+        config.codecForceStandardFps = !!changes.codecForceStandardFps.newValue;
+        syncCodecSettingsToMainWorld();
+      }
+      if (changes.codecForceAvc) {
+        config.codecForceAvc = !!changes.codecForceAvc.newValue;
+        syncCodecSettingsToMainWorld();
+      }
       if (changes.customScriptEnabled) config.customScriptEnabled = !!changes.customScriptEnabled.newValue;
       if (changes.customScriptCode) config.customScriptCode = String(changes.customScriptCode.newValue || "");
       if (changes.customScriptAutoRun) config.customScriptAutoRun = !!changes.customScriptAutoRun.newValue;
@@ -886,6 +934,16 @@ declare global {
     return ["smart-crop", "contain", "stretch"].includes(text) ? text : "smart-crop";
   }
 
+  function normalizeThemeEngine(value) {
+    const text = String(value || "");
+    return ["youtube", "tube-shield", "enhancer", "deepdark", "custom"].includes(text) ? text : "tube-shield";
+  }
+
+  function normalizeThemeVariant(value) {
+    const text = String(value || "");
+    return ["red", "deep-dark", "gray", "blue"].includes(text) ? text : "red";
+  }
+
   function normalizeShortcutText(value, fallback = "") {
     const text = String(value || "").trim();
     return text || fallback;
@@ -938,6 +996,21 @@ declare global {
   function shortcutMatches(event, combo) {
     const wanted = normalizeShortcutCombo(combo);
     return !!wanted && eventToShortcutCombo(event) === wanted;
+  }
+
+  function getCodecSettings() {
+    return {
+      forceStandardFps: !!config.codecForceStandardFps,
+      forceAvc: !!config.codecForceAvc,
+    };
+  }
+
+  function syncCodecSettingsToMainWorld() {
+    const settings = getCodecSettings();
+    try {
+      localStorage.setItem(CODEC_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+    } catch (err) {}
+    window.postMessage({ source: CODEC_SETTINGS_MESSAGE, settings }, "*");
   }
 
   function parseMiniplayerSize(size = config.miniplayerSize) {
@@ -1196,8 +1269,154 @@ declare global {
 
   const APPEARANCE_STYLE_ID = "tube-shield-appearance-style";
 
+  function getThemePalette() {
+    const engine = normalizeThemeEngine(config.themeEngine);
+    const variant = normalizeThemeVariant(config.themeVariant);
+
+    const palettes = {
+      red: {
+        accent: "#ff334b",
+        background: "#0f1014",
+        surface: "#17191f",
+        surfaceRaised: "#20232b",
+        text: "#f4f5f7",
+        muted: "#a9adb8",
+        border: "#323642",
+      },
+      "deep-dark": {
+        accent: "#e02f42",
+        background: "#07080a",
+        surface: "#101116",
+        surfaceRaised: "#171a20",
+        text: "#f5f5f6",
+        muted: "#a3a6ad",
+        border: "#292d35",
+      },
+      gray: {
+        accent: "#d43f52",
+        background: "#15161a",
+        surface: "#202227",
+        surfaceRaised: "#2a2d34",
+        text: "#f0f2f5",
+        muted: "#aeb3bd",
+        border: "#393e47",
+      },
+      blue: {
+        accent: "#4f7fc2",
+        background: "#0e1117",
+        surface: "#171d27",
+        surfaceRaised: "#202838",
+        text: "#f3f6fb",
+        muted: "#aab4c3",
+        border: "#313b4f",
+      },
+    };
+
+    if (engine === "custom") {
+      const background = normalizeHexColor(config.themeCustomBackground, "#0f0f0f");
+      return {
+        accent: normalizeHexColor(config.themeCustomAccent, "#ff334b"),
+        background,
+        surface: background,
+        surfaceRaised: background,
+        text: normalizeHexColor(config.themeCustomText, "#f4f5f7"),
+        muted: "#a9adb8",
+        border: "#343741",
+      };
+    }
+
+    if (engine === "deepdark") return palettes["deep-dark"];
+    if (engine === "enhancer") return palettes.red;
+    return palettes[variant] || palettes.red;
+  }
+
+  function buildThemeCss() {
+    const engine = normalizeThemeEngine(config.themeEngine);
+    if (engine === "youtube") return "";
+
+    const palette = getThemePalette();
+    const customCss = String(config.themeCustomCss || "").trim();
+    const allowCustomCss = engine === "custom" || (engine === "deepdark" && config.themeDeepDarkCustom);
+
+    return `
+      html,
+      ytd-app,
+      #content,
+      #page-manager,
+      ytd-browse,
+      ytd-watch-flexy {
+        --yt-spec-base-background: ${palette.background} !important;
+        --yt-spec-raised-background: ${palette.surfaceRaised} !important;
+        --yt-spec-menu-background: ${palette.surfaceRaised} !important;
+        --yt-spec-brand-background-solid: ${palette.background} !important;
+        --yt-spec-general-background-a: ${palette.background} !important;
+        --yt-spec-general-background-b: ${palette.surface} !important;
+        --yt-spec-general-background-c: ${palette.surfaceRaised} !important;
+        --yt-spec-text-primary: ${palette.text} !important;
+        --yt-spec-text-secondary: ${palette.muted} !important;
+        --yt-spec-call-to-action: ${palette.accent} !important;
+        --yt-spec-themed-blue: ${palette.accent} !important;
+        --yt-spec-static-brand-red: ${palette.accent} !important;
+        background: ${palette.background} !important;
+        color: ${palette.text} !important;
+      }
+
+      ytd-masthead,
+      #masthead-container,
+      tp-yt-paper-dialog,
+      ytd-popup-container,
+      ytd-menu-popup-renderer,
+      ytd-multi-page-menu-renderer,
+      ytd-guide-renderer,
+      ytd-mini-guide-renderer,
+      ytd-rich-grid-renderer,
+      ytd-watch-flexy #secondary-inner,
+      ytd-comments,
+      ytd-live-chat-frame {
+        background: ${palette.surface} !important;
+        color: ${palette.text} !important;
+      }
+
+      ytd-video-renderer,
+      ytd-rich-item-renderer,
+      ytd-compact-video-renderer,
+      ytd-grid-video-renderer,
+      ytd-playlist-panel-video-renderer {
+        color: ${palette.text} !important;
+      }
+
+      ytd-thumbnail-overlay-time-status-renderer,
+      .ytp-chrome-bottom .ytp-progress-list,
+      .ytp-volume-slider-handle,
+      .ytp-play-progress,
+      .ytp-swatch-background-color {
+        background-color: ${palette.accent} !important;
+      }
+
+      a,
+      yt-formatted-string a,
+      #video-title:hover,
+      ytd-toggle-button-renderer[is-icon-button][style-target="button"] yt-icon {
+        color: ${palette.accent} !important;
+      }
+
+      ytd-rich-item-renderer,
+      ytd-video-renderer,
+      ytd-comment-thread-renderer,
+      ytd-playlist-panel-video-renderer,
+      #sections.ytd-guide-renderer > ytd-guide-section-renderer {
+        border-color: ${palette.border} !important;
+      }
+
+      ${allowCustomCss && customCss ? customCss : ""}
+    `;
+  }
+
   function buildAppearanceCss() {
     const blocks: string[] = [];
+
+    const themeCss = buildThemeCss();
+    if (themeCss) blocks.push(themeCss);
 
     if (config.appearanceHideShorts) {
       blocks.push(`
@@ -1317,6 +1536,13 @@ declare global {
       config.appearanceUseViewportPlayer,
       config.ultrawideEnabled,
       config.ultrawideFit,
+      config.themeEngine,
+      config.themeVariant,
+      config.themeDeepDarkCustom,
+      config.themeCustomAccent,
+      config.themeCustomBackground,
+      config.themeCustomText,
+      config.themeCustomCss,
       location.pathname,
     ].join(":");
 
@@ -3343,6 +3569,7 @@ declare global {
     if (isInIframe()) return;
     loadSettings().then(() => {
       // garantir que as configurações foram carregadas antes de iniciar o loop
+      syncCodecSettingsToMainWorld();
       if (isAdSkipperActive()) startAdblockProtection();
       try { mainLoop(); } catch (e) {}
       setInterval(mainLoop, CHECK_INTERVAL);

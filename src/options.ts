@@ -326,7 +326,7 @@ let initialState: OptionsSettings | null = null;
 
 // ── Load ─────────────────────────────────────────
 
-chrome.storage.local.get(DEFAULT, (s: OptionsSettings) => {
+chrome.storage.local.get({ ...DEFAULT, ...PLANNED_DEFAULTS } as Record<string, any>, (s: any) => {
   if ((Number(s.playerDefaultsProfileVersion) || 0) < PLAYER_DEFAULTS_PROFILE_VERSION) {
     Object.assign(s, PLAYER_DEFAULTS_PROFILE, { playerDefaultsProfileVersion: PLAYER_DEFAULTS_PROFILE_VERSION });
     chrome.storage.local.set({
@@ -867,6 +867,10 @@ function bindPlannedSettingEvents() {
           themeCustomCss: PLANNED_DEFAULTS.themeCustomCss,
         };
         chrome.storage.local.set(resetValues, loadPlannedSettings);
+      } else if (action === "themeSave") {
+        persistPlannedControls();
+        updateCinemaPreview();
+        flashBorder(button, "var(--green)");
       } else if (action === "customScriptSave") {
         persistPlannedControls();
         flashBorder(button, "var(--green)");
@@ -1233,15 +1237,17 @@ function renderWarnings(count: number) {
 
 function checkRestartWarning() {
   if (!initialState) return;
-  chrome.storage.local.get(DEFAULT, (current: OptionsSettings) => {
-    const needsReload: Array<keyof OptionsSettings> = [
+  chrome.storage.local.get({ ...DEFAULT, ...PLANNED_DEFAULTS } as Record<string, any>, (current: Record<string, any>) => {
+    const needsReload = [
       'enabled', 'adSkipperEnabled', 'skipDelay', 'muteAds', 'showOverlay', 'aggressiveSkip', 'listMode',
-      'instantSkip', 'pipEnabled', 'adSpeedRate', 'customSpeedEnabled', 'adaptiveSpeedEnabled'
+      'instantSkip', 'pipEnabled', 'adSpeedRate', 'customSpeedEnabled', 'adaptiveSpeedEnabled',
+      'codecForceStandardFps', 'codecForceAvc'
     ];
     let changed = false;
     
     for (const key of needsReload) {
-      if (current[key] !== initialState[key]) { changed = true; break; }
+      const initialValue = key in initialState ? (initialState as unknown as Record<string, PlannedSettingValue>)[key] : PLANNED_DEFAULTS[key];
+      if (current[key] !== initialValue) { changed = true; break; }
     }
     
     if (!changed && JSON.stringify(current.whitelist) !== JSON.stringify(initialState.whitelist)) {
