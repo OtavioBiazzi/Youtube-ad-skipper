@@ -3162,8 +3162,11 @@
         return true;
       }
     }
+    function isSupportedEmbedFrame() {
+      return /^\/embed\//.test(location.pathname);
+    }
     function init() {
-      if (isInIframe()) return;
+      if (isInIframe() && !isSupportedEmbedFrame()) return;
       loadSettings().then(() => {
         syncCodecSettingsToMainWorld();
         if (isAdSkipperActive()) startAdblockProtection();

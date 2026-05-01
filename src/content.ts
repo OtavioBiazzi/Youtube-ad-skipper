@@ -3565,8 +3565,12 @@ declare global {
     try { return window.self !== window.top; } catch (e) { return true; }
   }
 
+  function isSupportedEmbedFrame() {
+    return /^\/embed\//.test(location.pathname);
+  }
+
   function init() {
-    if (isInIframe()) return;
+    if (isInIframe() && !isSupportedEmbedFrame()) return;
     loadSettings().then(() => {
       // garantir que as configurações foram carregadas antes de iniciar o loop
       syncCodecSettingsToMainWorld();

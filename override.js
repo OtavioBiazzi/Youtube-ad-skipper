@@ -138,13 +138,28 @@
       }
       applyCodecFiltersToKnownGlobals();
     }
+    function textLooksLikePlayerResponse(text) {
+      return typeof text === "string" && (text.includes('"streamingData"') || text.includes('"adaptiveFormats"') || text.includes('"playerResponse"'));
+    }
+    function responseLooksLikePlayerEndpoint(response) {
+      const url = String(response?.url || "");
+      return url.includes("/youtubei/v1/player") || url.includes("/get_video_info") || url.includes("/player?");
+    }
+    function resultLooksLikePlayerResponse(result) {
+      return !!result && typeof result === "object" && (!!result.streamingData || !!result.playerResponse || !!result.response?.streamingData || !!result.data?.streamingData);
+    }
     JSON.parse = function(text, reviver) {
       const parsed = originalJsonParse(text, reviver);
-      return filterPlayerResponse(parsed);
+      return textLooksLikePlayerResponse(text) ? filterPlayerResponse(parsed) : parsed;
     };
     if (originalResponseJson) {
       Response.prototype.json = function(...args) {
-        return originalResponseJson.apply(this, args).then((result) => filterPlayerResponse(result));
+        return originalResponseJson.apply(this, args).then((result) => {
+          if (responseLooksLikePlayerEndpoint(this) || resultLooksLikePlayerResponse(result)) {
+            return filterPlayerResponse(result);
+          }
+          return result;
+        });
       };
     }
     function getCapture(options) {
