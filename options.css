@@ -62,8 +62,17 @@ body.theme-light {
     var(--bg);
 }
 
-body * {
-  transition: background-color 0.4s ease, border-color 0.4s ease, color 0.4s ease, box-shadow 0.4s ease;
+.card,
+.module-nav,
+.theme-toggle,
+.switch-track,
+.control-input,
+.outline-action,
+.about-link,
+.tag,
+.warning-box,
+.nav-link {
+  transition: background-color 0.25s ease, border-color 0.25s ease, color 0.25s ease, box-shadow 0.25s ease;
 }
 
 /* ── Page Container ── */
@@ -746,6 +755,21 @@ kbd {
   border-color: var(--accent);
   color: var(--text);
   background: var(--accent-dim);
+}
+
+.about-link svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.about-link--warning {
+  color: var(--yellow);
 }
 
 .btn-reset {

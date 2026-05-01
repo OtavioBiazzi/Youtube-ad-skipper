@@ -320,6 +320,7 @@ const optToolbarPip = byId<HTMLInputElement>("opt-toolbar-pip");
 const optToolbarScreenshot = byId<HTMLInputElement>("opt-toolbar-screenshot");
 const optToolbarTheater = byId<HTMLInputElement>("opt-toolbar-theater");
 const optToolbarSettings = byId<HTMLInputElement>("opt-toolbar-settings");
+const optToolbarVolumeBoost = document.querySelector<HTMLInputElement>('[data-setting="toolbarVolumeBoost"]');
 
 let currentWhitelist: string[] = [];
 let initialState: OptionsSettings | null = null;
@@ -798,17 +799,63 @@ function setPlannedControlValue(control: HTMLInputElement | HTMLSelectElement | 
 }
 
 function readPlannedControlValue(control: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement): PlannedSettingValue {
+  const key = getPlannedKey(control);
+  if (control instanceof HTMLInputElement && isShortcutSettingKey(key)) {
+    return normalizeShortcutCombo(control.value) || PLANNED_DEFAULTS[key] || "";
+  }
+
   if (control instanceof HTMLInputElement && control.type === "checkbox") {
     return control.checked;
   }
 
   if (control instanceof HTMLInputElement && control.type === "number") {
     const value = Number(control.value);
-    const key = getPlannedKey(control);
     return Number.isFinite(value) ? value : PLANNED_DEFAULTS[key] || 0;
   }
 
   return control.value;
+}
+
+function isShortcutSettingKey(key: string) {
+  return /^shortcut[A-Z]/.test(key);
+}
+
+function normalizeShortcutToken(token: string) {
+  const raw = String(token || "");
+  if (raw === " ") return "Space";
+  const text = raw.trim();
+  if (!text) return "";
+  const lower = text.toLowerCase();
+  if (lower === "control" || lower === "ctrl") return "Ctrl";
+  if (lower === "option" || lower === "alt") return "Alt";
+  if (lower === "shift") return "Shift";
+  if (lower === "cmd" || lower === "command" || lower === "meta") return "Meta";
+  if (lower === "escape" || lower === "esc") return "Esc";
+  if (lower === "spacebar") return "Space";
+  if (lower.length === 1) return lower.toUpperCase();
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+function normalizeShortcutCombo(combo: string) {
+  const parts = String(combo || "")
+    .split("+")
+    .map(normalizeShortcutToken)
+    .filter(Boolean);
+  const modifiers = ["Ctrl", "Alt", "Shift", "Meta"].filter(mod => parts.includes(mod));
+  const key = parts.find(part => !["Ctrl", "Alt", "Shift", "Meta"].includes(part)) || "";
+  return [...modifiers, key].filter(Boolean).join("+");
+}
+
+function shortcutFromKeyboardEvent(event: KeyboardEvent) {
+  const key = normalizeShortcutToken(event.key);
+  if (!key || ["Ctrl", "Alt", "Shift", "Meta"].includes(key)) return "";
+  return [
+    event.ctrlKey ? "Ctrl" : "",
+    event.altKey ? "Alt" : "",
+    event.shiftKey ? "Shift" : "",
+    event.metaKey ? "Meta" : "",
+    key,
+  ].filter(Boolean).join("+");
 }
 
 function loadPlannedSettings() {
@@ -837,13 +884,44 @@ function bindPlannedSettingEvents() {
   plannedControls.forEach((control) => {
     if (control.dataset.bound === "true") return;
     control.dataset.bound = "true";
+    const key = getPlannedKey(control);
 
     const persist = () => {
-      const key = getPlannedKey(control);
       if (!key) return;
-      chrome.storage.local.set({ [key]: readPlannedControlValue(control) });
+      const value = readPlannedControlValue(control);
+      if (control instanceof HTMLInputElement && isShortcutSettingKey(key)) {
+        control.value = String(value);
+      }
+      chrome.storage.local.set({ [key]: value });
       if (key.startsWith("cinema")) updateCinemaPreview();
     };
+
+    if (control instanceof HTMLInputElement && isShortcutSettingKey(key)) {
+      control.placeholder = "Pressione as teclas";
+      control.addEventListener("keydown", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        if (event.key === "Escape") {
+          control.blur();
+          return;
+        }
+
+        if (event.key === "Backspace" || event.key === "Delete") {
+          const fallback = PLANNED_DEFAULTS[key] || "";
+          control.value = String(fallback);
+          chrome.storage.local.set({ [key]: fallback });
+          flashBorder(control, "var(--orange)");
+          return;
+        }
+
+        const combo = shortcutFromKeyboardEvent(event);
+        if (!combo) return;
+        control.value = combo;
+        chrome.storage.local.set({ [key]: combo });
+        flashBorder(control, "var(--accent)");
+      });
+    }
 
     control.addEventListener("change", persist);
     if (!(control instanceof HTMLInputElement) || control.type !== "checkbox") {
@@ -941,7 +1019,11 @@ function importSettingsBackup(button: HTMLElement) {
     reader.addEventListener("load", () => {
       try {
         const parsed = JSON.parse(String(reader.result || "{}"));
-        const settings = parsed.settings && typeof parsed.settings === "object" ? parsed.settings : parsed;
+        const rawSettings = parsed.settings && typeof parsed.settings === "object" ? parsed.settings : parsed;
+        const allowedKeys = new Set([...Object.keys(DEFAULT), ...Object.keys(PLANNED_DEFAULTS)]);
+        const settings = Object.fromEntries(
+          Object.entries(rawSettings).filter(([key]) => allowedKeys.has(key))
+        );
         chrome.storage.local.set(settings, () => {
           flashBorder(button, "var(--green)");
           location.reload();
@@ -1174,6 +1256,7 @@ function renderToolbarControlLocks() {
   optToolbarScreenshot.disabled = disabled;
   optToolbarTheater.disabled = disabled;
   optToolbarSettings.disabled = disabled;
+  if (optToolbarVolumeBoost) optToolbarVolumeBoost.disabled = disabled;
 }
 
 function renderAdSpeed(delay: number, manualSpeed: number, state = getTimingState()) {
@@ -1239,8 +1322,6 @@ function checkRestartWarning() {
   if (!initialState) return;
   chrome.storage.local.get({ ...DEFAULT, ...PLANNED_DEFAULTS } as Record<string, any>, (current: Record<string, any>) => {
     const needsReload = [
-      'enabled', 'adSkipperEnabled', 'skipDelay', 'muteAds', 'showOverlay', 'aggressiveSkip', 'listMode',
-      'instantSkip', 'pipEnabled', 'adSpeedRate', 'customSpeedEnabled', 'adaptiveSpeedEnabled',
       'codecForceStandardFps', 'codecForceAvc'
     ];
     let changed = false;
@@ -1250,10 +1331,6 @@ function checkRestartWarning() {
       if (current[key] !== initialValue) { changed = true; break; }
     }
     
-    if (!changed && JSON.stringify(current.whitelist) !== JSON.stringify(initialState.whitelist)) {
-      changed = true;
-    }
-
     const initialSpeed = normalizeAdSpeed(initialState.adSpeedRate);
     const currentSpeed = normalizeAdSpeed(current.adSpeedRate);
     const currentDelay = Number(current.skipDelay) || DEFAULT.skipDelay;
@@ -1269,7 +1346,7 @@ function checkRestartWarning() {
         current.skipDelay !== initialState.skipDelay
       ))
     );
-    renderRestartBanner(changed, riskySpeedChange);
+    renderRestartBanner(changed || riskySpeedChange, riskySpeedChange);
   });
 }
 
@@ -1278,8 +1355,8 @@ function renderRestartBanner(visible: boolean, riskySpeedChange: boolean) {
   f5Banner.style.display = visible ? "block" : "none";
   f5Banner.classList.toggle("f5-banner--danger", riskySpeedChange);
   f5Banner.textContent = riskySpeedChange
-    ? "Recarregue os vídeos do YouTube (F5) para aplicar. Aceleração acima de 3x pode aumentar o risco de identificação."
-    : "Configurações alteradas! Recarregue os vídeos do YouTube (F5) para aplicar.";
+    ? "Alteracao aplicada ao vivo. Aceleracao acima de 3x pode aumentar o risco de identificacao pelo YouTube."
+    : "Codecs e formatos podem exigir recarregar o video atual (F5) para pegar respostas ja carregadas.";
 }
 
 chrome.storage.onChanged.addListener((changes) => {

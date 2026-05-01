@@ -533,6 +533,43 @@ body {
 
 /* ── Settings Gear Button ─────────────────────── */
 
+.popup-footer {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+}
+
+.popup-footer a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-3);
+  text-decoration: none;
+}
+
+.popup-footer a:hover {
+  color: var(--text);
+}
+
+.popup-footer-dot {
+  color: var(--text-3);
+  opacity: 0.5;
+}
+
+.popup-footer svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .header-settings {
   background: none;
   border: 1px solid var(--border);

@@ -34,6 +34,9 @@
       playerVolumeStep: 5,
       playerVolumeWheel: false,
       playerVolumeWheelRightButton: false,
+      volumeBoostEnabled: false,
+      volumeBoostLevel: 2,
+      volumeBoostAuto: false,
       playerWheelInvert: false,
       autoplayBlockBackground: true,
       autoplayBlockForeground: false,
@@ -68,6 +71,7 @@
       toolbarScreenshot: true,
       toolbarTheater: true,
       toolbarSettings: true,
+      toolbarVolumeBoost: true,
       playerSpeedButtonsEnabled: true,
       shortcutSkipAd: "Shift+S",
       shortcutSpeedDown: "Ctrl+,",
@@ -153,6 +157,7 @@
       toolbarScreenshot: true,
       toolbarTheater: true,
       toolbarSettings: true,
+      toolbarVolumeBoost: true,
       playerSpeedButtonsEnabled: true,
       playerPopupEnabled: true
     };
@@ -209,6 +214,8 @@
     let miniplayerUpdateRaf = 0;
     let adWatchdogVideo = null;
     let adWatchdogTimeout = null;
+    const volumeBoostGraphs = /* @__PURE__ */ new WeakMap();
+    let playerFeedbackTimer = null;
     function humanDelay(baseMs) {
       if (baseMs <= 0) return 0;
       const jitter = baseMs * (0.85 + Math.random() * 0.3);
@@ -249,6 +256,9 @@
               playerVolumeStep: 5,
               playerVolumeWheel: false,
               playerVolumeWheelRightButton: false,
+              volumeBoostEnabled: false,
+              volumeBoostLevel: 2,
+              volumeBoostAuto: false,
               playerWheelInvert: false,
               autoplayBlockBackground: true,
               autoplayBlockForeground: false,
@@ -283,6 +293,7 @@
               toolbarScreenshot: true,
               toolbarTheater: true,
               toolbarSettings: true,
+              toolbarVolumeBoost: true,
               playerSpeedButtonsEnabled: true,
               shortcutSkipAd: "Shift+S",
               shortcutSpeedDown: "Ctrl+,",
@@ -361,6 +372,9 @@
               config.playerVolumeStep = normalizeVolumeStep(s.playerVolumeStep);
               config.playerVolumeWheel = !!s.playerVolumeWheel;
               config.playerVolumeWheelRightButton = !!s.playerVolumeWheelRightButton;
+              config.volumeBoostEnabled = !!s.volumeBoostEnabled;
+              config.volumeBoostLevel = normalizeVolumeBoostLevel(s.volumeBoostLevel);
+              config.volumeBoostAuto = !!s.volumeBoostAuto;
               config.playerWheelInvert = !!s.playerWheelInvert;
               config.autoplayBlockBackground = !!s.autoplayBlockBackground;
               config.autoplayBlockForeground = !!s.autoplayBlockForeground;
@@ -395,6 +409,7 @@
               config.toolbarScreenshot = s.toolbarScreenshot !== false;
               config.toolbarTheater = s.toolbarTheater !== false;
               config.toolbarSettings = s.toolbarSettings !== false;
+              config.toolbarVolumeBoost = s.toolbarVolumeBoost !== false;
               config.playerSpeedButtonsEnabled = s.playerSpeedButtonsEnabled !== false;
               config.shortcutSkipAd = normalizeShortcutText(s.shortcutSkipAd, "Shift+S");
               config.shortcutSpeedDown = normalizeShortcutText(s.shortcutSpeedDown, "Ctrl+,");
@@ -523,6 +538,19 @@
         if (changes.playerVolumeStep) config.playerVolumeStep = normalizeVolumeStep(changes.playerVolumeStep.newValue);
         if (changes.playerVolumeWheel) config.playerVolumeWheel = !!changes.playerVolumeWheel.newValue;
         if (changes.playerVolumeWheelRightButton) config.playerVolumeWheelRightButton = !!changes.playerVolumeWheelRightButton.newValue;
+        if (changes.volumeBoostEnabled) {
+          config.volumeBoostEnabled = !!changes.volumeBoostEnabled.newValue;
+          applyVolumeBoost();
+          updatePlayerToolbar();
+        }
+        if (changes.volumeBoostLevel) {
+          config.volumeBoostLevel = normalizeVolumeBoostLevel(changes.volumeBoostLevel.newValue);
+          applyVolumeBoost();
+        }
+        if (changes.volumeBoostAuto) {
+          config.volumeBoostAuto = !!changes.volumeBoostAuto.newValue;
+          applyVolumeBoost();
+        }
         if (changes.playerWheelInvert) config.playerWheelInvert = !!changes.playerWheelInvert.newValue;
         if (changes.autoplayBlockBackground) config.autoplayBlockBackground = !!changes.autoplayBlockBackground.newValue;
         if (changes.autoplayBlockForeground) config.autoplayBlockForeground = !!changes.autoplayBlockForeground.newValue;
@@ -636,6 +664,10 @@
         }
         if (changes.toolbarSettings) {
           config.toolbarSettings = changes.toolbarSettings.newValue !== false;
+          updatePlayerToolbar();
+        }
+        if (changes.toolbarVolumeBoost) {
+          config.toolbarVolumeBoost = changes.toolbarVolumeBoost.newValue !== false;
           updatePlayerToolbar();
         }
         if (changes.playerSpeedButtonsEnabled) {
@@ -907,6 +939,11 @@
       if (!Number.isFinite(n) || n <= 0) return 5;
       return Math.min(25, Math.max(1, Math.round(n)));
     }
+    function normalizeVolumeBoostLevel(level) {
+      const n = Number(level);
+      if (!Number.isFinite(n) || n < 1) return 2;
+      return Math.min(6, Math.max(1, Math.round(n * 4) / 4));
+    }
     function normalizeMiniplayerSize(size) {
       const value = String(size || "");
       return ["360x203", "480x270", "640x360"].includes(value) ? value : "480x270";
@@ -960,7 +997,9 @@
       return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || element.isContentEditable;
     }
     function normalizeShortcutToken(token) {
-      const text = String(token || "").trim();
+      const raw = String(token || "");
+      if (raw === " ") return "Space";
+      const text = raw.trim();
       if (!text) return "";
       const lower = text.toLowerCase();
       if (lower === "control") return "Ctrl";
@@ -1073,6 +1112,55 @@
       } catch (err) {
       }
       return target;
+    }
+    function shouldUseVolumeBoost() {
+      return !!config.enabled && !!config.volumeBoostEnabled && normalizeVolumeBoostLevel(config.volumeBoostLevel) > 1;
+    }
+    function ensureVolumeBoostGraph(video) {
+      if (!video) return null;
+      const existing = volumeBoostGraphs.get(video);
+      if (existing) return existing;
+      const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextCtor) return null;
+      const context = new AudioContextCtor();
+      const source = context.createMediaElementSource(video);
+      const gain = context.createGain();
+      source.connect(gain);
+      gain.connect(context.destination);
+      const graph = { context, source, gain };
+      volumeBoostGraphs.set(video, graph);
+      return graph;
+    }
+    function applyVolumeBoost(video = getActiveVideo(), showFeedback = false) {
+      if (!video) return false;
+      const enabled = shouldUseVolumeBoost();
+      const level = enabled ? normalizeVolumeBoostLevel(config.volumeBoostLevel) : 1;
+      try {
+        const graph = enabled ? ensureVolumeBoostGraph(video) : volumeBoostGraphs.get(video);
+        if (!graph) return false;
+        graph.gain.gain.value = level;
+        if (enabled && graph.context.state === "suspended") {
+          graph.context.resume().catch(() => {
+          });
+        }
+        if (showFeedback) {
+          showPlayerFeedback("volume", enabled ? "Boost " + level + "x" : "Boost off", enabled ? "Volume acima de 100%" : "Volume normal");
+        }
+        updatePlayerToolbarStates();
+        return enabled;
+      } catch (err) {
+        console.warn("[YouTube Extension] Volume boost unavailable:", err);
+        if (showFeedback) showPlayerFeedback("volume", "Boost indisponivel", "O navegador bloqueou o audio graph");
+        return false;
+      }
+    }
+    function setVolumeBoostEnabled(enabled, video = getActiveVideo()) {
+      config.volumeBoostEnabled = !!enabled;
+      try {
+        chrome.storage.local.set({ volumeBoostEnabled: config.volumeBoostEnabled });
+      } catch (err) {
+      }
+      return applyVolumeBoost(video, true);
     }
     const QUALITY_ORDER = ["tiny", "small", "medium", "large", "hd720", "hd1080", "hd1440", "hd2160", "hd2880", "highres"];
     const QUALITY_ALLOWED = ["auto", ...QUALITY_ORDER];
@@ -1600,6 +1688,81 @@
     function toggleCinemaMode() {
       setCinemaMode(!adState.cinemaActive);
     }
+    const PLAYER_FEEDBACK_ID = "youtube-extension-player-feedback";
+    const PLAYER_FEEDBACK_STYLE_ID = "youtube-extension-player-feedback-style";
+    function ensurePlayerFeedbackStyle() {
+      if (document.getElementById(PLAYER_FEEDBACK_STYLE_ID)) return;
+      const style = document.createElement("style");
+      style.id = PLAYER_FEEDBACK_STYLE_ID;
+      style.textContent = `
+      #${PLAYER_FEEDBACK_ID} {
+        position: fixed !important;
+        z-index: 2147483600 !important;
+        min-width: 132px !important;
+        max-width: min(260px, calc(100vw - 32px)) !important;
+        padding: 10px 14px !important;
+        border-radius: 999px !important;
+        border: 1px solid rgba(255, 255, 255, 0.18) !important;
+        background: rgba(10, 10, 12, 0.84) !important;
+        color: #fff !important;
+        box-shadow: 0 18px 50px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
+        backdrop-filter: blur(14px) saturate(1.1) !important;
+        -webkit-backdrop-filter: blur(14px) saturate(1.1) !important;
+        font: 700 13px/1.15 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+        letter-spacing: 0 !important;
+        text-align: center !important;
+        pointer-events: none !important;
+        opacity: 0 !important;
+        transform: translate(-50%, -50%) scale(0.96) !important;
+        transition: opacity 150ms ease, transform 150ms ease !important;
+      }
+
+      #${PLAYER_FEEDBACK_ID}.is-visible {
+        opacity: 1 !important;
+        transform: translate(-50%, -50%) scale(1) !important;
+      }
+
+      #${PLAYER_FEEDBACK_ID} .feedback-label {
+        display: block !important;
+        color: rgba(255, 255, 255, 0.68) !important;
+        font-size: 10px !important;
+        font-weight: 650 !important;
+        text-transform: uppercase !important;
+      }
+
+      #${PLAYER_FEEDBACK_ID} .feedback-value {
+        display: block !important;
+        margin-top: 2px !important;
+        color: #fff !important;
+        font-size: 18px !important;
+      }
+    `;
+      (document.head || document.documentElement).appendChild(style);
+    }
+    function showPlayerFeedback(kind, value, label = "") {
+      const player = getYouTubePlayer();
+      const rect = player?.getBoundingClientRect?.();
+      if (!rect || rect.width <= 0 || rect.height <= 0) return;
+      ensurePlayerFeedbackStyle();
+      let feedback = document.getElementById(PLAYER_FEEDBACK_ID);
+      if (!feedback) {
+        feedback = document.createElement("div");
+        feedback.id = PLAYER_FEEDBACK_ID;
+        document.body.appendChild(feedback);
+      }
+      feedback.innerHTML = `
+      <span class="feedback-label">${kind === "volume" ? "Volume" : "Velocidade"}</span>
+      <span class="feedback-value">${value}</span>
+      ${label ? `<span class="feedback-label">${label}</span>` : ""}
+    `;
+      feedback.style.left = Math.round(rect.left + rect.width / 2) + "px";
+      feedback.style.top = Math.round(rect.top + rect.height * 0.23) + "px";
+      feedback.classList.add("is-visible");
+      if (playerFeedbackTimer) window.clearTimeout(playerFeedbackTimer);
+      playerFeedbackTimer = window.setTimeout(() => {
+        feedback?.classList.remove("is-visible");
+      }, 950);
+    }
     const MINIPLAYER_STYLE_ID = "tube-shield-miniplayer-style";
     const MINIPLAYER_ACTIVE_CLASS = "tube-shield-miniplayer-active";
     function getPlayerAnchor() {
@@ -1607,16 +1770,17 @@
     }
     function getMiniplayerPositionCss() {
       const margin = "18px";
+      const topOffset = "72px";
       switch (normalizeMiniplayerPosition(config.miniplayerPosition)) {
         case "top-right":
-          return `top: ${margin}; right: ${margin};`;
+          return `top: ${topOffset}; right: ${margin};`;
         case "bottom-left":
           return `bottom: ${margin}; left: ${margin};`;
         case "bottom-right":
           return `bottom: ${margin}; right: ${margin};`;
         case "top-left":
         default:
-          return `top: ${margin}; left: ${margin};`;
+          return `top: ${topOffset}; left: ${margin};`;
       }
     }
     function buildMiniplayerCss() {
@@ -1626,7 +1790,7 @@
         position: fixed !important;
         ${getMiniplayerPositionCss()}
         width: min(${size.width}px, calc(100vw - 36px)) !important;
-        height: min(${size.height}px, calc(100vh - 36px)) !important;
+        height: min(${size.height}px, calc(100vh - 90px)) !important;
         z-index: 2147483000 !important;
         border-radius: 10px !important;
         overflow: hidden !important;
@@ -1711,6 +1875,7 @@
         actions.push({ action: "speed-down", title: "Diminuir velocidade", icon: "speed-down" });
         actions.push({ action: "speed-up", title: "Aumentar velocidade", icon: "speed-up" });
       }
+      if (config.toolbarVolumeBoost) actions.push({ action: "volume-boost", title: "Volume boost", icon: "volume-boost" });
       if (config.toolbarPopup && config.playerPopupEnabled !== false) actions.push({ action: "popup", title: "Abrir em pop-up", icon: "popup" });
       if (config.toolbarPip) actions.push({ action: "pip", title: "Picture-in-Picture", icon: "pip" });
       if (config.toolbarScreenshot) actions.push({ action: "screenshot", title: "Capturar frame", icon: "camera" });
@@ -1799,7 +1964,19 @@
       #${PLAYER_TOOLBAR_ID} svg {
         width: 18px;
         height: 18px;
+        color: currentColor !important;
+        stroke: currentColor !important;
+        fill: none !important;
         pointer-events: none;
+      }
+
+      #${PLAYER_TOOLBAR_ID} svg [fill="currentColor"] {
+        fill: currentColor !important;
+        stroke: none !important;
+      }
+
+      #${PLAYER_TOOLBAR_ID} svg * {
+        vector-effect: non-scaling-stroke;
       }
 
       html.${MINIPLAYER_ACTIVE_CLASS} #${PLAYER_TOOLBAR_ID} {
@@ -1832,6 +2009,8 @@
           return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 5l-7 7 7 7"/></svg>';
         case "speed-up":
           return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>';
+        case "volume-boost":
+          return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16 9.5a4 4 0 0 1 0 5"/><path d="M19 8v8"/><path d="M22 12h-6"/></svg>';
         case "popup":
           return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M14 9h4v4"/><path d="M13 14l5-5"/></svg>';
         case "pip":
@@ -1868,6 +2047,7 @@
         config.toolbarScreenshot,
         config.toolbarTheater,
         config.toolbarSettings,
+        config.toolbarVolumeBoost,
         config.playerSpeedButtonsEnabled,
         config.playerPopupEnabled,
         config.toolbarInsidePlayer,
@@ -1891,6 +2071,8 @@
       pipButton?.classList.toggle("is-active", !!document.pictureInPictureElement);
       const theaterButton = toolbar.querySelector('[data-toolbar-action="theater"]');
       theaterButton?.classList.toggle("is-active", !!adState.cinemaActive);
+      const boostButton = toolbar.querySelector('[data-toolbar-action="volume-boost"]');
+      boostButton?.classList.toggle("is-active", shouldUseVolumeBoost());
     }
     function updatePlayerToolbar() {
       if (!config.enabled || !config.toolbarEnabled || !isWatchPage()) {
@@ -2015,6 +2197,11 @@
         const current = getCurrentPlaybackRate(video);
         const next = normalizeUserPlaybackRate(current + direction * normalizePlayerSpeedStep(config.playerSpeedStep), current);
         setUserPlaybackRate(next, video);
+        showPlayerFeedback("speed", next + "x");
+        return;
+      }
+      if (action === "volume-boost") {
+        setVolumeBoostEnabled(!config.volumeBoostEnabled, video);
         return;
       }
       if (action === "popup") {
@@ -2055,6 +2242,9 @@
         setUserVolume(config.playerVolumeDefault, false, video);
         adState.defaultVolumeAppliedKey = key;
       }
+      if (config.volumeBoostEnabled && config.volumeBoostAuto) {
+        applyVolumeBoost(video);
+      }
       applyQualityPreferences();
     }
     function isPointerInsidePlayer(target) {
@@ -2079,6 +2269,7 @@
         const current = getCurrentPlaybackRate(video);
         const next = normalizeUserPlaybackRate(current + direction * normalizePlayerSpeedStep(config.playerSpeedStep), current);
         setUserPlaybackRate(next, video);
+        showPlayerFeedback("speed", next + "x");
         return;
       }
       if (config.playerVolumeWheel && !event.ctrlKey && (!config.playerVolumeWheelRightButton || rightButtonHeld)) {
@@ -2087,6 +2278,8 @@
         const current = video ? Math.round(video.volume * 100) : 50;
         const next = normalizeVolumePercent(current + direction * normalizeVolumeStep(config.playerVolumeStep));
         setUserVolume(next, true, video);
+        if (shouldUseVolumeBoost()) applyVolumeBoost(video);
+        showPlayerFeedback("volume", next + "%", shouldUseVolumeBoost() ? "Boost " + normalizeVolumeBoostLevel(config.volumeBoostLevel) + "x" : "");
       }
     }
     function isPlaylistContext() {
@@ -2988,7 +3181,9 @@
         const video = getActiveVideo();
         const current = video ? Math.round(video.volume * 100) : 50;
         const direction = matched.action === "volume-up" ? 1 : -1;
-        setUserVolume(current + direction * normalizeVolumeStep(config.playerVolumeStep), true, video);
+        const next = setUserVolume(current + direction * normalizeVolumeStep(config.playerVolumeStep), true, video);
+        if (shouldUseVolumeBoost()) applyVolumeBoost(video);
+        showPlayerFeedback("volume", next + "%", shouldUseVolumeBoost() ? "Boost " + normalizeVolumeBoostLevel(config.volumeBoostLevel) + "x" : "");
         return;
       }
       handlePlayerToolbarAction(matched.action);
@@ -3007,8 +3202,11 @@
       adState.rightMouseDown = false;
     });
     document.addEventListener("wheel", handlePlayerWheel, { capture: true, passive: false });
-    document.addEventListener("pointerdown", () => {
+    document.addEventListener("pointerdown", (event) => {
       markUserPlaybackIntent();
+      if (config.volumeBoostEnabled && config.volumeBoostAuto && isPointerInsidePlayer(event.target)) {
+        setTimeout(() => applyVolumeBoost(getActiveVideo()), 0);
+      }
     }, true);
     document.addEventListener("keydown", (event) => {
       const playbackKeys = [" ", "Enter", "k", "K", "MediaPlayPause", "MediaPlay"];
@@ -3154,6 +3352,12 @@
     _pipNavObserver.observe(document.documentElement, { childList: true, subtree: true });
     document.addEventListener("yt-navigate-finish", () => {
       scheduleCustomScriptAutoRun("yt-navigate-finish");
+      setTimeout(() => {
+        runAppearanceTasks();
+        updateMiniplayer();
+        updatePlayerToolbar();
+        if (config.volumeBoostEnabled && config.volumeBoostAuto) applyVolumeBoost();
+      }, 350);
     });
     function isInIframe() {
       try {

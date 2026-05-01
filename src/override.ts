@@ -1,4 +1,10 @@
 (function() {
+  function isInIframe() {
+    try { return window.self !== window.top; } catch (err) { return true; }
+  }
+
+  if (isInIframe() && !/^\/embed\//.test(location.pathname)) return;
+
   const MAX_AD_RATE = 16;
   const originalAddEventListener = HTMLElement.prototype.addEventListener;
   const originalRemoveEventListener = HTMLElement.prototype.removeEventListener;
