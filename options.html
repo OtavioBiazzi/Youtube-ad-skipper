@@ -243,7 +243,7 @@
           <div>
             <span class="section-kicker">Modulo em expansao</span>
             <h2>Player, audio e reproducao</h2>
-            <p>Velocidade, volume e autoplay ja estao ativos; qualidade, miniplayer e pre-carregamento entram nas proximas etapas.</p>
+            <p>Velocidade, autoplay, qualidade, miniplayer e barra do player ja estao ativos; codecs e pre-carregamento entram nas proximas etapas.</p>
           </div>
           <span class="module-state">Em etapas</span>
         </div>
@@ -251,10 +251,10 @@
           <article class="card card--module">
             <div class="card-header"><span>Velocidade de reproducao</span><span class="tag tag--safe">ATIVO</span></div>
             <div class="card-body control-stack">
-              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Aplicar velocidade padrao</span><span class="opt-desc">Define a velocidade ao abrir um video novo.</span></div><label class="switch"><input type="checkbox" id="opt-player-speed-enabled"><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Aplicar velocidade padrao</span><span class="opt-desc">Define a velocidade ao abrir um video novo.</span></div><label class="switch"><input type="checkbox" id="opt-player-speed-enabled" checked><span class="switch-track"></span></label></div>
               <label class="field-row"><span>Velocidade padrao</span><input class="control-input" id="opt-player-speed-default" type="number" value="1" min="0.25" max="16" step="0.05"></label>
-              <label class="field-row"><span>Variacao por roda</span><input class="control-input" id="opt-player-speed-step" type="number" value="0.25" min="0.05" max="2" step="0.05"></label>
-              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Roda do mouse + Ctrl</span><span class="opt-desc">Passe o mouse no player e use Ctrl + roda.</span></div><label class="switch"><input type="checkbox" id="opt-player-speed-wheel"><span class="switch-track"></span></label></div>
+              <label class="field-row"><span>Variacao por roda</span><input class="control-input" id="opt-player-speed-step" type="number" value="0.02" min="0.01" max="2" step="0.01"></label>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Roda do mouse + Ctrl</span><span class="opt-desc">Passe o mouse no player e use Ctrl + roda.</span></div><label class="switch"><input type="checkbox" id="opt-player-speed-wheel" checked><span class="switch-track"></span></label></div>
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Exigir botao direito pressionado</span></div><label class="switch"><input type="checkbox" id="opt-player-speed-right-button"><span class="switch-track"></span></label></div>
             </div>
           </article>
@@ -281,9 +281,9 @@
           <article class="card card--module">
             <div class="card-header"><span>Autoplay e abas</span><span class="tag tag--safe">ATIVO</span></div>
             <div class="card-body control-stack">
-              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Bloquear autoplay em abas de fundo</span><span class="opt-desc">Pausa videos que comecam sozinhos enquanto a aba esta oculta.</span></div><label class="switch"><input type="checkbox" id="opt-autoplay-background"><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Bloquear autoplay em abas de fundo</span><span class="opt-desc">Pausa videos que comecam sozinhos enquanto a aba esta oculta.</span></div><label class="switch"><input type="checkbox" id="opt-autoplay-background" checked><span class="switch-track"></span></label></div>
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Bloquear autoplay na aba atual</span><span class="opt-desc">Pausa reproducoes sem clique ou tecla recente.</span></div><label class="switch"><input type="checkbox" id="opt-autoplay-foreground"><span class="switch-track"></span></label></div>
-              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Permitir em playlists</span><span class="opt-desc">Nao interrompe sequencias quando existe uma playlist ativa.</span></div><label class="switch"><input type="checkbox" id="opt-autoplay-allow-playlists"><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Permitir em playlists</span><span class="opt-desc">Nao interrompe sequencias quando existe uma playlist ativa.</span></div><label class="switch"><input type="checkbox" id="opt-autoplay-allow-playlists" checked><span class="switch-track"></span></label></div>
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Pausar abas de fundo</span><span class="opt-desc">Ao tocar um video nesta aba, pausa YouTube em abas ocultas.</span></div><label class="switch"><input type="checkbox" id="opt-pause-background-tabs"><span class="switch-track"></span></label></div>
               <div class="module-note">Bloqueio total de pre-carregamento fica para uma etapa separada, porque mexe direto no carregamento do player.</div>
             </div>
@@ -306,7 +306,8 @@
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Miniplayer ao rolar</span><span class="opt-desc">Quando voce desce para comentarios, o player fica flutuante.</span></div><label class="switch"><input type="checkbox" id="opt-miniplayer-enabled" checked><span class="switch-track"></span></label></div>
               <label class="field-row"><span>Tamanho do miniplayer</span><select class="control-input" id="opt-miniplayer-size"><option value="360x203">360x203</option><option value="480x270" selected>480x270</option><option value="640x360">640x360</option></select></label>
               <label class="field-row"><span>Posicao</span><select class="control-input" id="opt-miniplayer-position"><option value="top-left">Canto superior esquerdo</option><option value="top-right">Canto superior direito</option><option value="bottom-left">Canto inferior esquerdo</option><option value="bottom-right">Canto inferior direito</option></select></label>
-              <div class="module-note">Pop-up em janela separada e barra de controles dedicada entram depois, junto com os icones do player.</div>
+              <label class="field-row"><span>Tamanho do player em pop-up</span><select class="control-input" id="opt-player-popup-size"><option value="480x270">480x270</option><option value="640x360" selected>640x360</option><option value="960x540">960x540</option></select></label>
+              <div class="module-note">O botao de pop-up tambem aparece na barra de controles abaixo do player.</div>
             </div>
           </article>
         </div>
@@ -369,15 +370,19 @@
         </div>
         <div class="section-grid section-grid--split">
           <article class="card card--module">
-            <div class="card-header"><span>Barra de controles do player</span><span class="tag tag--stage">BASE</span></div>
-            <div class="card-body">
+            <div class="card-header"><span>Barra de controles do player</span><span class="tag tag--safe">ATIVO</span></div>
+            <div class="card-body control-stack">
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Exibir em uma barra</span><span class="opt-desc">Adiciona atalhos abaixo do player do YouTube.</span></div><label class="switch"><input type="checkbox" id="opt-toolbar-enabled" checked><span class="switch-track"></span></label></div>
+              <label class="field-row"><span>Posicao da barra</span><select class="control-input" id="opt-toolbar-position"><option value="below" selected>Abaixo do video</option><option value="above">Acima do video</option></select></label>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Centralizar ao expandir ou tela cheia</span></div><label class="switch"><input type="checkbox" id="opt-toolbar-center" checked><span class="switch-track"></span></label></div>
               <div class="toolbar-grid">
-                <label><input type="checkbox" checked disabled><span>Loop</span></label>
-                <label><input type="checkbox" checked disabled><span>Volume boost</span></label>
-                <label><input type="checkbox" checked disabled><span>Pop-up</span></label>
-                <label><input type="checkbox" checked disabled><span>Screenshot</span></label>
-                <label><input type="checkbox" checked disabled><span>Cinema</span></label>
-                <label><input type="checkbox" checked disabled><span>Configuracoes</span></label>
+                <label><input type="checkbox" id="opt-toolbar-loop" checked><span>Loop</span></label>
+                <label><input type="checkbox" id="opt-toolbar-speed" checked><span>Velocidade -/+</span></label>
+                <label><input type="checkbox" id="opt-toolbar-popup" checked><span>Pop-up</span></label>
+                <label><input type="checkbox" id="opt-toolbar-pip" checked><span>PiP</span></label>
+                <label><input type="checkbox" id="opt-toolbar-screenshot" checked><span>Screenshot</span></label>
+                <label><input type="checkbox" id="opt-toolbar-theater" checked><span>Cinema</span></label>
+                <label><input type="checkbox" id="opt-toolbar-settings" checked><span>Configuracoes</span></label>
               </div>
             </div>
           </article>

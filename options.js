@@ -11,6 +11,7 @@
     totalAdsSkipped: 0,
     adsSkippedToday: 0,
     todayDate: null,
+    playerDefaultsProfileVersion: 0,
     whitelist: [],
     listMode: "whitelist",
     showToast: false,
@@ -20,10 +21,10 @@
     adSpeedRate: 3,
     customSpeedEnabled: false,
     adaptiveSpeedEnabled: false,
-    playerSpeedEnabled: false,
+    playerSpeedEnabled: true,
     playerSpeedDefault: 1,
-    playerSpeedStep: 0.25,
-    playerSpeedWheel: false,
+    playerSpeedStep: 0.02,
+    playerSpeedWheel: true,
     playerSpeedWheelRightButton: false,
     playerVolumeEnabled: false,
     playerVolumeDefault: 50,
@@ -31,7 +32,7 @@
     playerVolumeWheel: false,
     playerVolumeWheelRightButton: false,
     playerWheelInvert: false,
-    autoplayBlockBackground: false,
+    autoplayBlockBackground: true,
     autoplayBlockForeground: false,
     autoplayAllowPlaylists: true,
     pauseBackgroundTabs: false,
@@ -50,12 +51,45 @@
     appearanceHideEndcards: false,
     miniplayerEnabled: true,
     miniplayerSize: "480x270",
-    miniplayerPosition: "top-left"
+    miniplayerPosition: "top-left",
+    playerPopupSize: "640x360",
+    toolbarEnabled: true,
+    toolbarPosition: "below",
+    toolbarCenter: true,
+    toolbarLoop: true,
+    toolbarSpeed: true,
+    toolbarPopup: true,
+    toolbarPip: true,
+    toolbarScreenshot: true,
+    toolbarTheater: true,
+    toolbarSettings: true
   };
   const SAFE_AD_SPEED_RATE = 3;
   const MIN_AD_SPEED_RATE = 1;
   const MAX_AD_SPEED_RATE = 8;
   const INSTANT_AD_SPEED_RATE = 16;
+  const PLAYER_DEFAULTS_PROFILE_VERSION = 1;
+  const PLAYER_DEFAULTS_PROFILE = {
+    playerSpeedEnabled: true,
+    playerSpeedStep: 0.02,
+    playerSpeedWheel: true,
+    autoplayBlockBackground: true,
+    autoplayAllowPlaylists: true,
+    miniplayerEnabled: true,
+    miniplayerSize: "480x270",
+    miniplayerPosition: "top-left",
+    playerPopupSize: "640x360",
+    toolbarEnabled: true,
+    toolbarPosition: "below",
+    toolbarCenter: true,
+    toolbarLoop: true,
+    toolbarSpeed: true,
+    toolbarPopup: true,
+    toolbarPip: true,
+    toolbarScreenshot: true,
+    toolbarTheater: true,
+    toolbarSettings: true
+  };
   function byId(id) {
     return document.getElementById(id);
   }
@@ -127,9 +161,27 @@
   const optMiniplayerEnabled = byId("opt-miniplayer-enabled");
   const optMiniplayerSize = byId("opt-miniplayer-size");
   const optMiniplayerPosition = byId("opt-miniplayer-position");
+  const optPlayerPopupSize = byId("opt-player-popup-size");
+  const optToolbarEnabled = byId("opt-toolbar-enabled");
+  const optToolbarPosition = byId("opt-toolbar-position");
+  const optToolbarCenter = byId("opt-toolbar-center");
+  const optToolbarLoop = byId("opt-toolbar-loop");
+  const optToolbarSpeed = byId("opt-toolbar-speed");
+  const optToolbarPopup = byId("opt-toolbar-popup");
+  const optToolbarPip = byId("opt-toolbar-pip");
+  const optToolbarScreenshot = byId("opt-toolbar-screenshot");
+  const optToolbarTheater = byId("opt-toolbar-theater");
+  const optToolbarSettings = byId("opt-toolbar-settings");
   let currentWhitelist = [];
   let initialState = null;
   chrome.storage.local.get(DEFAULT, (s) => {
+    if ((Number(s.playerDefaultsProfileVersion) || 0) < PLAYER_DEFAULTS_PROFILE_VERSION) {
+      Object.assign(s, PLAYER_DEFAULTS_PROFILE, { playerDefaultsProfileVersion: PLAYER_DEFAULTS_PROFILE_VERSION });
+      chrome.storage.local.set({
+        ...PLAYER_DEFAULTS_PROFILE,
+        playerDefaultsProfileVersion: PLAYER_DEFAULTS_PROFILE_VERSION
+      });
+    }
     initialState = JSON.parse(JSON.stringify(s));
     optEnabled.checked = s.enabled;
     optMute.checked = s.muteAds;
@@ -175,6 +227,17 @@
     optMiniplayerEnabled.checked = s.miniplayerEnabled !== false;
     optMiniplayerSize.value = normalizeMiniplayerSize(s.miniplayerSize);
     optMiniplayerPosition.value = normalizeMiniplayerPosition(s.miniplayerPosition);
+    optPlayerPopupSize.value = normalizePlayerPopupSize(s.playerPopupSize);
+    optToolbarEnabled.checked = s.toolbarEnabled !== false;
+    optToolbarPosition.value = normalizeToolbarPosition(s.toolbarPosition);
+    optToolbarCenter.checked = s.toolbarCenter !== false;
+    optToolbarLoop.checked = s.toolbarLoop !== false;
+    optToolbarSpeed.checked = s.toolbarSpeed !== false;
+    optToolbarPopup.checked = s.toolbarPopup !== false;
+    optToolbarPip.checked = s.toolbarPip !== false;
+    optToolbarScreenshot.checked = s.toolbarScreenshot !== false;
+    optToolbarTheater.checked = s.toolbarTheater !== false;
+    optToolbarSettings.checked = s.toolbarSettings !== false;
     if (!s.aggressiveSkip && s.instantSkip) {
       chrome.storage.local.set({ instantSkip: false });
     }
@@ -189,6 +252,7 @@
     renderAutoplayControlLocks();
     renderQualityControlLocks();
     renderMiniplayerControlLocks();
+    renderToolbarControlLocks();
     const now = /* @__PURE__ */ new Date();
     const today = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0");
     const todayCount = s.todayDate === today ? s.adsSkippedToday || 0 : 0;
@@ -392,6 +456,32 @@
   optMiniplayerPosition.addEventListener("change", () => {
     chrome.storage.local.set({ miniplayerPosition: normalizeMiniplayerPosition(optMiniplayerPosition.value) });
   });
+  optPlayerPopupSize.addEventListener("change", () => {
+    chrome.storage.local.set({ playerPopupSize: normalizePlayerPopupSize(optPlayerPopupSize.value) });
+  });
+  optToolbarEnabled.addEventListener("change", () => {
+    chrome.storage.local.set({ toolbarEnabled: optToolbarEnabled.checked });
+    renderToolbarControlLocks();
+  });
+  optToolbarPosition.addEventListener("change", () => {
+    chrome.storage.local.set({ toolbarPosition: normalizeToolbarPosition(optToolbarPosition.value) });
+  });
+  optToolbarCenter.addEventListener("change", () => {
+    chrome.storage.local.set({ toolbarCenter: optToolbarCenter.checked });
+  });
+  [
+    [optToolbarLoop, "toolbarLoop"],
+    [optToolbarSpeed, "toolbarSpeed"],
+    [optToolbarPopup, "toolbarPopup"],
+    [optToolbarPip, "toolbarPip"],
+    [optToolbarScreenshot, "toolbarScreenshot"],
+    [optToolbarTheater, "toolbarTheater"],
+    [optToolbarSettings, "toolbarSettings"]
+  ].forEach(([input, key]) => {
+    input.addEventListener("change", () => {
+      chrome.storage.local.set({ [key]: input.checked });
+    });
+  });
   btnReset.addEventListener("click", () => {
     if (confirm("Isso vai resetar todas as configurações e zerar o contador de anúncios e avisos. Continuar?")) {
       chrome.storage.local.set(DEFAULT, () => {
@@ -524,7 +614,7 @@
   function normalizePlayerSpeedStep(value) {
     const n = Number(value);
     if (!Number.isFinite(n) || n <= 0) return DEFAULT.playerSpeedStep;
-    return Math.min(2, Math.max(0.05, n));
+    return Math.min(2, Math.max(0.01, n));
   }
   function normalizeVolumePercent(value) {
     const n = Number(value);
@@ -547,6 +637,14 @@
   function normalizeMiniplayerPosition(value) {
     const valid = ["top-left", "top-right", "bottom-left", "bottom-right"];
     return valid.includes(value) ? value : DEFAULT.miniplayerPosition;
+  }
+  function normalizePlayerPopupSize(value) {
+    const valid = ["480x270", "640x360", "960x540"];
+    return valid.includes(value) ? value : DEFAULT.playerPopupSize;
+  }
+  function normalizeToolbarPosition(value) {
+    const valid = ["below", "above"];
+    return valid.includes(value) ? value : DEFAULT.toolbarPosition;
   }
   function formatControlNumber(value) {
     return value.toFixed(2).replace(/\.?0+$/, "");
@@ -621,6 +719,18 @@
   function renderMiniplayerControlLocks() {
     optMiniplayerSize.disabled = !optMiniplayerEnabled.checked;
     optMiniplayerPosition.disabled = !optMiniplayerEnabled.checked;
+  }
+  function renderToolbarControlLocks() {
+    const disabled = !optToolbarEnabled.checked;
+    optToolbarPosition.disabled = disabled;
+    optToolbarCenter.disabled = disabled;
+    optToolbarLoop.disabled = disabled;
+    optToolbarSpeed.disabled = disabled;
+    optToolbarPopup.disabled = disabled;
+    optToolbarPip.disabled = disabled;
+    optToolbarScreenshot.disabled = disabled;
+    optToolbarTheater.disabled = disabled;
+    optToolbarSettings.disabled = disabled;
   }
   function renderAdSpeed(delay, manualSpeed, state = getTimingState()) {
     let speed = getSafeAdaptiveSpeed(delay);
@@ -825,6 +935,20 @@
     }
     if (changes.miniplayerSize) optMiniplayerSize.value = normalizeMiniplayerSize(changes.miniplayerSize.newValue);
     if (changes.miniplayerPosition) optMiniplayerPosition.value = normalizeMiniplayerPosition(changes.miniplayerPosition.newValue);
+    if (changes.playerPopupSize) optPlayerPopupSize.value = normalizePlayerPopupSize(changes.playerPopupSize.newValue);
+    if (changes.toolbarEnabled) {
+      optToolbarEnabled.checked = changes.toolbarEnabled.newValue !== false;
+      renderToolbarControlLocks();
+    }
+    if (changes.toolbarPosition) optToolbarPosition.value = normalizeToolbarPosition(changes.toolbarPosition.newValue);
+    if (changes.toolbarCenter) optToolbarCenter.checked = changes.toolbarCenter.newValue !== false;
+    if (changes.toolbarLoop) optToolbarLoop.checked = changes.toolbarLoop.newValue !== false;
+    if (changes.toolbarSpeed) optToolbarSpeed.checked = changes.toolbarSpeed.newValue !== false;
+    if (changes.toolbarPopup) optToolbarPopup.checked = changes.toolbarPopup.newValue !== false;
+    if (changes.toolbarPip) optToolbarPip.checked = changes.toolbarPip.newValue !== false;
+    if (changes.toolbarScreenshot) optToolbarScreenshot.checked = changes.toolbarScreenshot.newValue !== false;
+    if (changes.toolbarTheater) optToolbarTheater.checked = changes.toolbarTheater.newValue !== false;
+    if (changes.toolbarSettings) optToolbarSettings.checked = changes.toolbarSettings.newValue !== false;
     if (changes.totalAdsSkipped) {
       animateCounter(statTotal, Number(changes.totalAdsSkipped.newValue) || 0);
     }

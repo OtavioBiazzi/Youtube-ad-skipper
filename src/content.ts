@@ -30,15 +30,16 @@ declare global {
     showToast: false,
     shortcutEnabled: false,
     listMode: "whitelist",
+    playerDefaultsProfileVersion: 0,
     whitelist: [],
     pipEnabled: false,
     adSpeedRate: 3,
     customSpeedEnabled: false,
     adaptiveSpeedEnabled: false,
-    playerSpeedEnabled: false,
+    playerSpeedEnabled: true,
     playerSpeedDefault: 1,
-    playerSpeedStep: 0.25,
-    playerSpeedWheel: false,
+    playerSpeedStep: 0.02,
+    playerSpeedWheel: true,
     playerSpeedWheelRightButton: false,
     playerVolumeEnabled: false,
     playerVolumeDefault: 50,
@@ -46,7 +47,7 @@ declare global {
     playerVolumeWheel: false,
     playerVolumeWheelRightButton: false,
     playerWheelInvert: false,
-    autoplayBlockBackground: false,
+    autoplayBlockBackground: true,
     autoplayBlockForeground: false,
     autoplayAllowPlaylists: true,
     pauseBackgroundTabs: false,
@@ -66,6 +67,17 @@ declare global {
     miniplayerEnabled: true,
     miniplayerSize: "480x270",
     miniplayerPosition: "top-left",
+    playerPopupSize: "640x360",
+    toolbarEnabled: true,
+    toolbarPosition: "below",
+    toolbarCenter: true,
+    toolbarLoop: true,
+    toolbarSpeed: true,
+    toolbarPopup: true,
+    toolbarPip: true,
+    toolbarScreenshot: true,
+    toolbarTheater: true,
+    toolbarSettings: true,
   };
 
   const CHECK_INTERVAL = 500;
@@ -85,6 +97,28 @@ declare global {
   const MAIN_FORCE_SKIP_MESSAGE = "yt-ad-skipper:force-skip";
   const MAIN_SPEED_THROUGH_MESSAGE = "yt-ad-skipper:speed-through";
   const MAIN_FORCE_SKIP_RESULT = "yt-ad-skipper:force-skip-result";
+  const PLAYER_DEFAULTS_PROFILE_VERSION = 1;
+  const PLAYER_DEFAULTS_PROFILE = {
+    playerSpeedEnabled: true,
+    playerSpeedStep: 0.02,
+    playerSpeedWheel: true,
+    autoplayBlockBackground: true,
+    autoplayAllowPlaylists: true,
+    miniplayerEnabled: true,
+    miniplayerSize: "480x270",
+    miniplayerPosition: "top-left",
+    playerPopupSize: "640x360",
+    toolbarEnabled: true,
+    toolbarPosition: "below",
+    toolbarCenter: true,
+    toolbarLoop: true,
+    toolbarSpeed: true,
+    toolbarPopup: true,
+    toolbarPip: true,
+    toolbarScreenshot: true,
+    toolbarTheater: true,
+    toolbarSettings: true,
+  };
 
   let adState: any = {
     active: false,
@@ -151,13 +185,14 @@ declare global {
             enabled: true, skipDelay: 1, muteAds: true, showOverlay: true,
             aggressiveSkip: true, instantSkip: false, showToast: false,
             shortcutEnabled: false, listMode: "whitelist", whitelist: [], warningCount: 0,
-            totalAdsSkipped: 0, adsSkippedToday: 0, todayDate: null, pipEnabled: false,
+            totalAdsSkipped: 0, adsSkippedToday: 0, todayDate: null,
+            playerDefaultsProfileVersion: 0, pipEnabled: false,
             adSpeedRate: DEFAULT_SPEED_THROUGH_RATE, customSpeedEnabled: false, adaptiveSpeedEnabled: false,
-            playerSpeedEnabled: false, playerSpeedDefault: 1, playerSpeedStep: 0.25,
-            playerSpeedWheel: false, playerSpeedWheelRightButton: false,
+            playerSpeedEnabled: true, playerSpeedDefault: 1, playerSpeedStep: 0.02,
+            playerSpeedWheel: true, playerSpeedWheelRightButton: false,
             playerVolumeEnabled: false, playerVolumeDefault: 50, playerVolumeStep: 5,
             playerVolumeWheel: false, playerVolumeWheelRightButton: false, playerWheelInvert: false,
-            autoplayBlockBackground: false, autoplayBlockForeground: false,
+            autoplayBlockBackground: true, autoplayBlockForeground: false,
             autoplayAllowPlaylists: true, pauseBackgroundTabs: false,
             qualityEnabled: false, qualityVideo: "hd720", qualityPlaylist: "hd720",
             qualityFullscreenEnabled: false, qualityFullscreenVideo: "hd1080",
@@ -166,8 +201,19 @@ declare global {
             appearanceHideRelated: false, appearanceHideChat: false,
             appearanceHideComments: false, appearanceHideEndcards: false,
             miniplayerEnabled: true, miniplayerSize: "480x270", miniplayerPosition: "top-left",
+            playerPopupSize: "640x360", toolbarEnabled: true, toolbarPosition: "below",
+            toolbarCenter: true, toolbarLoop: true, toolbarSpeed: true, toolbarPopup: true,
+            toolbarPip: true, toolbarScreenshot: true, toolbarTheater: true, toolbarSettings: true,
           },
           (s) => {
+            if ((Number(s.playerDefaultsProfileVersion) || 0) < PLAYER_DEFAULTS_PROFILE_VERSION) {
+              Object.assign(s, PLAYER_DEFAULTS_PROFILE, { playerDefaultsProfileVersion: PLAYER_DEFAULTS_PROFILE_VERSION });
+              chrome.storage.local.set({
+                ...PLAYER_DEFAULTS_PROFILE,
+                playerDefaultsProfileVersion: PLAYER_DEFAULTS_PROFILE_VERSION,
+              });
+            }
+
             config.enabled = !!s.enabled;
             config.skipDelay = normalizeSkipDelay(s.skipDelay);
             config.muteAds = !!s.muteAds;
@@ -213,6 +259,17 @@ declare global {
             config.miniplayerEnabled = s.miniplayerEnabled !== false;
             config.miniplayerSize = normalizeMiniplayerSize(s.miniplayerSize);
             config.miniplayerPosition = normalizeMiniplayerPosition(s.miniplayerPosition);
+            config.playerPopupSize = normalizePlayerPopupSize(s.playerPopupSize);
+            config.toolbarEnabled = s.toolbarEnabled !== false;
+            config.toolbarPosition = normalizeToolbarPosition(s.toolbarPosition);
+            config.toolbarCenter = s.toolbarCenter !== false;
+            config.toolbarLoop = s.toolbarLoop !== false;
+            config.toolbarSpeed = s.toolbarSpeed !== false;
+            config.toolbarPopup = s.toolbarPopup !== false;
+            config.toolbarPip = s.toolbarPip !== false;
+            config.toolbarScreenshot = s.toolbarScreenshot !== false;
+            config.toolbarTheater = s.toolbarTheater !== false;
+            config.toolbarSettings = s.toolbarSettings !== false;
             adState.warningCount = s.warningCount || 0;
             adState.totalSkipped = s.totalAdsSkipped || 0;
             adState.adsSkippedToday = s.adsSkippedToday || 0;
@@ -349,6 +406,47 @@ declare global {
       if (changes.miniplayerPosition) {
         config.miniplayerPosition = normalizeMiniplayerPosition(changes.miniplayerPosition.newValue);
         updateMiniplayer();
+      }
+      if (changes.playerPopupSize) config.playerPopupSize = normalizePlayerPopupSize(changes.playerPopupSize.newValue);
+      if (changes.toolbarEnabled) {
+        config.toolbarEnabled = changes.toolbarEnabled.newValue !== false;
+        updatePlayerToolbar();
+      }
+      if (changes.toolbarPosition) {
+        config.toolbarPosition = normalizeToolbarPosition(changes.toolbarPosition.newValue);
+        updatePlayerToolbar();
+      }
+      if (changes.toolbarCenter) {
+        config.toolbarCenter = changes.toolbarCenter.newValue !== false;
+        updatePlayerToolbar();
+      }
+      if (changes.toolbarLoop) {
+        config.toolbarLoop = changes.toolbarLoop.newValue !== false;
+        updatePlayerToolbar();
+      }
+      if (changes.toolbarSpeed) {
+        config.toolbarSpeed = changes.toolbarSpeed.newValue !== false;
+        updatePlayerToolbar();
+      }
+      if (changes.toolbarPopup) {
+        config.toolbarPopup = changes.toolbarPopup.newValue !== false;
+        updatePlayerToolbar();
+      }
+      if (changes.toolbarPip) {
+        config.toolbarPip = changes.toolbarPip.newValue !== false;
+        updatePlayerToolbar();
+      }
+      if (changes.toolbarScreenshot) {
+        config.toolbarScreenshot = changes.toolbarScreenshot.newValue !== false;
+        updatePlayerToolbar();
+      }
+      if (changes.toolbarTheater) {
+        config.toolbarTheater = changes.toolbarTheater.newValue !== false;
+        updatePlayerToolbar();
+      }
+      if (changes.toolbarSettings) {
+        config.toolbarSettings = changes.toolbarSettings.newValue !== false;
+        updatePlayerToolbar();
       }
       if (changes.tubeShieldActivePlayback) {
         handleExternalPlaybackSignal(changes.tubeShieldActivePlayback.newValue);
@@ -533,8 +631,8 @@ declare global {
 
   function normalizePlayerSpeedStep(step) {
     const n = Number(step);
-    if (!Number.isFinite(n) || n <= 0) return 0.25;
-    return Math.min(2, Math.max(0.05, n));
+    if (!Number.isFinite(n) || n <= 0) return 0.02;
+    return Math.min(2, Math.max(0.01, n));
   }
 
   function normalizeVolumePercent(volume) {
@@ -559,11 +657,29 @@ declare global {
     return ["top-left", "top-right", "bottom-left", "bottom-right"].includes(value) ? value : "top-left";
   }
 
+  function normalizePlayerPopupSize(size) {
+    const value = String(size || "");
+    return ["480x270", "640x360", "960x540"].includes(value) ? value : "640x360";
+  }
+
+  function normalizeToolbarPosition(position) {
+    const value = String(position || "");
+    return ["below", "above"].includes(value) ? value : "below";
+  }
+
   function parseMiniplayerSize(size = config.miniplayerSize) {
     const [width, height] = normalizeMiniplayerSize(size).split("x").map(part => parseInt(part, 10));
     return {
       width: Number.isFinite(width) ? width : 480,
       height: Number.isFinite(height) ? height : 270,
+    };
+  }
+
+  function parsePlayerPopupSize(size = config.playerPopupSize) {
+    const [width, height] = normalizePlayerPopupSize(size).split("x").map(part => parseInt(part, 10));
+    return {
+      width: Number.isFinite(width) ? width : 640,
+      height: Number.isFinite(height) ? height : 360,
     };
   }
 
@@ -1030,6 +1146,364 @@ declare global {
       miniplayerUpdateRaf = 0;
       updateMiniplayer();
     });
+  }
+
+  const PLAYER_TOOLBAR_ID = "tube-shield-player-toolbar";
+  const PLAYER_TOOLBAR_STYLE_ID = "tube-shield-player-toolbar-style";
+  let playerToolbarSignature = "";
+
+  function getPlayerToolbarAnchor() {
+    return document.querySelector("#player-container-outer")
+      || document.querySelector("#player-theater-container")
+      || document.querySelector("#player")
+      || document.querySelector("ytd-player")
+      || getYouTubePlayer();
+  }
+
+  function getPlayerToolbarActions() {
+    const actions: Array<{ action: string; title: string; icon: string }> = [];
+    if (config.toolbarLoop) actions.push({ action: "loop", title: "Loop", icon: "loop" });
+    if (config.toolbarSpeed) {
+      actions.push({ action: "speed-down", title: "Diminuir velocidade", icon: "speed-down" });
+      actions.push({ action: "speed-up", title: "Aumentar velocidade", icon: "speed-up" });
+    }
+    if (config.toolbarPopup) actions.push({ action: "popup", title: "Abrir em pop-up", icon: "popup" });
+    if (config.toolbarPip) actions.push({ action: "pip", title: "Picture-in-Picture", icon: "pip" });
+    if (config.toolbarScreenshot) actions.push({ action: "screenshot", title: "Capturar frame", icon: "camera" });
+    if (config.toolbarTheater) actions.push({ action: "theater", title: "Modo teatro", icon: "theater" });
+    if (config.toolbarSettings) actions.push({ action: "settings", title: "Configuracoes", icon: "settings" });
+    return actions;
+  }
+
+  function buildPlayerToolbarCss() {
+    return `
+      #${PLAYER_TOOLBAR_ID} {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        width: max-content;
+        max-width: calc(100% - 16px);
+        margin: 8px 0 12px;
+        padding: 6px;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 999px;
+        background: rgba(12, 12, 14, 0.9);
+        color: #fff;
+        box-shadow: 0 10px 24px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        box-sizing: border-box;
+      }
+
+      #${PLAYER_TOOLBAR_ID}.is-centered {
+        margin-left: auto;
+        margin-right: auto;
+      }
+
+      #${PLAYER_TOOLBAR_ID} .tube-shield-toolbar-btn {
+        width: 34px;
+        height: 30px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid transparent;
+        border-radius: 999px;
+        background: transparent;
+        color: rgba(255, 255, 255, 0.82);
+        cursor: pointer;
+        transition: transform 160ms ease, background 160ms ease, color 160ms ease, border-color 160ms ease;
+      }
+
+      #${PLAYER_TOOLBAR_ID} .tube-shield-toolbar-btn:hover,
+      #${PLAYER_TOOLBAR_ID} .tube-shield-toolbar-btn:focus-visible {
+        color: #fff;
+        background: rgba(255, 255, 255, 0.12);
+        border-color: rgba(255, 255, 255, 0.16);
+        outline: none;
+      }
+
+      #${PLAYER_TOOLBAR_ID} .tube-shield-toolbar-btn:active {
+        transform: translateY(1px) scale(0.98);
+      }
+
+      #${PLAYER_TOOLBAR_ID} .tube-shield-toolbar-btn.is-active {
+        color: #fff;
+        background: rgba(255, 51, 75, 0.84);
+        border-color: rgba(255, 255, 255, 0.18);
+      }
+
+      #${PLAYER_TOOLBAR_ID} svg {
+        width: 18px;
+        height: 18px;
+        pointer-events: none;
+      }
+
+      html.${MINIPLAYER_ACTIVE_CLASS} #${PLAYER_TOOLBAR_ID} {
+        display: none !important;
+      }
+
+      @media (max-width: 720px) {
+        #${PLAYER_TOOLBAR_ID} {
+          overflow-x: auto;
+          border-radius: 16px;
+          width: 100%;
+          max-width: 100%;
+          justify-content: flex-start;
+        }
+      }
+    `;
+  }
+
+  function ensurePlayerToolbarStyle() {
+    if (document.getElementById(PLAYER_TOOLBAR_STYLE_ID)) return;
+    const style = document.createElement("style");
+    style.id = PLAYER_TOOLBAR_STYLE_ID;
+    style.textContent = buildPlayerToolbarCss();
+    (document.head || document.documentElement).appendChild(style);
+  }
+
+  function toolbarIcon(name) {
+    switch (name) {
+      case "loop":
+        return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>';
+      case "speed-down":
+        return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 5l-7 7 7 7"/></svg>';
+      case "speed-up":
+        return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>';
+      case "popup":
+        return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M14 9h4v4"/><path d="M13 14l5-5"/></svg>';
+      case "pip":
+        return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="13" y="11" width="6" height="4" rx="1" fill="currentColor" stroke="none"/></svg>';
+      case "camera":
+        return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h4l2-3h4l2 3h4v11H4z"/><circle cx="12" cy="14" r="3"/></svg>';
+      case "theater":
+        return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h10"/></svg>';
+      case "settings":
+      default:
+        return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.2a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.2a1.7 1.7 0 0 0 1 1.5h.1a1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v.1a1.7 1.7 0 0 0 1.5 1h.2a2 2 0 1 1 0 4h-.2a1.7 1.7 0 0 0-1.5 1z"/></svg>';
+    }
+  }
+
+  function createPlayerToolbarButton(action, title, icon) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "tube-shield-toolbar-btn";
+    button.dataset.toolbarAction = action;
+    button.title = title;
+    button.setAttribute("aria-label", title);
+    button.innerHTML = toolbarIcon(icon);
+    return button;
+  }
+
+  function getPlayerToolbarSignature() {
+    return [
+      config.enabled,
+      config.toolbarEnabled,
+      normalizeToolbarPosition(config.toolbarPosition),
+      config.toolbarCenter,
+      config.toolbarLoop,
+      config.toolbarSpeed,
+      config.toolbarPopup,
+      config.toolbarPip,
+      config.toolbarScreenshot,
+      config.toolbarTheater,
+      config.toolbarSettings,
+      normalizePlayerPopupSize(config.playerPopupSize),
+      location.pathname,
+    ].join(":");
+  }
+
+  function removePlayerToolbar() {
+    document.getElementById(PLAYER_TOOLBAR_ID)?.remove();
+    document.getElementById(PLAYER_TOOLBAR_STYLE_ID)?.remove();
+    playerToolbarSignature = "";
+  }
+
+  function updatePlayerToolbarStates() {
+    const toolbar = document.getElementById(PLAYER_TOOLBAR_ID);
+    if (!toolbar) return;
+
+    const video = getActiveVideo();
+    const loopButton = toolbar.querySelector('[data-toolbar-action="loop"]');
+    loopButton?.classList.toggle("is-active", !!video?.loop);
+
+    const pipButton = toolbar.querySelector('[data-toolbar-action="pip"]');
+    pipButton?.classList.toggle("is-active", !!document.pictureInPictureElement);
+  }
+
+  function updatePlayerToolbar() {
+    if (!config.enabled || !config.toolbarEnabled || !isWatchPage()) {
+      removePlayerToolbar();
+      return;
+    }
+
+    const anchor: any = getPlayerToolbarAnchor();
+    const parent = anchor?.parentElement;
+    if (!anchor || !parent) {
+      removePlayerToolbar();
+      return;
+    }
+
+    const signature = getPlayerToolbarSignature();
+    let toolbar = document.getElementById(PLAYER_TOOLBAR_ID);
+    const expectedNext = normalizeToolbarPosition(config.toolbarPosition) === "above"
+      ? anchor
+      : (anchor.nextSibling === toolbar ? toolbar.nextSibling : anchor.nextSibling);
+
+    if (toolbar && toolbar.parentElement === parent && playerToolbarSignature === signature) {
+      toolbar.classList.toggle("is-centered", config.toolbarCenter !== false);
+      updatePlayerToolbarStates();
+      return;
+    }
+
+    ensurePlayerToolbarStyle();
+    if (!toolbar) {
+      toolbar = document.createElement("div");
+      toolbar.id = PLAYER_TOOLBAR_ID;
+      toolbar.addEventListener("click", (event) => {
+        const target = event.target as Element;
+        const button = target.closest?.("[data-toolbar-action]") as HTMLElement | null;
+        const action = button?.dataset.toolbarAction;
+        if (!action) return;
+        event.preventDefault();
+        event.stopPropagation();
+        handlePlayerToolbarAction(action);
+      });
+    } else {
+      toolbar.innerHTML = "";
+    }
+
+    toolbar.className = config.toolbarCenter !== false ? "is-centered" : "";
+    for (const item of getPlayerToolbarActions()) {
+      toolbar.appendChild(createPlayerToolbarButton(item.action, item.title, item.icon));
+    }
+
+    if (normalizeToolbarPosition(config.toolbarPosition) === "above") {
+      parent.insertBefore(toolbar, anchor);
+    } else {
+      parent.insertBefore(toolbar, expectedNext);
+    }
+
+    playerToolbarSignature = signature;
+    updatePlayerToolbarStates();
+  }
+
+  function openPopupPlayer() {
+    const size = parsePlayerPopupSize();
+    const left = Math.max(0, Math.round(window.screenX + (window.outerWidth - size.width) / 2));
+    const top = Math.max(0, Math.round(window.screenY + (window.outerHeight - size.height) / 2));
+    const features = [
+      "popup=yes",
+      "noopener=yes",
+      "width=" + size.width,
+      "height=" + size.height,
+      "left=" + left,
+      "top=" + top,
+    ].join(",");
+    window.open(location.href, "tubeShieldPlayerPopup", features);
+  }
+
+  async function togglePictureInPicture(video = getActiveVideo()) {
+    if (!video) return;
+    try {
+      if (document.pictureInPictureElement) {
+        await document.exitPictureInPicture();
+      } else {
+        await video.requestPictureInPicture();
+      }
+    } catch (err) {
+      console.warn("[Tube Shield] PiP error:", err);
+    }
+  }
+
+  function captureVideoFrame(video = getActiveVideo()) {
+    if (!video) return;
+    const width = video.videoWidth || video.clientWidth || 1280;
+    const height = video.videoHeight || video.clientHeight || 720;
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+
+    try {
+      const context = canvas.getContext("2d");
+      if (!context) return;
+      context.drawImage(video, 0, 0, width, height);
+      const link = document.createElement("a");
+      link.href = canvas.toDataURL("image/png");
+      link.download = "tube-shield-frame-" + Date.now() + ".png";
+      link.click();
+    } catch (err) {
+      console.warn("[Tube Shield] Screenshot blocked by the video source:", err);
+    }
+  }
+
+  function toggleTheaterMode() {
+    const theaterButton = document.querySelector(".ytp-size-button, button.ytp-size-button") as HTMLElement | null;
+    if (theaterButton) {
+      theaterButton.click();
+      setTimeout(updatePlayerToolbar, 300);
+      return;
+    }
+
+    const watchFlexy = document.querySelector("ytd-watch-flexy");
+    if (!watchFlexy) return;
+    if (watchFlexy.hasAttribute("theater")) {
+      watchFlexy.removeAttribute("theater");
+    } else {
+      watchFlexy.setAttribute("theater", "");
+    }
+    setTimeout(updatePlayerToolbar, 300);
+  }
+
+  function openOptionsPage() {
+    try {
+      window.open(chrome.runtime.getURL("options.html"), "_blank", "noopener=yes");
+    } catch (err) {
+      window.open("/options.html", "_blank", "noopener=yes");
+    }
+  }
+
+  function handlePlayerToolbarAction(action) {
+    const video = getActiveVideo();
+    markUserPlaybackIntent();
+
+    if (action === "loop") {
+      if (video) video.loop = !video.loop;
+      updatePlayerToolbarStates();
+      return;
+    }
+
+    if (action === "speed-down" || action === "speed-up") {
+      const direction = action === "speed-up" ? 1 : -1;
+      const current = getCurrentPlaybackRate(video);
+      const next = normalizeUserPlaybackRate(current + direction * normalizePlayerSpeedStep(config.playerSpeedStep), current);
+      setUserPlaybackRate(next, video);
+      return;
+    }
+
+    if (action === "popup") {
+      openPopupPlayer();
+      return;
+    }
+
+    if (action === "pip") {
+      togglePictureInPicture(video).then(updatePlayerToolbarStates);
+      return;
+    }
+
+    if (action === "screenshot") {
+      captureVideoFrame(video);
+      return;
+    }
+
+    if (action === "theater") {
+      toggleTheaterMode();
+      return;
+    }
+
+    if (action === "settings") {
+      openOptionsPage();
+    }
   }
 
   function applyPlayerPreferences() {
@@ -1986,6 +2460,7 @@ declare global {
   function mainLoop() {
     runAppearanceTasks();
     updateMiniplayer();
+    updatePlayerToolbar();
 
     if (!config.enabled) {
       if (adState.active || adState.overlayEl) cleanupRuntimeState();
@@ -2253,6 +2728,7 @@ declare global {
         setTimeout(injectPipButton, 1500);
       }
       setTimeout(updateMiniplayer, 500);
+      setTimeout(updatePlayerToolbar, 500);
     }
   });
   _pipNavObserver.observe(document.documentElement, { childList: true, subtree: true });
