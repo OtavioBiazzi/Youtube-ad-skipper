@@ -22,6 +22,7 @@ declare global {
 
   let config: any = {
     enabled: true,
+    adSkipperEnabled: true,
     skipDelay: 1,
     muteAds: true,
     showOverlay: true,
@@ -165,6 +166,8 @@ declare global {
   let appearanceSignature = "";
   let miniplayerSignature = "";
   let miniplayerUpdateRaf = 0;
+  let adWatchdogVideo: HTMLVideoElement | null = null;
+  let adWatchdogTimeout: number | null = null;
 
   // ── Humanização — jitter aleatório ────────────────────
 
@@ -182,7 +185,7 @@ declare global {
       if (chrome?.storage?.local) {
         chrome.storage.local.get(
           {
-            enabled: true, skipDelay: 1, muteAds: true, showOverlay: true,
+            enabled: true, adSkipperEnabled: true, skipDelay: 1, muteAds: true, showOverlay: true,
             aggressiveSkip: true, instantSkip: false, showToast: false,
             shortcutEnabled: false, listMode: "whitelist", whitelist: [], warningCount: 0,
             totalAdsSkipped: 0, adsSkippedToday: 0, todayDate: null,
@@ -215,6 +218,7 @@ declare global {
             }
 
             config.enabled = !!s.enabled;
+            config.adSkipperEnabled = s.adSkipperEnabled !== false;
             config.skipDelay = normalizeSkipDelay(s.skipDelay);
             config.muteAds = !!s.muteAds;
             config.showOverlay = !!s.showOverlay;
@@ -288,7 +292,7 @@ declare global {
       if (changes.enabled) {
         config.enabled = !!changes.enabled.newValue;
         if (config.enabled) {
-          startAdblockProtection();
+          if (isAdSkipperActive()) startAdblockProtection();
           if (config.pipEnabled) injectPipButton();
         } else {
           cleanupRuntimeState();
@@ -297,6 +301,16 @@ declare global {
         }
         applyAppearanceFilters();
         updateMiniplayer();
+      }
+      if (changes.adSkipperEnabled) {
+        config.adSkipperEnabled = changes.adSkipperEnabled.newValue !== false;
+        if (isAdSkipperActive()) {
+          startAdblockProtection();
+          scheduleAdWatchdogTick();
+        } else {
+          cleanupRuntimeState();
+          stopAdblockProtection();
+        }
       }
       if (changes.skipDelay) {
         config.skipDelay = normalizeSkipDelay(changes.skipDelay.newValue);
@@ -574,6 +588,10 @@ declare global {
   function getYouTubePlayer() {
     const player = document.getElementById("movie_player") || document.querySelector(".html5-video-player");
     return player || null;
+  }
+
+  function isAdSkipperActive() {
+    return !!config.enabled && config.adSkipperEnabled !== false;
   }
 
   function getFinitePositiveNumber(value) {
@@ -1412,7 +1430,7 @@ declare global {
         await video.requestPictureInPicture();
       }
     } catch (err) {
-      console.warn("[Tube Shield] PiP error:", err);
+      console.warn("[YouTube Extension] PiP error:", err);
     }
   }
 
@@ -1430,10 +1448,10 @@ declare global {
       context.drawImage(video, 0, 0, width, height);
       const link = document.createElement("a");
       link.href = canvas.toDataURL("image/png");
-      link.download = "tube-shield-frame-" + Date.now() + ".png";
+      link.download = "youtube-extension-frame-" + Date.now() + ".png";
       link.click();
     } catch (err) {
-      console.warn("[Tube Shield] Screenshot blocked by the video source:", err);
+      console.warn("[YouTube Extension] Screenshot blocked by the video source:", err);
     }
   }
 
@@ -1711,7 +1729,7 @@ declare global {
   }
 
   function forceSkipAd(video = document.querySelector("video")) {
-    if (!config.enabled || !config.aggressiveSkip || adState.watching) return false;
+    if (!isAdSkipperActive() || !config.aggressiveSkip || adState.watching) return false;
 
     requestMainWorldSkip();
 
@@ -1798,7 +1816,7 @@ declare global {
   }
 
   function applySpeedThrough(video = document.querySelector("video")) {
-    if (!config.enabled || !config.aggressiveSkip || adState.watching) return false;
+    if (!isAdSkipperActive() || !config.aggressiveSkip || adState.watching) return false;
 
     const rate = getSpeedThroughRate();
     requestMainWorldSpeedThrough(rate);
@@ -1825,10 +1843,10 @@ declare global {
   }
 
   function startSpeedThrough() {
-    if (!config.aggressiveSkip || adState.speedThroughInterval) return;
+    if (!isAdSkipperActive() || !config.aggressiveSkip || adState.speedThroughInterval) return;
     applySpeedThrough();
     adState.speedThroughInterval = setInterval(() => {
-      if (!config.enabled || !adState.active || adState.watching || !getAdPlaying()) {
+      if (!isAdSkipperActive() || !adState.active || adState.watching || !getAdPlaying()) {
         stopSpeedThrough();
         return;
       }
@@ -1888,7 +1906,7 @@ declare global {
     const targetRate = adState.preAdPlaybackRate || 1;
 
     adState.postSkipRestoreTimeouts = POST_SKIP_RESTORE_DELAYS_MS.map((delay) => setTimeout(() => {
-      if (!config.enabled || adState.watching || !getAdPlaying()) {
+      if (!isAdSkipperActive() || adState.watching || !getAdPlaying()) {
         stopSpeedThrough();
         startPlaybackRateRestore(targetRate);
         clearPostSkipRestoreChecks();
@@ -1914,7 +1932,7 @@ declare global {
   }
 
   function attemptScheduledSkip() {
-    if (!config.enabled || !adState.active || adState.watching) return false;
+    if (!isAdSkipperActive() || !adState.active || adState.watching) return false;
 
     const video = document.querySelector("video");
     if (clickSkipAdBtn()) {
@@ -1931,11 +1949,11 @@ declare global {
   }
 
   function startForceSkipBurst(video = document.querySelector("video")) {
-    if (!config.aggressiveSkip || adState.forceSkipInterval) return;
+    if (!isAdSkipperActive() || !config.aggressiveSkip || adState.forceSkipInterval) return;
     adState.forceSkipStartedAt = Date.now();
 
     const tick = () => {
-      if (!config.enabled || adState.watching || !getAdPlaying()) {
+      if (!isAdSkipperActive() || adState.watching || !getAdPlaying()) {
         stopForceSkipBurst();
         return;
       }
@@ -1970,7 +1988,7 @@ declare global {
     if (!root) return;
 
     skipButtonObserver = new MutationObserver(() => {
-      if (!config.enabled || !adState.active || adState.watching || !adState.skipTargetTime) return;
+      if (!isAdSkipperActive() || !adState.active || adState.watching || !adState.skipTargetTime) return;
       if (Date.now() < adState.skipTargetTime) return;
       if (Date.now() - adState.lastObserverSkipAttempt < 90) return;
 
@@ -1999,7 +2017,7 @@ declare global {
 
   // ── Camada 1: CSS Preemptivo ──────────────────────────
   function injectAntiAdblockCSS() {
-    if (!config.enabled) return;
+    if (!isAdSkipperActive()) return;
     if (document.getElementById(ANTI_ADBLOCK_STYLE_ID)) return;
     const s = document.createElement('style');
     s.id = ANTI_ADBLOCK_STYLE_ID;
@@ -2030,7 +2048,7 @@ declare global {
   }
 
   function startAdblockProtection() {
-    if (!config.enabled) return;
+    if (!isAdSkipperActive()) return;
     injectAntiAdblockCSS();
     startAdblockObserver();
     dismissAdblockWarning();
@@ -2050,7 +2068,7 @@ declare global {
 
   // ── Camada 2: MutationObserver (instantâneo) ──────────
   function nukeAdblockElement(el) {
-    if (!config.enabled || !el) return;
+    if (!isAdSkipperActive() || !el) return;
     const shouldCount = el.isConnected !== false;
     el.remove();
     const backdrops = document.querySelectorAll('iron-overlay-backdrop, tp-yt-paper-dialog-backdrop');
@@ -2067,7 +2085,7 @@ declare global {
   }
 
   function checkAndNukeNode(node) {
-    if (!config.enabled) return;
+    if (!isAdSkipperActive()) return;
     if (!node || node.nodeType !== 1) return;
 
     if (_abTagNames.includes(node.tagName)) {
@@ -2094,7 +2112,7 @@ declare global {
   }
 
   function startAdblockObserver() {
-    if (!config.enabled || adblockObserver || adblockBodyWaitObserver) return;
+    if (!isAdSkipperActive() || adblockObserver || adblockBodyWaitObserver) return;
     const root = document.body || document.documentElement;
     if (!document.body) {
       adblockBodyWaitObserver = new MutationObserver(() => {
@@ -2109,7 +2127,7 @@ declare global {
     }
 
     adblockObserver = new MutationObserver((mutations) => {
-      if (!config.enabled) return;
+      if (!isAdSkipperActive()) return;
       for (const mutation of mutations) {
         for (const node of mutation.addedNodes) {
           checkAndNukeNode(node);
@@ -2124,7 +2142,7 @@ declare global {
 
   // ── Camada 3: Polling fallback ────────────────────────
   function dismissAdblockWarning() {
-    if (!config.enabled) return false;
+    if (!isAdSkipperActive()) return false;
     const enforcement = document.querySelector('ytd-enforcement-message-view-model');
     if (enforcement) {
       const dialog = enforcement.closest('tp-yt-paper-dialog') || enforcement;
@@ -2455,6 +2473,43 @@ declare global {
     adState.speedThroughInterval = null;
   }
 
+  const AD_WATCHDOG_EVENTS = ["play", "playing", "timeupdate", "durationchange", "ratechange", "loadeddata"];
+
+  function scheduleAdWatchdogTick() {
+    if (!isAdSkipperActive() || adWatchdogTimeout !== null) return;
+
+    adWatchdogTimeout = window.setTimeout(() => {
+      adWatchdogTimeout = null;
+      if (!isAdSkipperActive()) return;
+
+      try {
+        const adPlaying = getAdPlaying();
+        if (adPlaying && adState.active && !adState.watching && adState.skipTargetTime && Date.now() >= adState.skipTargetTime) {
+          attemptScheduledSkip();
+          return;
+        }
+
+        mainLoop();
+      } catch (err) {}
+    }, document.hidden ? 250 : 90);
+  }
+
+  function bindAdSkipperWatchdog() {
+    const video = getActiveVideo();
+    if (!video || adWatchdogVideo === video) return;
+
+    if (adWatchdogVideo) {
+      AD_WATCHDOG_EVENTS.forEach((eventName) => {
+        adWatchdogVideo?.removeEventListener(eventName, scheduleAdWatchdogTick, true);
+      });
+    }
+
+    adWatchdogVideo = video;
+    AD_WATCHDOG_EVENTS.forEach((eventName) => {
+      video.addEventListener(eventName, scheduleAdWatchdogTick, true);
+    });
+  }
+
   // ── Main loop ─────────────────────────────────────────
 
   function mainLoop() {
@@ -2464,8 +2519,18 @@ declare global {
 
     if (!config.enabled) {
       if (adState.active || adState.overlayEl) cleanupRuntimeState();
+      stopAdblockProtection();
       return;
     }
+
+    if (!isAdSkipperActive()) {
+      if (adState.active || adState.overlayEl) cleanupRuntimeState();
+      enforceAutoplayGuards();
+      applyPlayerPreferences();
+      return;
+    }
+
+    bindAdSkipperWatchdog();
 
     // Sempre tentar fechar popup anti-adblock
     dismissAdblockWarning();
@@ -2538,7 +2603,7 @@ declare global {
   // ── Atalho de teclado ─────────────────────────────────
 
   document.addEventListener('keydown', (e) => {
-    if (!config.enabled || !config.shortcutEnabled || !config.aggressiveSkip) return;
+    if (!isAdSkipperActive() || !config.shortcutEnabled || !config.aggressiveSkip) return;
     if (e.shiftKey && (e.key === 'S' || e.key === 's')) {
       e.preventDefault();
       if (adState.active && !adState.watching) {
@@ -2582,6 +2647,7 @@ declare global {
 
   document.addEventListener("visibilitychange", () => {
     enforceAutoplayGuards();
+    scheduleAdWatchdogTick();
   });
 
   window.addEventListener("scroll", scheduleMiniplayerUpdate, { passive: true });
@@ -2679,7 +2745,7 @@ declare global {
           btn.classList.add('pip-active');
         }
       } catch (err) {
-        console.warn('[Tube Shield] PiP error:', err);
+        console.warn('[YouTube Extension] PiP error:', err);
       }
     });
 
@@ -2743,7 +2809,7 @@ declare global {
     if (isInIframe()) return;
     loadSettings().then(() => {
       // garantir que as configurações foram carregadas antes de iniciar o loop
-      startAdblockProtection();
+      if (isAdSkipperActive()) startAdblockProtection();
       try { mainLoop(); } catch (e) {}
       setInterval(mainLoop, CHECK_INTERVAL);
       // Inject PiP button if enabled

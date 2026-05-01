@@ -987,6 +987,26 @@ kbd {
   gap: 18px;
 }
 
+.cinema-preview-shell {
+  display: grid;
+  gap: 10px;
+}
+
+.preview-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.preview-label span {
+  color: var(--text-muted);
+  font: 500 12px "JetBrains Mono", ui-monospace, monospace;
+}
+
 .cinema-preview {
   display: grid;
   grid-template-columns: 1.35fr 0.65fr;

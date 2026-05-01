@@ -21,17 +21,17 @@
     let state = "active";
     if (settings.enabled === false) {
       state = "disabled";
-    } else if (settings.aggressiveSkip === false) {
+    } else if (settings.adSkipperEnabled === false || settings.aggressiveSkip === false) {
       state = "passive";
     }
     chrome.action.setIcon({ path: ICONS[state] });
   }
-  chrome.storage.local.get({ enabled: true, aggressiveSkip: true }, (s) => {
+  chrome.storage.local.get({ enabled: true, adSkipperEnabled: true, aggressiveSkip: true }, (s) => {
     updateIcon(s);
   });
   chrome.storage.onChanged.addListener((changes) => {
-    if (changes.enabled || changes.aggressiveSkip) {
-      chrome.storage.local.get({ enabled: true, aggressiveSkip: true }, (s) => {
+    if (changes.enabled || changes.adSkipperEnabled || changes.aggressiveSkip) {
+      chrome.storage.local.get({ enabled: true, adSkipperEnabled: true, aggressiveSkip: true }, (s) => {
         updateIcon(s);
       });
     }

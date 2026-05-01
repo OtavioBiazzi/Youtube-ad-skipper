@@ -1,4 +1,4 @@
-# Tube Shield
+# YouTube Extension
 
 Uma extensão experimental de navegador para reunir **skipper inteligente, controles de player, aparência e recursos avançados do YouTube** em um único painel.
 

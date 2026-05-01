@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tube Shield</title>
+  <title>YouTube Extension</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
@@ -17,7 +17,7 @@
       <div class="header-mark">
         <img class="header-mark-img" data-state-icon src="icon48.png" alt="" aria-hidden="true">
       </div>
-      <h1 class="header-title">Tube Shield</h1>
+      <h1 class="header-title">YouTube Extension</h1>
       <span class="header-version" id="version-tag" aria-label="Extension version">v5.0.0</span>
       <button class="header-settings" id="btn-open-settings" title="Abrir Configurações">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -65,6 +65,21 @@
 
     <!-- Section: Config -->
     <div class="section-label">Skipper</div>
+
+    <div class="block">
+      <div class="block-row">
+        <div class="block-label">
+          <img class="state-icon-img" data-state-icon src="icon48.png" alt="" aria-hidden="true">
+          <span>Modulo Ad Skipper</span>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="toggle-ad-skipper" checked>
+          <span class="switch-track"></span>
+        </label>
+      </div>
+      <div class="hint">Desliga apenas o pulo de anuncios. O resto da extensao continua ativo.</div>
+      <div class="hint hint--note" id="note-ad-skipper" style="display:none;">Recarregue (F5) para aplicar ao video atual.</div>
+    </div>
 
     <!-- Skip Delay -->
     <div class="block" id="block-delay">

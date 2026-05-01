@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tube Shield - Control Center</title>
+  <title>YouTube Extension - Control Center</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
@@ -17,7 +17,7 @@
           <img class="header-mark-img" data-state-icon src="icon48.png" alt="" aria-hidden="true">
         </div>
         <div>
-          <h1 class="header-title">Tube Shield</h1>
+          <h1 class="header-title">YouTube Extension</h1>
           <span class="header-sub">Control Center</span>
         </div>
       </div>
@@ -92,6 +92,13 @@
               <span>Controle principal</span>
             </div>
             <div class="card-body control-stack">
+              <div class="opt-row">
+                <div class="opt-info">
+                  <span class="opt-title">Modulo Ad Skipper</span>
+                  <span class="opt-desc">Desliga apenas o pulo/aceleracao de anuncios, sem desativar o resto da extensao.</span>
+                </div>
+                <label class="switch"><input type="checkbox" id="opt-ad-skipper-enabled" checked><span class="switch-track"></span></label>
+              </div>
               <div class="opt-row">
                 <div class="opt-info">
                   <span class="opt-title">Mutar anuncios</span>
@@ -278,6 +285,8 @@
             <div class="card-header"><span>Mouse e atalhos</span><span class="tag tag--stage">MAPA</span></div>
             <div class="card-body control-stack">
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Inverter direcao da roda</span><span class="opt-desc">Troca subir/descer nos controles de volume e velocidade.</span></div><label class="switch"><input type="checkbox" id="opt-player-wheel-invert"><span class="switch-track"></span></label></div>
+              <button class="outline-action" type="button" data-setting-action="shortcutEditor">Configurar atalhos do teclado</button>
+              <div class="module-note">Os campos abaixo representam as combinacoes personalizadas; o editor completo entra quando ligarmos o motor de atalhos.</div>
               <div class="keymap-grid">
                 <label><span>Pular anuncio</span><input class="control-input" data-setting="shortcutSkipAd" type="text" value="Shift+S"></label>
                 <label><span>Velocidade -</span><input class="control-input" data-setting="shortcutSpeedDown" type="text" value="Ctrl+,"></label>
@@ -361,7 +370,7 @@
           <article class="card card--module">
             <div class="card-header"><span>Tema e CSS customizado</span><span class="tag tag--stage">MAPA</span></div>
             <div class="card-body control-stack">
-              <label class="field-row"><span>Motor de tema</span><select class="control-input" data-setting="themeEngine"><option value="tube-shield" selected>Tube Shield</option><option value="youtube">YouTube oficial</option><option value="enhancer">Enhancer style</option><option value="deepdark">YouTube-DeepDark</option><option value="custom">Personalizado</option></select></label>
+              <label class="field-row"><span>Motor de tema</span><select class="control-input" data-setting="themeEngine"><option value="tube-shield" selected>YouTube Extension</option><option value="youtube">YouTube oficial</option><option value="enhancer">Enhancer style</option><option value="deepdark">YouTube-DeepDark</option><option value="custom">Personalizado</option></select></label>
               <label class="field-row"><span>Variante</span><select class="control-input" data-setting="themeVariant"><option value="red" selected>Red</option><option value="deep-dark">Deep Dark</option><option value="gray">Gray</option><option value="blue">Blue</option></select></label>
               <div class="theme-swatches" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">YouTube-DeepDark personalizado</span><span class="opt-desc">Salva as cores para a variante personalizada.</span></div><label class="switch"><input type="checkbox" data-setting="themeDeepDarkCustom"><span class="switch-track"></span></label></div>
@@ -405,7 +414,10 @@
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Modo ultrawide 21:9 / 32:9</span></div><label class="switch"><input type="checkbox" data-setting="ultrawideEnabled"><span class="switch-track"></span></label></div>
               <label class="field-row"><span>Ajuste de encaixe</span><select class="control-input" data-setting="ultrawideFit"><option value="smart-crop" selected>Crop inteligente</option><option value="contain">Contain</option><option value="stretch">Stretch</option></select></label>
             </div>
-            <div class="cinema-preview"><div class="preview-player"><span></span></div><div class="preview-side"></div></div>
+            <div class="cinema-preview-shell">
+              <div class="preview-label"><strong>Previa</strong><span>video player</span></div>
+              <div class="cinema-preview"><div class="preview-player"><span></span></div><div class="preview-side"></div></div>
+            </div>
           </div>
         </article>
       </section>
@@ -425,7 +437,7 @@
             <div class="card-body control-stack">
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Exibir em uma barra</span><span class="opt-desc">Adiciona atalhos abaixo do player do YouTube.</span></div><label class="switch"><input type="checkbox" id="opt-toolbar-enabled" checked><span class="switch-track"></span></label></div>
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Exibir dentro do player</span><span class="opt-desc">Planejado para colocar os controles sobre o video.</span></div><label class="switch"><input type="checkbox" data-setting="toolbarInsidePlayer"><span class="switch-track"></span></label></div>
-              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Manter controles visiveis</span><span class="opt-desc">Evita esconder a barra atras do botao de mais opcoes.</span></div><label class="switch"><input type="checkbox" data-setting="toolbarAlwaysVisible"><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Manter controles visiveis</span><span class="opt-desc">Mantem os controles sem precisar clicar ou passar o cursor no icone de mais opcoes.</span></div><label class="switch"><input type="checkbox" data-setting="toolbarAlwaysVisible"><span class="switch-track"></span></label></div>
               <label class="field-row"><span>Posicao da barra</span><select class="control-input" id="opt-toolbar-position"><option value="below" selected>Abaixo do video</option><option value="above">Acima do video</option></select></label>
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Centralizar ao expandir ou tela cheia</span></div><label class="switch"><input type="checkbox" id="opt-toolbar-center" checked><span class="switch-track"></span></label></div>
               <div class="toolbar-grid">
@@ -459,13 +471,14 @@
           <article class="card card--module">
             <div class="card-header"><span>Script personalizado</span><span class="tag tag--risk">BETA</span></div>
             <div class="card-body control-stack">
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Script personalizado</span><span class="opt-desc">Liga o comando da propria secao para executar o script quando voce quiser.</span></div><label class="switch"><input type="checkbox" data-setting="customScriptEnabled"><span class="switch-track"></span></label></div>
               <div class="warning-box warning-box--alert">Use apenas scripts seus ou de fontes confiaveis.</div>
               <textarea class="control-input code-textarea" data-setting="customScriptCode" rows="7">// seu script aqui
 document.addEventListener("yt-navigate-finish", () =&gt; {});</textarea>
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Executar automaticamente no YouTube</span></div><label class="switch"><input type="checkbox" data-setting="customScriptAutoRun"><span class="switch-track"></span></label></div>
               <div class="action-row">
                 <button class="outline-action" type="button" data-setting-action="customScriptSave">Salvar script</button>
-                <button class="outline-action" type="button" data-setting-action="customScriptRun">Executar manualmente</button>
+                <button class="outline-action" type="button" data-setting-action="customScriptRun">Executar Script personalizado</button>
               </div>
             </div>
           </article>
@@ -476,7 +489,7 @@ document.addEventListener("yt-navigate-finish", () =&gt; {});</textarea>
         <div class="section-heading section-heading--row">
           <div>
             <span class="section-kicker">Projeto</span>
-            <h2>Sobre o Tube Shield</h2>
+            <h2>Sobre o YouTube Extension</h2>
             <p>A branch experimental mantem o skipper funcional e prepara a extensao para substituir varias ferramentas do YouTube aos poucos.</p>
           </div>
         </div>

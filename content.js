@@ -9,6 +9,7 @@
     ];
     let config = {
       enabled: true,
+      adSkipperEnabled: true,
       skipDelay: 1,
       muteAds: true,
       showOverlay: true,
@@ -148,6 +149,8 @@
     let appearanceSignature = "";
     let miniplayerSignature = "";
     let miniplayerUpdateRaf = 0;
+    let adWatchdogVideo = null;
+    let adWatchdogTimeout = null;
     function humanDelay(baseMs) {
       if (baseMs <= 0) return 0;
       const jitter = baseMs * (0.85 + Math.random() * 0.3);
@@ -159,6 +162,7 @@
           chrome.storage.local.get(
             {
               enabled: true,
+              adSkipperEnabled: true,
               skipDelay: 1,
               muteAds: true,
               showOverlay: true,
@@ -229,6 +233,7 @@
                 });
               }
               config.enabled = !!s.enabled;
+              config.adSkipperEnabled = s.adSkipperEnabled !== false;
               config.skipDelay = normalizeSkipDelay(s.skipDelay);
               config.muteAds = !!s.muteAds;
               config.showOverlay = !!s.showOverlay;
@@ -301,7 +306,7 @@
         if (changes.enabled) {
           config.enabled = !!changes.enabled.newValue;
           if (config.enabled) {
-            startAdblockProtection();
+            if (isAdSkipperActive()) startAdblockProtection();
             if (config.pipEnabled) injectPipButton();
           } else {
             cleanupRuntimeState();
@@ -310,6 +315,16 @@
           }
           applyAppearanceFilters();
           updateMiniplayer();
+        }
+        if (changes.adSkipperEnabled) {
+          config.adSkipperEnabled = changes.adSkipperEnabled.newValue !== false;
+          if (isAdSkipperActive()) {
+            startAdblockProtection();
+            scheduleAdWatchdogTick();
+          } else {
+            cleanupRuntimeState();
+            stopAdblockProtection();
+          }
         }
         if (changes.skipDelay) {
           config.skipDelay = normalizeSkipDelay(changes.skipDelay.newValue);
@@ -557,6 +572,9 @@
     function getYouTubePlayer() {
       const player = document.getElementById("movie_player") || document.querySelector(".html5-video-player");
       return player || null;
+    }
+    function isAdSkipperActive() {
+      return !!config.enabled && config.adSkipperEnabled !== false;
     }
     function getFinitePositiveNumber(value) {
       const n = Number(value);
@@ -1280,7 +1298,7 @@
           await video.requestPictureInPicture();
         }
       } catch (err) {
-        console.warn("[Tube Shield] PiP error:", err);
+        console.warn("[YouTube Extension] PiP error:", err);
       }
     }
     function captureVideoFrame(video = getActiveVideo()) {
@@ -1296,10 +1314,10 @@
         context.drawImage(video, 0, 0, width, height);
         const link = document.createElement("a");
         link.href = canvas.toDataURL("image/png");
-        link.download = "tube-shield-frame-" + Date.now() + ".png";
+        link.download = "youtube-extension-frame-" + Date.now() + ".png";
         link.click();
       } catch (err) {
-        console.warn("[Tube Shield] Screenshot blocked by the video source:", err);
+        console.warn("[YouTube Extension] Screenshot blocked by the video source:", err);
       }
     }
     function toggleTheaterMode() {
@@ -1523,7 +1541,7 @@
       }, "*");
     }
     function forceSkipAd(video = document.querySelector("video")) {
-      if (!config.enabled || !config.aggressiveSkip || adState.watching) return false;
+      if (!isAdSkipperActive() || !config.aggressiveSkip || adState.watching) return false;
       requestMainWorldSkip();
       const player = getYouTubePlayer();
       let attempted = false;
@@ -1598,7 +1616,7 @@
       stopPlaybackRateRestore();
     }
     function applySpeedThrough(video = document.querySelector("video")) {
-      if (!config.enabled || !config.aggressiveSkip || adState.watching) return false;
+      if (!isAdSkipperActive() || !config.aggressiveSkip || adState.watching) return false;
       const rate = getSpeedThroughRate();
       requestMainWorldSpeedThrough(rate);
       let attempted = false;
@@ -1622,10 +1640,10 @@
       return attempted;
     }
     function startSpeedThrough() {
-      if (!config.aggressiveSkip || adState.speedThroughInterval) return;
+      if (!isAdSkipperActive() || !config.aggressiveSkip || adState.speedThroughInterval) return;
       applySpeedThrough();
       adState.speedThroughInterval = setInterval(() => {
-        if (!config.enabled || !adState.active || adState.watching || !getAdPlaying()) {
+        if (!isAdSkipperActive() || !adState.active || adState.watching || !getAdPlaying()) {
           stopSpeedThrough();
           return;
         }
@@ -1679,7 +1697,7 @@
       clearPostSkipRestoreChecks();
       const targetRate = adState.preAdPlaybackRate || 1;
       adState.postSkipRestoreTimeouts = POST_SKIP_RESTORE_DELAYS_MS.map((delay) => setTimeout(() => {
-        if (!config.enabled || adState.watching || !getAdPlaying()) {
+        if (!isAdSkipperActive() || adState.watching || !getAdPlaying()) {
           stopSpeedThrough();
           startPlaybackRateRestore(targetRate);
           clearPostSkipRestoreChecks();
@@ -1702,7 +1720,7 @@
       if (incrementAdCounter()) showToastNotification();
     }
     function attemptScheduledSkip() {
-      if (!config.enabled || !adState.active || adState.watching) return false;
+      if (!isAdSkipperActive() || !adState.active || adState.watching) return false;
       const video = document.querySelector("video");
       if (clickSkipAdBtn()) {
         finishSkipClick();
@@ -1715,10 +1733,10 @@
       return false;
     }
     function startForceSkipBurst(video = document.querySelector("video")) {
-      if (!config.aggressiveSkip || adState.forceSkipInterval) return;
+      if (!isAdSkipperActive() || !config.aggressiveSkip || adState.forceSkipInterval) return;
       adState.forceSkipStartedAt = Date.now();
       const tick = () => {
-        if (!config.enabled || adState.watching || !getAdPlaying()) {
+        if (!isAdSkipperActive() || adState.watching || !getAdPlaying()) {
           stopForceSkipBurst();
           return;
         }
@@ -1746,7 +1764,7 @@
       const root = document.body || document.documentElement;
       if (!root) return;
       skipButtonObserver = new MutationObserver(() => {
-        if (!config.enabled || !adState.active || adState.watching || !adState.skipTargetTime) return;
+        if (!isAdSkipperActive() || !adState.active || adState.watching || !adState.skipTargetTime) return;
         if (Date.now() < adState.skipTargetTime) return;
         if (Date.now() - adState.lastObserverSkipAttempt < 90) return;
         adState.lastObserverSkipAttempt = Date.now();
@@ -1764,7 +1782,7 @@
     ];
     const ANTI_ADBLOCK_STYLE_ID = "ytp-css-patch-ab";
     function injectAntiAdblockCSS() {
-      if (!config.enabled) return;
+      if (!isAdSkipperActive()) return;
       if (document.getElementById(ANTI_ADBLOCK_STYLE_ID)) return;
       const s = document.createElement("style");
       s.id = ANTI_ADBLOCK_STYLE_ID;
@@ -1793,7 +1811,7 @@
       if (style) style.remove();
     }
     function startAdblockProtection() {
-      if (!config.enabled) return;
+      if (!isAdSkipperActive()) return;
       injectAntiAdblockCSS();
       startAdblockObserver();
       dismissAdblockWarning();
@@ -1810,7 +1828,7 @@
       removeAntiAdblockCSS();
     }
     function nukeAdblockElement(el) {
-      if (!config.enabled || !el) return;
+      if (!isAdSkipperActive() || !el) return;
       const shouldCount = el.isConnected !== false;
       el.remove();
       const backdrops = document.querySelectorAll("iron-overlay-backdrop, tp-yt-paper-dialog-backdrop");
@@ -1824,7 +1842,7 @@
       }
     }
     function checkAndNukeNode(node) {
-      if (!config.enabled) return;
+      if (!isAdSkipperActive()) return;
       if (!node || node.nodeType !== 1) return;
       if (_abTagNames.includes(node.tagName)) {
         nukeAdblockElement(node);
@@ -1848,7 +1866,7 @@
       }
     }
     function startAdblockObserver() {
-      if (!config.enabled || adblockObserver || adblockBodyWaitObserver) return;
+      if (!isAdSkipperActive() || adblockObserver || adblockBodyWaitObserver) return;
       const root = document.body || document.documentElement;
       if (!document.body) {
         adblockBodyWaitObserver = new MutationObserver(() => {
@@ -1862,7 +1880,7 @@
         return;
       }
       adblockObserver = new MutationObserver((mutations) => {
-        if (!config.enabled) return;
+        if (!isAdSkipperActive()) return;
         for (const mutation of mutations) {
           for (const node of mutation.addedNodes) {
             checkAndNukeNode(node);
@@ -1875,7 +1893,7 @@
       });
     }
     function dismissAdblockWarning() {
-      if (!config.enabled) return false;
+      if (!isAdSkipperActive()) return false;
       const enforcement = document.querySelector("ytd-enforcement-message-view-model");
       if (enforcement) {
         const dialog = enforcement.closest("tp-yt-paper-dialog") || enforcement;
@@ -2147,14 +2165,52 @@
       adState.skipTimeout = null;
       adState.speedThroughInterval = null;
     }
+    const AD_WATCHDOG_EVENTS = ["play", "playing", "timeupdate", "durationchange", "ratechange", "loadeddata"];
+    function scheduleAdWatchdogTick() {
+      if (!isAdSkipperActive() || adWatchdogTimeout !== null) return;
+      adWatchdogTimeout = window.setTimeout(() => {
+        adWatchdogTimeout = null;
+        if (!isAdSkipperActive()) return;
+        try {
+          const adPlaying = getAdPlaying();
+          if (adPlaying && adState.active && !adState.watching && adState.skipTargetTime && Date.now() >= adState.skipTargetTime) {
+            attemptScheduledSkip();
+            return;
+          }
+          mainLoop();
+        } catch (err) {
+        }
+      }, document.hidden ? 250 : 90);
+    }
+    function bindAdSkipperWatchdog() {
+      const video = getActiveVideo();
+      if (!video || adWatchdogVideo === video) return;
+      if (adWatchdogVideo) {
+        AD_WATCHDOG_EVENTS.forEach((eventName) => {
+          adWatchdogVideo?.removeEventListener(eventName, scheduleAdWatchdogTick, true);
+        });
+      }
+      adWatchdogVideo = video;
+      AD_WATCHDOG_EVENTS.forEach((eventName) => {
+        video.addEventListener(eventName, scheduleAdWatchdogTick, true);
+      });
+    }
     function mainLoop() {
       runAppearanceTasks();
       updateMiniplayer();
       updatePlayerToolbar();
       if (!config.enabled) {
         if (adState.active || adState.overlayEl) cleanupRuntimeState();
+        stopAdblockProtection();
         return;
       }
+      if (!isAdSkipperActive()) {
+        if (adState.active || adState.overlayEl) cleanupRuntimeState();
+        enforceAutoplayGuards();
+        applyPlayerPreferences();
+        return;
+      }
+      bindAdSkipperWatchdog();
       dismissAdblockWarning();
       const adPlaying = getAdPlaying();
       if (!adPlaying) enforceAutoplayGuards();
@@ -2201,7 +2257,7 @@
       }
     }
     document.addEventListener("keydown", (e) => {
-      if (!config.enabled || !config.shortcutEnabled || !config.aggressiveSkip) return;
+      if (!isAdSkipperActive() || !config.shortcutEnabled || !config.aggressiveSkip) return;
       if (e.shiftKey && (e.key === "S" || e.key === "s")) {
         e.preventDefault();
         if (adState.active && !adState.watching) {
@@ -2235,6 +2291,7 @@
     }, true);
     document.addEventListener("visibilitychange", () => {
       enforceAutoplayGuards();
+      scheduleAdWatchdogTick();
     });
     window.addEventListener("scroll", scheduleMiniplayerUpdate, { passive: true });
     window.addEventListener("resize", scheduleMiniplayerUpdate);
@@ -2323,7 +2380,7 @@
             btn.classList.add("pip-active");
           }
         } catch (err) {
-          console.warn("[Tube Shield] PiP error:", err);
+          console.warn("[YouTube Extension] PiP error:", err);
         }
       });
       player.style.position = "relative";
@@ -2379,7 +2436,7 @@
     function init() {
       if (isInIframe()) return;
       loadSettings().then(() => {
-        startAdblockProtection();
+        if (isAdSkipperActive()) startAdblockProtection();
         try {
           mainLoop();
         } catch (e) {

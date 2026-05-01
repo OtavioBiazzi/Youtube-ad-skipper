@@ -2,6 +2,7 @@
   "use strict";
   const DEFAULT_SETTINGS = {
     enabled: true,
+    adSkipperEnabled: true,
     skipDelay: 1,
     muteAds: true,
     showOverlay: true,
@@ -16,6 +17,7 @@
     return document.querySelector(selector);
   }
   const toggleEnabled = byId("toggle-enabled");
+  const toggleAdSkipper = byId("toggle-ad-skipper");
   const toggleMute = byId("toggle-mute");
   const toggleOverlay = byId("toggle-overlay");
   const toggleAggressive = byId("toggle-aggressive");
@@ -32,6 +34,7 @@
   const stateIcons = Array.from(document.querySelectorAll("[data-state-icon]"));
   const notes = {
     enabled: document.getElementById("note-enabled"),
+    adSkipperEnabled: document.getElementById("note-ad-skipper"),
     skipDelay: document.getElementById("note-delay"),
     muteAds: document.getElementById("note-mute"),
     showOverlay: document.getElementById("note-overlay"),
@@ -42,17 +45,19 @@
     const manifestVersion = chrome.runtime.getManifest().version;
     if (versionTag) versionTag.textContent = `v${manifestVersion}`;
   } catch (err) {
-    console.warn("[Tube Shield] Failed to read manifest version:", err);
+    console.warn("[YouTube Extension] Failed to read manifest version:", err);
     if (versionTag) versionTag.textContent = "v-";
   }
   chrome.storage.local.get(DEFAULT_SETTINGS, (s) => {
     toggleEnabled.checked = s.enabled;
+    toggleAdSkipper.checked = s.adSkipperEnabled !== false;
     toggleMute.checked = s.muteAds;
     toggleOverlay.checked = s.showOverlay;
     toggleAggressive.checked = s.aggressiveSkip;
     skipDelaySlider.value = String(s.skipDelay);
     initialState = {
       enabled: s.enabled,
+      adSkipperEnabled: s.adSkipperEnabled !== false,
       skipDelay: s.skipDelay,
       muteAds: s.muteAds,
       showOverlay: s.showOverlay,
@@ -88,6 +93,10 @@
     renderAggressiveState(on);
     checkChanges();
   });
+  toggleAdSkipper.addEventListener("change", () => {
+    chrome.storage.local.set({ adSkipperEnabled: toggleAdSkipper.checked });
+    checkChanges();
+  });
   skipDelaySlider.addEventListener("input", () => {
     const v = parseInt(skipDelaySlider.value, 10);
     renderDelay(v);
@@ -106,6 +115,7 @@
     if (!initialState || Object.keys(initialState).length === 0) return;
     const current = {
       enabled: toggleEnabled.checked,
+      adSkipperEnabled: toggleAdSkipper.checked,
       skipDelay: parseInt(skipDelaySlider.value, 10),
       muteAds: toggleMute.checked,
       showOverlay: toggleOverlay.checked,
@@ -182,6 +192,7 @@
       renderStatus(!!changes.enabled.newValue);
     }
     if (changes.muteAds) toggleMute.checked = !!changes.muteAds.newValue;
+    if (changes.adSkipperEnabled) toggleAdSkipper.checked = changes.adSkipperEnabled.newValue !== false;
     if (changes.showOverlay) toggleOverlay.checked = !!changes.showOverlay.newValue;
     if (changes.aggressiveSkip) {
       toggleAggressive.checked = !!changes.aggressiveSkip.newValue;

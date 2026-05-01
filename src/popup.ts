@@ -1,9 +1,10 @@
 // ══════════════════════════════════════════════════
-// Tube Shield — Popup Logic v3 | Taste Skill
+// YouTube Extension - Popup Logic v3 | Taste Skill
 // ══════════════════════════════════════════════════
 
 const DEFAULT_SETTINGS = {
   enabled: true,
+  adSkipperEnabled: true,
   skipDelay: 1,
   muteAds: true,
   showOverlay: true,
@@ -24,6 +25,7 @@ function query<T extends Element>(selector: string): T {
 
 type PopupState = {
   enabled: boolean;
+  adSkipperEnabled: boolean;
   skipDelay: number;
   muteAds: boolean;
   showOverlay: boolean;
@@ -36,6 +38,7 @@ type PopupSettings = PopupState & {
 };
 
 const toggleEnabled    = byId<HTMLInputElement>("toggle-enabled");
+const toggleAdSkipper  = byId<HTMLInputElement>("toggle-ad-skipper");
 const toggleMute       = byId<HTMLInputElement>("toggle-mute");
 const toggleOverlay    = byId<HTMLInputElement>("toggle-overlay");
 const toggleAggressive = byId<HTMLInputElement>("toggle-aggressive");
@@ -53,6 +56,7 @@ const stateIcons       = Array.from(document.querySelectorAll<HTMLImageElement>(
 
 const notes = {
   enabled: document.getElementById("note-enabled"),
+  adSkipperEnabled: document.getElementById("note-ad-skipper"),
   skipDelay: document.getElementById("note-delay"),
   muteAds: document.getElementById("note-mute"),
   showOverlay: document.getElementById("note-overlay"),
@@ -67,7 +71,7 @@ try {
   const manifestVersion = chrome.runtime.getManifest().version;
   if (versionTag) versionTag.textContent = `v${manifestVersion}`;
 } catch (err) {
-  console.warn("[Tube Shield] Failed to read manifest version:", err);
+  console.warn("[YouTube Extension] Failed to read manifest version:", err);
   if (versionTag) versionTag.textContent = "v-";
 }
 
@@ -75,6 +79,7 @@ try {
 
 chrome.storage.local.get(DEFAULT_SETTINGS, (s: PopupSettings) => {
   toggleEnabled.checked    = s.enabled;
+  toggleAdSkipper.checked  = s.adSkipperEnabled !== false;
   toggleMute.checked       = s.muteAds;
   toggleOverlay.checked    = s.showOverlay;
   toggleAggressive.checked = s.aggressiveSkip;
@@ -82,6 +87,7 @@ chrome.storage.local.get(DEFAULT_SETTINGS, (s: PopupSettings) => {
 
   initialState = {
     enabled: s.enabled,
+    adSkipperEnabled: s.adSkipperEnabled !== false,
     skipDelay: s.skipDelay,
     muteAds: s.muteAds,
     showOverlay: s.showOverlay,
@@ -125,6 +131,11 @@ toggleAggressive.addEventListener("change", () => {
   checkChanges();
 });
 
+toggleAdSkipper.addEventListener("change", () => {
+  chrome.storage.local.set({ adSkipperEnabled: toggleAdSkipper.checked });
+  checkChanges();
+});
+
 skipDelaySlider.addEventListener("input", () => {
   const v = parseInt(skipDelaySlider.value, 10);
   renderDelay(v);
@@ -148,6 +159,7 @@ function checkChanges() {
 
   const current: PopupState = {
     enabled: toggleEnabled.checked,
+    adSkipperEnabled: toggleAdSkipper.checked,
     skipDelay: parseInt(skipDelaySlider.value, 10),
     muteAds: toggleMute.checked,
     showOverlay: toggleOverlay.checked,
@@ -237,6 +249,7 @@ chrome.storage.onChanged.addListener((changes) => {
     renderStatus(!!changes.enabled.newValue);
   }
   if (changes.muteAds) toggleMute.checked = !!changes.muteAds.newValue;
+  if (changes.adSkipperEnabled) toggleAdSkipper.checked = changes.adSkipperEnabled.newValue !== false;
   if (changes.showOverlay) toggleOverlay.checked = !!changes.showOverlay.newValue;
   if (changes.aggressiveSkip) {
     toggleAggressive.checked = !!changes.aggressiveSkip.newValue;

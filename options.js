@@ -2,6 +2,7 @@
   "use strict";
   const DEFAULT = {
     enabled: true,
+    adSkipperEnabled: true,
     skipDelay: 1,
     muteAds: true,
     showOverlay: true,
@@ -144,6 +145,7 @@
     toolbarVolumeBoost: true,
     codecForceStandardFps: false,
     codecForceAvc: false,
+    customScriptEnabled: false,
     customScriptCode: '// seu script aqui\ndocument.addEventListener("yt-navigate-finish", () => {});',
     customScriptAutoRun: false
   };
@@ -151,6 +153,7 @@
     return document.getElementById(id);
   }
   const optEnabled = byId("opt-enabled");
+  const optAdSkipperEnabled = byId("opt-ad-skipper-enabled");
   const optMute = byId("opt-mute");
   const optOverlay = byId("opt-overlay");
   const optAggressive = byId("opt-aggressive");
@@ -242,6 +245,7 @@
     }
     initialState = JSON.parse(JSON.stringify(s));
     optEnabled.checked = s.enabled;
+    optAdSkipperEnabled.checked = s.adSkipperEnabled !== false;
     optMute.checked = s.muteAds;
     optOverlay.checked = s.showOverlay;
     optAggressive.checked = s.aggressiveSkip;
@@ -324,13 +328,16 @@
   try {
     versionTag.textContent = "v" + chrome.runtime.getManifest().version;
   } catch (err) {
-    console.warn("[Tube Shield] Failed to read manifest version:", err);
+    console.warn("[YouTube Extension] Failed to read manifest version:", err);
     versionTag.textContent = "v-";
   }
   optEnabled.addEventListener("change", () => {
     const on = optEnabled.checked;
     chrome.storage.local.set({ enabled: on });
     renderStatus(on);
+  });
+  optAdSkipperEnabled.addEventListener("change", () => {
+    chrome.storage.local.set({ adSkipperEnabled: optAdSkipperEnabled.checked });
   });
   themeToggle.addEventListener("click", () => {
     const isLight = document.body.classList.contains("theme-light");
@@ -914,6 +921,7 @@
     chrome.storage.local.get(DEFAULT, (current) => {
       const needsReload = [
         "enabled",
+        "adSkipperEnabled",
         "skipDelay",
         "muteAds",
         "showOverlay",
@@ -954,6 +962,7 @@
       optEnabled.checked = !!changes.enabled.newValue;
       renderStatus(!!changes.enabled.newValue);
     }
+    if (changes.adSkipperEnabled) optAdSkipperEnabled.checked = changes.adSkipperEnabled.newValue !== false;
     if (changes.muteAds) optMute.checked = !!changes.muteAds.newValue;
     if (changes.showOverlay) optOverlay.checked = !!changes.showOverlay.newValue;
     if (changes.skipDelay) {

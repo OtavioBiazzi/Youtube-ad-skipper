@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Tube Shield",
+  "name": "YouTube Extension",
   "version": "5.0.0",
   "description": "Central de controle para YouTube com skipper inteligente, ajustes do player, aparência e recursos avançados em uma única extensão.",
   "permissions": ["storage"],
@@ -14,7 +14,7 @@
       "48": "icon48.png",
       "128": "icon128.png"
     },
-    "default_title": "Tube Shield"
+    "default_title": "YouTube Extension"
   },
   "background": {
     "service_worker": "background.js"

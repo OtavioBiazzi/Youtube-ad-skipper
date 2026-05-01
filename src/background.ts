@@ -21,7 +21,7 @@ function updateIcon(settings) {
   
   if (settings.enabled === false) {
     state = "disabled";
-  } else if (settings.aggressiveSkip === false) {
+  } else if (settings.adSkipperEnabled === false || settings.aggressiveSkip === false) {
     state = "passive";
   }
   
@@ -29,14 +29,14 @@ function updateIcon(settings) {
 }
 
 // Initial set
-chrome.storage.local.get({ enabled: true, aggressiveSkip: true }, (s) => {
+chrome.storage.local.get({ enabled: true, adSkipperEnabled: true, aggressiveSkip: true }, (s) => {
   updateIcon(s);
 });
 
 // Watch for changes
 chrome.storage.onChanged.addListener((changes) => {
-  if (changes.enabled || changes.aggressiveSkip) {
-    chrome.storage.local.get({ enabled: true, aggressiveSkip: true }, (s) => {
+  if (changes.enabled || changes.adSkipperEnabled || changes.aggressiveSkip) {
+    chrome.storage.local.get({ enabled: true, adSkipperEnabled: true, aggressiveSkip: true }, (s) => {
       updateIcon(s);
     });
   }

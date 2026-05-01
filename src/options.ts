@@ -1,5 +1,5 @@
 // ══════════════════════════════════════════════════
-// Tube Shield — Options Logic | Taste Skill
+// YouTube Extension - Options Logic | Taste Skill
 // ══════════════════════════════════════════════════
 
 type ListMode = 'whitelist' | 'blacklist';
@@ -12,6 +12,7 @@ type PlannedSettingValue = string | number | boolean;
 
 type OptionsSettings = {
   enabled: boolean;
+  adSkipperEnabled: boolean;
   skipDelay: number;
   muteAds: boolean;
   showOverlay: boolean;
@@ -77,6 +78,7 @@ type OptionsSettings = {
 
 const DEFAULT: OptionsSettings = {
   enabled: true,
+  adSkipperEnabled: true,
   skipDelay: 1,
   muteAds: true,
   showOverlay: true,
@@ -220,6 +222,7 @@ const PLANNED_DEFAULTS: Record<string, PlannedSettingValue> = {
   toolbarVolumeBoost: true,
   codecForceStandardFps: false,
   codecForceAvc: false,
+  customScriptEnabled: false,
   customScriptCode: '// seu script aqui\ndocument.addEventListener("yt-navigate-finish", () => {});',
   customScriptAutoRun: false,
 };
@@ -231,6 +234,7 @@ function byId<T extends HTMLElement>(id: string): T {
 }
 
 const optEnabled    = byId<HTMLInputElement>("opt-enabled");
+const optAdSkipperEnabled = byId<HTMLInputElement>("opt-ad-skipper-enabled");
 const optMute       = byId<HTMLInputElement>("opt-mute");
 const optOverlay    = byId<HTMLInputElement>("opt-overlay");
 const optAggressive = byId<HTMLInputElement>("opt-aggressive");
@@ -333,6 +337,7 @@ chrome.storage.local.get(DEFAULT, (s: OptionsSettings) => {
   initialState = JSON.parse(JSON.stringify(s));
 
   optEnabled.checked    = s.enabled;
+  optAdSkipperEnabled.checked = s.adSkipperEnabled !== false;
   optMute.checked       = s.muteAds;
   optOverlay.checked    = s.showOverlay;
   optAggressive.checked = s.aggressiveSkip;
@@ -425,7 +430,7 @@ chrome.storage.local.get(DEFAULT, (s: OptionsSettings) => {
 try {
   versionTag.textContent = "v" + chrome.runtime.getManifest().version;
 } catch (err) {
-  console.warn("[Tube Shield] Failed to read manifest version:", err);
+  console.warn("[YouTube Extension] Failed to read manifest version:", err);
   versionTag.textContent = "v-";
 }
 
@@ -435,6 +440,10 @@ optEnabled.addEventListener("change", () => {
   const on = optEnabled.checked;
   chrome.storage.local.set({ enabled: on });
   renderStatus(on);
+});
+
+optAdSkipperEnabled.addEventListener("change", () => {
+  chrome.storage.local.set({ adSkipperEnabled: optAdSkipperEnabled.checked });
 });
 
 themeToggle.addEventListener("click", () => {
@@ -1135,7 +1144,7 @@ function checkRestartWarning() {
   if (!initialState) return;
   chrome.storage.local.get(DEFAULT, (current: OptionsSettings) => {
     const needsReload: Array<keyof OptionsSettings> = [
-      'enabled', 'skipDelay', 'muteAds', 'showOverlay', 'aggressiveSkip', 'listMode',
+      'enabled', 'adSkipperEnabled', 'skipDelay', 'muteAds', 'showOverlay', 'aggressiveSkip', 'listMode',
       'instantSkip', 'pipEnabled', 'adSpeedRate', 'customSpeedEnabled', 'adaptiveSpeedEnabled'
     ];
     let changed = false;
@@ -1181,6 +1190,7 @@ chrome.storage.onChanged.addListener((changes) => {
     optEnabled.checked = !!changes.enabled.newValue;
     renderStatus(!!changes.enabled.newValue);
   }
+  if (changes.adSkipperEnabled) optAdSkipperEnabled.checked = changes.adSkipperEnabled.newValue !== false;
   if (changes.muteAds) optMute.checked = !!changes.muteAds.newValue;
   if (changes.showOverlay) optOverlay.checked = !!changes.showOverlay.newValue;
   if (changes.skipDelay) {
