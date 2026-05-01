@@ -1179,12 +1179,15 @@ kbd {
   gap: 12px;
 }
 
-.overview-title strong,
-.overview-title span {
+.overview-title > div > strong,
+.overview-title > div > span {
   display: block;
 }
 
-.overview-title span {
+.overview-title > div > span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
   margin-top: 4px;
   color: var(--text-muted);
   font-size: 13px;
@@ -1194,7 +1197,7 @@ kbd {
   display: inline-block;
   width: 8px;
   height: 8px;
-  margin-right: 7px;
+  flex: 0 0 auto;
   border-radius: 50%;
   background: var(--green);
   box-shadow: 0 0 0 4px var(--green-dim);
