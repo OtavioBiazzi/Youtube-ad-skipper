@@ -282,7 +282,7 @@
             </div>
           </article>
           <article class="card card--module">
-            <div class="card-header"><span>Mouse e atalhos</span><span class="tag tag--stage">MAPA</span></div>
+            <div class="card-header"><span>Mouse e atalhos</span><span class="tag tag--on">FUNCIONAL</span></div>
             <div class="card-body control-stack">
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Inverter direcao da roda</span><span class="opt-desc">Troca subir/descer nos controles de volume e velocidade.</span></div><label class="switch"><input type="checkbox" id="opt-player-wheel-invert"><span class="switch-track"></span></label></div>
               <button class="outline-action" type="button" data-setting-action="shortcutEditor">Configurar atalhos do teclado</button>
@@ -310,7 +310,7 @@
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Desativar reproducao automatica</span><span class="opt-desc">Config geral para pausar videos iniciados pelo YouTube.</span></div><label class="switch"><input type="checkbox" data-setting="autoplayDisableAll"><span class="switch-track"></span></label></div>
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Bloquear autoplay na aba atual</span><span class="opt-desc">Pausa reproducoes sem clique ou tecla recente.</span></div><label class="switch"><input type="checkbox" id="opt-autoplay-foreground"><span class="switch-track"></span></label></div>
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Permitir em playlists</span><span class="opt-desc">Nao interrompe sequencias quando existe uma playlist ativa.</span></div><label class="switch"><input type="checkbox" id="opt-autoplay-allow-playlists" checked><span class="switch-track"></span></label></div>
-              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Parar pre-carregamento</span><span class="opt-desc">Etapa futura: bloquear o carregamento antecipado do video.</span></div><label class="switch"><input type="checkbox" data-setting="autoplayStopPreload"><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Parar pre-carregamento</span><span class="opt-desc">Experimental: tenta impedir carregamento antes de uma acao do usuario.</span></div><label class="switch"><input type="checkbox" data-setting="autoplayStopPreload"><span class="switch-track"></span></label></div>
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Pausar abas de fundo</span><span class="opt-desc">Ao tocar um video nesta aba, pausa YouTube em abas ocultas.</span></div><label class="switch"><input type="checkbox" id="opt-pause-background-tabs"><span class="switch-track"></span></label></div>
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Ignorar player em pop-up</span><span class="opt-desc">Nao aplica bloqueios de autoplay em janelas pop-up.</span></div><label class="switch"><input type="checkbox" data-setting="autoplayIgnorePopup" checked><span class="switch-track"></span></label></div>
             </div>
@@ -387,7 +387,7 @@
           </article>
         </div>
         <article class="card card--module">
-          <div class="card-header"><span>Layout por fileira</span><span class="tag tag--stage">MAPA</span></div>
+          <div class="card-header"><span>Layout por fileira</span><span class="tag tag--on">FUNCIONAL</span></div>
           <div class="card-body">
             <div class="appearance-grid">
               <label class="field-row"><span>Videos por fileira</span><input class="control-input" data-setting="layoutVideosPerRow" type="number" value="4" min="1" max="8" step="1"></label>
@@ -403,7 +403,7 @@
           </div>
         </article>
         <article class="card card--module">
-          <div class="card-header"><span>Modo cinema e ultrawide</span><span class="tag tag--stage">MAPA</span></div>
+          <div class="card-header"><span>Modo cinema e ultrawide</span><span class="tag tag--on">FUNCIONAL</span></div>
           <div class="card-body cinema-layout">
             <div class="control-stack">
               <label class="field-row"><span>Cor de fundo</span><input class="control-input" data-setting="cinemaColor" type="color" value="#000000"></label>
@@ -429,14 +429,14 @@
             <h2>Controles, backup, codecs e scripts</h2>
             <p>Area para as funcoes mais sensiveis ou tecnicas ficarem separadas do uso diario.</p>
           </div>
-          <span class="module-state">Preparado</span>
+          <span class="module-state">Funcional</span>
         </div>
         <div class="section-grid section-grid--split">
           <article class="card card--module">
             <div class="card-header"><span>Barra de controles do player</span><span class="tag tag--safe">ATIVO</span></div>
             <div class="card-body control-stack">
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Exibir em uma barra</span><span class="opt-desc">Adiciona atalhos abaixo do player do YouTube.</span></div><label class="switch"><input type="checkbox" id="opt-toolbar-enabled" checked><span class="switch-track"></span></label></div>
-              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Exibir dentro do player</span><span class="opt-desc">Planejado para colocar os controles sobre o video.</span></div><label class="switch"><input type="checkbox" data-setting="toolbarInsidePlayer"><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Exibir dentro do player</span><span class="opt-desc">Coloca os controles sobre o video quando houver espaco.</span></div><label class="switch"><input type="checkbox" data-setting="toolbarInsidePlayer"><span class="switch-track"></span></label></div>
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Manter controles visiveis</span><span class="opt-desc">Mantem os controles sem precisar clicar ou passar o cursor no icone de mais opcoes.</span></div><label class="switch"><input type="checkbox" data-setting="toolbarAlwaysVisible"><span class="switch-track"></span></label></div>
               <label class="field-row"><span>Posicao da barra</span><select class="control-input" id="opt-toolbar-position"><option value="below" selected>Abaixo do video</option><option value="above">Acima do video</option></select></label>
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Centralizar ao expandir ou tela cheia</span></div><label class="switch"><input type="checkbox" id="opt-toolbar-center" checked><span class="switch-track"></span></label></div>
@@ -462,10 +462,10 @@
         </div>
         <div class="section-grid section-grid--split">
           <article class="card card--module">
-            <div class="card-header"><span>Backup</span><span class="tag tag--stage">BASE</span></div>
+            <div class="card-header"><span>Backup</span><span class="tag tag--on">FUNCIONAL</span></div>
             <div class="card-body action-row">
-              <button class="outline-action" disabled>Exportar</button>
-              <button class="outline-action" disabled>Importar</button>
+              <button class="outline-action" type="button" data-setting-action="backupExport">Exportar</button>
+              <button class="outline-action" type="button" data-setting-action="backupImport">Importar</button>
             </div>
           </article>
           <article class="card card--module">

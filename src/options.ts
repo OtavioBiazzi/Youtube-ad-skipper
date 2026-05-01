@@ -225,6 +225,7 @@ const PLANNED_DEFAULTS: Record<string, PlannedSettingValue> = {
   customScriptEnabled: false,
   customScriptCode: '// seu script aqui\ndocument.addEventListener("yt-navigate-finish", () => {});',
   customScriptAutoRun: false,
+  customScriptRunAt: 0,
 };
 
 // ── Elements ─────────────────────────────────────
@@ -817,7 +818,19 @@ function loadPlannedSettings() {
       if (!key) return;
       setPlannedControlValue(control, settings[key] ?? PLANNED_DEFAULTS[key] ?? "");
     });
+    updateCinemaPreview();
   });
+}
+
+function persistPlannedControls() {
+  const values: Record<string, PlannedSettingValue> = {};
+  plannedControls.forEach((control) => {
+    const key = getPlannedKey(control);
+    if (!key) return;
+    values[key] = readPlannedControlValue(control);
+  });
+  chrome.storage.local.set(values);
+  return values;
 }
 
 function bindPlannedSettingEvents() {
@@ -829,6 +842,7 @@ function bindPlannedSettingEvents() {
       const key = getPlannedKey(control);
       if (!key) return;
       chrome.storage.local.set({ [key]: readPlannedControlValue(control) });
+      if (key.startsWith("cinema")) updateCinemaPreview();
     };
 
     control.addEventListener("change", persist);
@@ -853,11 +867,88 @@ function bindPlannedSettingEvents() {
           themeCustomCss: PLANNED_DEFAULTS.themeCustomCss,
         };
         chrome.storage.local.set(resetValues, loadPlannedSettings);
+      } else if (action === "customScriptSave") {
+        persistPlannedControls();
+        flashBorder(button, "var(--green)");
+      } else if (action === "customScriptRun") {
+        persistPlannedControls();
+        chrome.storage.local.set({ customScriptEnabled: true, customScriptRunAt: Date.now() });
+        flashBorder(button, "var(--green)");
+      } else if (action === "shortcutEditor") {
+        const firstShortcut = document.querySelector<HTMLInputElement>('[data-setting="shortcutSkipAd"]');
+        firstShortcut?.focus();
+        firstShortcut?.select();
+        flashBorder(button, "var(--accent)");
+      } else if (action === "backupExport") {
+        exportSettingsBackup(button);
+      } else if (action === "backupImport") {
+        importSettingsBackup(button);
       } else {
         flashBorder(button, "var(--accent)");
       }
     });
   });
+}
+
+function getPlannedInput(key: string) {
+  return plannedControls.find(control => getPlannedKey(control) === key) || null;
+}
+
+function updateCinemaPreview() {
+  const preview = document.querySelector<HTMLElement>(".cinema-preview");
+  const player = document.querySelector<HTMLElement>(".cinema-preview .preview-player");
+  if (!preview || !player) return;
+
+  const color = String((getPlannedInput("cinemaColor") as HTMLInputElement | null)?.value || PLANNED_DEFAULTS.cinemaColor);
+  const opacity = Number((getPlannedInput("cinemaOpacity") as HTMLInputElement | null)?.value || PLANNED_DEFAULTS.cinemaOpacity);
+  const alpha = Math.min(1, Math.max(0, opacity / 100));
+  preview.style.background = color;
+  player.style.boxShadow = `0 0 0 999px rgba(0, 0, 0, ${alpha})`;
+}
+
+function exportSettingsBackup(button: HTMLElement) {
+  chrome.storage.local.get(null, (settings) => {
+    const payload = {
+      app: "YouTube Extension",
+      version: chrome.runtime.getManifest().version,
+      exportedAt: new Date().toISOString(),
+      settings,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "youtube-extension-backup.json";
+    link.click();
+    URL.revokeObjectURL(url);
+    flashBorder(button, "var(--green)");
+  });
+}
+
+function importSettingsBackup(button: HTMLElement) {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "application/json";
+  input.addEventListener("change", () => {
+    const file = input.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.addEventListener("load", () => {
+      try {
+        const parsed = JSON.parse(String(reader.result || "{}"));
+        const settings = parsed.settings && typeof parsed.settings === "object" ? parsed.settings : parsed;
+        chrome.storage.local.set(settings, () => {
+          flashBorder(button, "var(--green)");
+          location.reload();
+        });
+      } catch (err) {
+        flashBorder(button, "var(--red)");
+      }
+    });
+    reader.readAsText(file);
+  });
+  input.click();
 }
 
 // ── Render ────────────────────────────────────────
@@ -1318,6 +1409,7 @@ chrome.storage.onChanged.addListener((changes) => {
     const nextValue = (changes[key].newValue ?? PLANNED_DEFAULTS[key] ?? "") as PlannedSettingValue;
     setPlannedControlValue(control, nextValue);
   });
+  if (changes.cinemaColor || changes.cinemaOpacity) updateCinemaPreview();
   
   if (changes.totalAdsSkipped) {
     animateCounter(statTotal, Number(changes.totalAdsSkipped.newValue) || 0);
