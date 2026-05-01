@@ -1799,7 +1799,7 @@
     }
     function getMiniplayerPositionCss() {
       const margin = "18px";
-      const topOffset = "72px";
+      const topOffset = "calc(var(--ytd-masthead-height, 56px) + 16px)";
       switch (normalizeMiniplayerPosition(config.miniplayerPosition)) {
         case "top-right":
           return `top: ${topOffset}; right: ${margin};`;
