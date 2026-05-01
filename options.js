@@ -90,6 +90,63 @@
     toolbarTheater: true,
     toolbarSettings: true
   };
+  const PLANNED_DEFAULTS = {
+    playerSpeedReplaceMenu: true,
+    playerSpeedMenuList: "0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4",
+    playerSpeedButtonsEnabled: true,
+    volumeBoostEnabled: false,
+    volumeBoostLevel: 2,
+    volumeBoostAuto: false,
+    shortcutSkipAd: "Shift+S",
+    shortcutSpeedDown: "Ctrl+,",
+    shortcutSpeedUp: "Ctrl+.",
+    shortcutVolumeDown: "Alt+,",
+    shortcutVolumeUp: "Alt+.",
+    shortcutCinema: "C",
+    shortcutScreenshot: "P",
+    shortcutPopup: "O",
+    shortcutLoop: "L",
+    autoplayDisableAll: false,
+    autoplayStopPreload: false,
+    autoplayIgnorePopup: true,
+    qualityPopup: "medium",
+    qualityFullscreenPopup: "hd1080",
+    miniplayerCustomSize: "480x270",
+    playerPopupEnabled: true,
+    playerPopupEmbeds: false,
+    appearanceSortNewestComments: false,
+    appearanceAutoApplyFilters: false,
+    themeEngine: "tube-shield",
+    themeVariant: "red",
+    themeDeepDarkCustom: false,
+    themeCustomAccent: "#ff334b",
+    themeCustomBackground: "#0f0f0f",
+    themeCustomText: "#f4f5f7",
+    themeCustomCss: "body {\n  --yt-spec-base-background: #0f0f0f;\n}",
+    layoutVideosPerRow: 4,
+    layoutChannelVideosPerRow: 4,
+    layoutShortsPerRow: 8,
+    layoutChannelShortsPerRow: 5,
+    layoutPostsPerRow: 4,
+    appearanceKeepBlackBars: false,
+    appearanceAutoTheater: false,
+    appearanceAutoExpandPlayer: false,
+    appearanceUseViewportPlayer: false,
+    cinemaColor: "#000000",
+    cinemaOpacity: 85,
+    cinemaDefault: false,
+    cinemaAutoResize: false,
+    cinemaUseYouTubeTheater: true,
+    ultrawideEnabled: false,
+    ultrawideFit: "smart-crop",
+    toolbarInsidePlayer: false,
+    toolbarAlwaysVisible: false,
+    toolbarVolumeBoost: true,
+    codecForceStandardFps: false,
+    codecForceAvc: false,
+    customScriptCode: '// seu script aqui\ndocument.addEventListener("yt-navigate-finish", () => {});',
+    customScriptAutoRun: false
+  };
   function byId(id) {
     return document.getElementById(id);
   }
@@ -130,6 +187,7 @@
   const adSpeedValue = byId("opt-ad-speed-value");
   const adSpeedBetaHint = byId("ad-speed-beta-hint");
   const f5Banner = byId("f5-banner");
+  const plannedControls = Array.from(document.querySelectorAll("[data-setting]"));
   const optPlayerSpeedEnabled = byId("opt-player-speed-enabled");
   const optPlayerSpeedDefault = byId("opt-player-speed-default");
   const optPlayerSpeedStep = byId("opt-player-speed-step");
@@ -253,6 +311,8 @@
     renderQualityControlLocks();
     renderMiniplayerControlLocks();
     renderToolbarControlLocks();
+    loadPlannedSettings();
+    bindPlannedSettingEvents();
     const now = /* @__PURE__ */ new Date();
     const today = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0");
     const todayCount = s.todayDate === today ? s.adsSkippedToday || 0 : 0;
@@ -484,7 +544,7 @@
   });
   btnReset.addEventListener("click", () => {
     if (confirm("Isso vai resetar todas as configurações e zerar o contador de anúncios e avisos. Continuar?")) {
-      chrome.storage.local.set(DEFAULT, () => {
+      chrome.storage.local.set({ ...DEFAULT, ...PLANNED_DEFAULTS }, () => {
         location.reload();
       });
     }
@@ -542,6 +602,72 @@
     setTimeout(() => {
       el.style.borderColor = orig;
     }, 600);
+  }
+  function getPlannedKey(control) {
+    return control.dataset.setting || "";
+  }
+  function setPlannedControlValue(control, value) {
+    if (control instanceof HTMLInputElement && control.type === "checkbox") {
+      control.checked = value !== false;
+      return;
+    }
+    control.value = String(value ?? "");
+  }
+  function readPlannedControlValue(control) {
+    if (control instanceof HTMLInputElement && control.type === "checkbox") {
+      return control.checked;
+    }
+    if (control instanceof HTMLInputElement && control.type === "number") {
+      const value = Number(control.value);
+      const key = getPlannedKey(control);
+      return Number.isFinite(value) ? value : PLANNED_DEFAULTS[key] || 0;
+    }
+    return control.value;
+  }
+  function loadPlannedSettings() {
+    chrome.storage.local.get(PLANNED_DEFAULTS, (settings) => {
+      plannedControls.forEach((control) => {
+        const key = getPlannedKey(control);
+        if (!key) return;
+        setPlannedControlValue(control, settings[key] ?? PLANNED_DEFAULTS[key] ?? "");
+      });
+    });
+  }
+  function bindPlannedSettingEvents() {
+    plannedControls.forEach((control) => {
+      if (control.dataset.bound === "true") return;
+      control.dataset.bound = "true";
+      const persist = () => {
+        const key = getPlannedKey(control);
+        if (!key) return;
+        chrome.storage.local.set({ [key]: readPlannedControlValue(control) });
+      };
+      control.addEventListener("change", persist);
+      if (!(control instanceof HTMLInputElement) || control.type !== "checkbox") {
+        control.addEventListener("input", persist);
+      }
+    });
+    document.querySelectorAll("[data-setting-action]").forEach((button) => {
+      if (button.dataset.bound === "true") return;
+      button.dataset.bound = "true";
+      button.addEventListener("click", () => {
+        const action = button.dataset.settingAction || "";
+        if (action === "themeReset") {
+          const resetValues = {
+            themeEngine: PLANNED_DEFAULTS.themeEngine,
+            themeVariant: PLANNED_DEFAULTS.themeVariant,
+            themeDeepDarkCustom: PLANNED_DEFAULTS.themeDeepDarkCustom,
+            themeCustomAccent: PLANNED_DEFAULTS.themeCustomAccent,
+            themeCustomBackground: PLANNED_DEFAULTS.themeCustomBackground,
+            themeCustomText: PLANNED_DEFAULTS.themeCustomText,
+            themeCustomCss: PLANNED_DEFAULTS.themeCustomCss
+          };
+          chrome.storage.local.set(resetValues, loadPlannedSettings);
+        } else {
+          flashBorder(button, "var(--accent)");
+        }
+      });
+    });
   }
   function renderDelay(v, aggressive, instant) {
     delayValue.textContent = String(instant ? 0 : v);
@@ -627,7 +753,7 @@
     return Math.min(25, Math.max(1, Math.round(n)));
   }
   function normalizeQuality(value) {
-    const valid = ["auto", "large", "hd720", "hd1080", "hd1440", "hd2160", "highres"];
+    const valid = ["auto", "medium", "large", "hd720", "hd1080", "hd1440", "hd2160", "highres"];
     return valid.includes(value) ? value : DEFAULT.qualityVideo;
   }
   function normalizeMiniplayerSize(value) {
@@ -949,6 +1075,12 @@
     if (changes.toolbarScreenshot) optToolbarScreenshot.checked = changes.toolbarScreenshot.newValue !== false;
     if (changes.toolbarTheater) optToolbarTheater.checked = changes.toolbarTheater.newValue !== false;
     if (changes.toolbarSettings) optToolbarSettings.checked = changes.toolbarSettings.newValue !== false;
+    plannedControls.forEach((control) => {
+      const key = getPlannedKey(control);
+      if (!key || !changes[key] || document.activeElement === control) return;
+      const nextValue = changes[key].newValue ?? PLANNED_DEFAULTS[key] ?? "";
+      setPlannedControlValue(control, nextValue);
+    });
     if (changes.totalAdsSkipped) {
       animateCounter(statTotal, Number(changes.totalAdsSkipped.newValue) || 0);
     }

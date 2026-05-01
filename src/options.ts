@@ -3,11 +3,12 @@
 // ══════════════════════════════════════════════════
 
 type ListMode = 'whitelist' | 'blacklist';
-type QualityLevel = 'auto' | 'large' | 'hd720' | 'hd1080' | 'hd1440' | 'hd2160' | 'highres';
+type QualityLevel = 'auto' | 'medium' | 'large' | 'hd720' | 'hd1080' | 'hd1440' | 'hd2160' | 'highres';
 type MiniplayerSize = '360x203' | '480x270' | '640x360';
 type MiniplayerPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 type PlayerPopupSize = '480x270' | '640x360' | '960x540';
 type ToolbarPosition = 'below' | 'above';
+type PlannedSettingValue = string | number | boolean;
 
 type OptionsSettings = {
   enabled: boolean;
@@ -165,6 +166,63 @@ const PLAYER_DEFAULTS_PROFILE: Partial<OptionsSettings> = {
   toolbarTheater: true,
   toolbarSettings: true,
 };
+const PLANNED_DEFAULTS: Record<string, PlannedSettingValue> = {
+  playerSpeedReplaceMenu: true,
+  playerSpeedMenuList: '0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4',
+  playerSpeedButtonsEnabled: true,
+  volumeBoostEnabled: false,
+  volumeBoostLevel: 2,
+  volumeBoostAuto: false,
+  shortcutSkipAd: 'Shift+S',
+  shortcutSpeedDown: 'Ctrl+,',
+  shortcutSpeedUp: 'Ctrl+.',
+  shortcutVolumeDown: 'Alt+,',
+  shortcutVolumeUp: 'Alt+.',
+  shortcutCinema: 'C',
+  shortcutScreenshot: 'P',
+  shortcutPopup: 'O',
+  shortcutLoop: 'L',
+  autoplayDisableAll: false,
+  autoplayStopPreload: false,
+  autoplayIgnorePopup: true,
+  qualityPopup: 'medium',
+  qualityFullscreenPopup: 'hd1080',
+  miniplayerCustomSize: '480x270',
+  playerPopupEnabled: true,
+  playerPopupEmbeds: false,
+  appearanceSortNewestComments: false,
+  appearanceAutoApplyFilters: false,
+  themeEngine: 'tube-shield',
+  themeVariant: 'red',
+  themeDeepDarkCustom: false,
+  themeCustomAccent: '#ff334b',
+  themeCustomBackground: '#0f0f0f',
+  themeCustomText: '#f4f5f7',
+  themeCustomCss: 'body {\n  --yt-spec-base-background: #0f0f0f;\n}',
+  layoutVideosPerRow: 4,
+  layoutChannelVideosPerRow: 4,
+  layoutShortsPerRow: 8,
+  layoutChannelShortsPerRow: 5,
+  layoutPostsPerRow: 4,
+  appearanceKeepBlackBars: false,
+  appearanceAutoTheater: false,
+  appearanceAutoExpandPlayer: false,
+  appearanceUseViewportPlayer: false,
+  cinemaColor: '#000000',
+  cinemaOpacity: 85,
+  cinemaDefault: false,
+  cinemaAutoResize: false,
+  cinemaUseYouTubeTheater: true,
+  ultrawideEnabled: false,
+  ultrawideFit: 'smart-crop',
+  toolbarInsidePlayer: false,
+  toolbarAlwaysVisible: false,
+  toolbarVolumeBoost: true,
+  codecForceStandardFps: false,
+  codecForceAvc: false,
+  customScriptCode: '// seu script aqui\ndocument.addEventListener("yt-navigate-finish", () => {});',
+  customScriptAutoRun: false,
+};
 
 // ── Elements ─────────────────────────────────────
 
@@ -213,6 +271,7 @@ const manualSpeedControl = byId<HTMLElement>("manual-speed-control");
 const adSpeedValue = byId<HTMLElement>("opt-ad-speed-value");
 const adSpeedBetaHint = byId<HTMLElement>("ad-speed-beta-hint");
 const f5Banner    = byId<HTMLElement>("f5-banner");
+const plannedControls = Array.from(document.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>("[data-setting]"));
 
 const optPlayerSpeedEnabled = byId<HTMLInputElement>("opt-player-speed-enabled");
 const optPlayerSpeedDefault = byId<HTMLInputElement>("opt-player-speed-default");
@@ -346,6 +405,8 @@ chrome.storage.local.get(DEFAULT, (s: OptionsSettings) => {
   renderQualityControlLocks();
   renderMiniplayerControlLocks();
   renderToolbarControlLocks();
+  loadPlannedSettings();
+  bindPlannedSettingEvents();
   
   // Stats
   const now = new Date();
@@ -642,7 +703,7 @@ optToolbarCenter.addEventListener("change", () => {
 
 btnReset.addEventListener("click", () => {
   if (confirm("Isso vai resetar todas as configurações e zerar o contador de anúncios e avisos. Continuar?")) {
-    chrome.storage.local.set(DEFAULT, () => {
+    chrome.storage.local.set({ ...DEFAULT, ...PLANNED_DEFAULTS }, () => {
       location.reload();
     });
   }
@@ -711,6 +772,83 @@ function flashBorder(el: HTMLElement, color: string) {
   const orig = el.style.borderColor;
   el.style.borderColor = color;
   setTimeout(() => { el.style.borderColor = orig; }, 600);
+}
+
+function getPlannedKey(control: HTMLElement) {
+  return control.dataset.setting || "";
+}
+
+function setPlannedControlValue(control: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement, value: PlannedSettingValue) {
+  if (control instanceof HTMLInputElement && control.type === "checkbox") {
+    control.checked = value !== false;
+    return;
+  }
+
+  control.value = String(value ?? "");
+}
+
+function readPlannedControlValue(control: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement): PlannedSettingValue {
+  if (control instanceof HTMLInputElement && control.type === "checkbox") {
+    return control.checked;
+  }
+
+  if (control instanceof HTMLInputElement && control.type === "number") {
+    const value = Number(control.value);
+    const key = getPlannedKey(control);
+    return Number.isFinite(value) ? value : PLANNED_DEFAULTS[key] || 0;
+  }
+
+  return control.value;
+}
+
+function loadPlannedSettings() {
+  chrome.storage.local.get(PLANNED_DEFAULTS, (settings: Record<string, PlannedSettingValue>) => {
+    plannedControls.forEach((control) => {
+      const key = getPlannedKey(control);
+      if (!key) return;
+      setPlannedControlValue(control, settings[key] ?? PLANNED_DEFAULTS[key] ?? "");
+    });
+  });
+}
+
+function bindPlannedSettingEvents() {
+  plannedControls.forEach((control) => {
+    if (control.dataset.bound === "true") return;
+    control.dataset.bound = "true";
+
+    const persist = () => {
+      const key = getPlannedKey(control);
+      if (!key) return;
+      chrome.storage.local.set({ [key]: readPlannedControlValue(control) });
+    };
+
+    control.addEventListener("change", persist);
+    if (!(control instanceof HTMLInputElement) || control.type !== "checkbox") {
+      control.addEventListener("input", persist);
+    }
+  });
+
+  document.querySelectorAll<HTMLButtonElement>("[data-setting-action]").forEach((button) => {
+    if (button.dataset.bound === "true") return;
+    button.dataset.bound = "true";
+    button.addEventListener("click", () => {
+      const action = button.dataset.settingAction || "";
+      if (action === "themeReset") {
+        const resetValues = {
+          themeEngine: PLANNED_DEFAULTS.themeEngine,
+          themeVariant: PLANNED_DEFAULTS.themeVariant,
+          themeDeepDarkCustom: PLANNED_DEFAULTS.themeDeepDarkCustom,
+          themeCustomAccent: PLANNED_DEFAULTS.themeCustomAccent,
+          themeCustomBackground: PLANNED_DEFAULTS.themeCustomBackground,
+          themeCustomText: PLANNED_DEFAULTS.themeCustomText,
+          themeCustomCss: PLANNED_DEFAULTS.themeCustomCss,
+        };
+        chrome.storage.local.set(resetValues, loadPlannedSettings);
+      } else {
+        flashBorder(button, "var(--accent)");
+      }
+    });
+  });
 }
 
 // ── Render ────────────────────────────────────────
@@ -811,7 +949,7 @@ function normalizeVolumeStep(value: unknown) {
 }
 
 function normalizeQuality(value: unknown): QualityLevel {
-  const valid: QualityLevel[] = ['auto', 'large', 'hd720', 'hd1080', 'hd1440', 'hd2160', 'highres'];
+  const valid: QualityLevel[] = ['auto', 'medium', 'large', 'hd720', 'hd1080', 'hd1440', 'hd2160', 'highres'];
   return valid.includes(value as QualityLevel) ? value as QualityLevel : DEFAULT.qualityVideo;
 }
 
@@ -1164,6 +1302,12 @@ chrome.storage.onChanged.addListener((changes) => {
   if (changes.toolbarScreenshot) optToolbarScreenshot.checked = changes.toolbarScreenshot.newValue !== false;
   if (changes.toolbarTheater) optToolbarTheater.checked = changes.toolbarTheater.newValue !== false;
   if (changes.toolbarSettings) optToolbarSettings.checked = changes.toolbarSettings.newValue !== false;
+  plannedControls.forEach((control) => {
+    const key = getPlannedKey(control);
+    if (!key || !changes[key] || document.activeElement === control) return;
+    const nextValue = (changes[key].newValue ?? PLANNED_DEFAULTS[key] ?? "") as PlannedSettingValue;
+    setPlannedControlValue(control, nextValue);
+  });
   
   if (changes.totalAdsSkipped) {
     animateCounter(statTotal, Number(changes.totalAdsSkipped.newValue) || 0);

@@ -840,7 +840,9 @@ kbd {
 }
 
 .toolbar-grid label,
-.appearance-grid label {
+.appearance-grid label,
+.keymap-grid label,
+.color-grid label {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -851,6 +853,42 @@ kbd {
   background: color-mix(in srgb, var(--surface-2) 72%, transparent);
   color: var(--text-dim);
   font-size: 13px;
+}
+
+.keymap-grid,
+.color-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.keymap-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.keymap-grid label,
+.color-grid label {
+  justify-content: space-between;
+}
+
+.keymap-grid .control-input {
+  max-width: 92px;
+  text-align: center;
+}
+
+.color-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.color-grid .control-input {
+  min-width: 54px;
+  max-width: 76px;
+  padding: 4px;
+}
+
+.code-textarea {
+  min-height: 130px;
+  resize: vertical;
+  line-height: 1.6;
 }
 
 .control-split {
@@ -1003,6 +1041,8 @@ kbd {
   .toolbar-grid,
   .control-split,
   .appearance-grid,
+  .keymap-grid,
+  .color-grid,
   .cinema-layout {
     grid-template-columns: 1fr;
   }

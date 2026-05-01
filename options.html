@@ -253,9 +253,12 @@
             <div class="card-body control-stack">
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Aplicar velocidade padrao</span><span class="opt-desc">Define a velocidade ao abrir um video novo.</span></div><label class="switch"><input type="checkbox" id="opt-player-speed-enabled" checked><span class="switch-track"></span></label></div>
               <label class="field-row"><span>Velocidade padrao</span><input class="control-input" id="opt-player-speed-default" type="number" value="1" min="0.25" max="16" step="0.05"></label>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Substituir velocidades do YouTube</span><span class="opt-desc">Prepara o menu do player para usar a lista personalizada.</span></div><label class="switch"><input type="checkbox" data-setting="playerSpeedReplaceMenu" checked><span class="switch-track"></span></label></div>
+              <label class="field-row"><span>Lista personalizada</span><input class="control-input" data-setting="playerSpeedMenuList" type="text" value="0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4"></label>
               <label class="field-row"><span>Variacao por roda</span><input class="control-input" id="opt-player-speed-step" type="number" value="0.02" min="0.01" max="2" step="0.01"></label>
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Roda do mouse + Ctrl</span><span class="opt-desc">Passe o mouse no player e use Ctrl + roda.</span></div><label class="switch"><input type="checkbox" id="opt-player-speed-wheel" checked><span class="switch-track"></span></label></div>
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Exigir botao direito pressionado</span></div><label class="switch"><input type="checkbox" id="opt-player-speed-right-button"><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Mostrar botoes - e +</span><span class="opt-desc">Mantem os atalhos de velocidade preparados na barra do player.</span></div><label class="switch"><input type="checkbox" data-setting="playerSpeedButtonsEnabled" checked><span class="switch-track"></span></label></div>
             </div>
           </article>
           <article class="card card--module">
@@ -263,16 +266,29 @@
             <div class="card-body control-stack">
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Aplicar volume padrao</span><span class="opt-desc">Ajusta o volume ao abrir um video novo.</span></div><label class="switch"><input type="checkbox" id="opt-player-volume-enabled"><span class="switch-track"></span></label></div>
               <label class="field-row"><span>Volume padrao</span><input class="control-input" id="opt-player-volume-default" type="number" value="50" min="0" max="100" step="1"></label>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Amplificador de volume</span><span class="opt-desc">Planejado para passar de 100% quando necessario.</span></div><label class="switch"><input type="checkbox" data-setting="volumeBoostEnabled"><span class="switch-track"></span></label></div>
+              <label class="field-row"><span>Nivel do amplificador</span><input class="control-input" data-setting="volumeBoostLevel" type="number" value="2" min="1" max="6" step="0.25"></label>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Ampliar automaticamente</span><span class="opt-desc">Aplica o boost automaticamente em videos baixos.</span></div><label class="switch"><input type="checkbox" data-setting="volumeBoostAuto"><span class="switch-track"></span></label></div>
               <label class="field-row"><span>Variacao por roda</span><input class="control-input" id="opt-player-volume-step" type="number" value="5" min="1" max="25" step="1"></label>
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Volume pela roda</span><span class="opt-desc">Use a roda com o cursor em cima do player.</span></div><label class="switch"><input type="checkbox" id="opt-player-volume-wheel"><span class="switch-track"></span></label></div>
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Exigir botao direito pressionado</span></div><label class="switch"><input type="checkbox" id="opt-player-volume-right-button"><span class="switch-track"></span></label></div>
             </div>
           </article>
           <article class="card card--module">
-            <div class="card-header"><span>Mouse</span><span class="tag tag--safe">ATIVO</span></div>
+            <div class="card-header"><span>Mouse e atalhos</span><span class="tag tag--stage">MAPA</span></div>
             <div class="card-body control-stack">
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Inverter direcao da roda</span><span class="opt-desc">Troca subir/descer nos controles de volume e velocidade.</span></div><label class="switch"><input type="checkbox" id="opt-player-wheel-invert"><span class="switch-track"></span></label></div>
-              <div class="module-note">Os atalhos de teclado completos entram depois, junto com o editor de atalhos.</div>
+              <div class="keymap-grid">
+                <label><span>Pular anuncio</span><input class="control-input" data-setting="shortcutSkipAd" type="text" value="Shift+S"></label>
+                <label><span>Velocidade -</span><input class="control-input" data-setting="shortcutSpeedDown" type="text" value="Ctrl+,"></label>
+                <label><span>Velocidade +</span><input class="control-input" data-setting="shortcutSpeedUp" type="text" value="Ctrl+."></label>
+                <label><span>Volume -</span><input class="control-input" data-setting="shortcutVolumeDown" type="text" value="Alt+,"></label>
+                <label><span>Volume +</span><input class="control-input" data-setting="shortcutVolumeUp" type="text" value="Alt+."></label>
+                <label><span>Cinema</span><input class="control-input" data-setting="shortcutCinema" type="text" value="C"></label>
+                <label><span>Screenshot</span><input class="control-input" data-setting="shortcutScreenshot" type="text" value="P"></label>
+                <label><span>Pop-up</span><input class="control-input" data-setting="shortcutPopup" type="text" value="O"></label>
+                <label><span>Loop</span><input class="control-input" data-setting="shortcutLoop" type="text" value="L"></label>
+              </div>
             </div>
           </article>
         </div>
@@ -282,21 +298,25 @@
             <div class="card-header"><span>Autoplay e abas</span><span class="tag tag--safe">ATIVO</span></div>
             <div class="card-body control-stack">
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Bloquear autoplay em abas de fundo</span><span class="opt-desc">Pausa videos que comecam sozinhos enquanto a aba esta oculta.</span></div><label class="switch"><input type="checkbox" id="opt-autoplay-background" checked><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Desativar reproducao automatica</span><span class="opt-desc">Config geral para pausar videos iniciados pelo YouTube.</span></div><label class="switch"><input type="checkbox" data-setting="autoplayDisableAll"><span class="switch-track"></span></label></div>
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Bloquear autoplay na aba atual</span><span class="opt-desc">Pausa reproducoes sem clique ou tecla recente.</span></div><label class="switch"><input type="checkbox" id="opt-autoplay-foreground"><span class="switch-track"></span></label></div>
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Permitir em playlists</span><span class="opt-desc">Nao interrompe sequencias quando existe uma playlist ativa.</span></div><label class="switch"><input type="checkbox" id="opt-autoplay-allow-playlists" checked><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Parar pre-carregamento</span><span class="opt-desc">Etapa futura: bloquear o carregamento antecipado do video.</span></div><label class="switch"><input type="checkbox" data-setting="autoplayStopPreload"><span class="switch-track"></span></label></div>
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Pausar abas de fundo</span><span class="opt-desc">Ao tocar um video nesta aba, pausa YouTube em abas ocultas.</span></div><label class="switch"><input type="checkbox" id="opt-pause-background-tabs"><span class="switch-track"></span></label></div>
-              <div class="module-note">Bloqueio total de pre-carregamento fica para uma etapa separada, porque mexe direto no carregamento do player.</div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Ignorar player em pop-up</span><span class="opt-desc">Nao aplica bloqueios de autoplay em janelas pop-up.</span></div><label class="switch"><input type="checkbox" data-setting="autoplayIgnorePopup" checked><span class="switch-track"></span></label></div>
             </div>
           </article>
           <article class="card card--module">
             <div class="card-header"><span>Qualidade de reproducao</span><span class="tag tag--safe">ATIVO</span></div>
             <div class="card-body control-stack">
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Selecionar automaticamente</span><span class="opt-desc">Escolhe a qualidade ao abrir um video novo.</span></div><label class="switch"><input type="checkbox" id="opt-quality-enabled"><span class="switch-track"></span></label></div>
-              <label class="field-row"><span>Videos</span><select class="control-input" id="opt-quality-video"><option value="auto">Auto</option><option value="large">480p</option><option value="hd720">720p HD</option><option value="hd1080">1080p HD</option><option value="hd1440">1440p</option><option value="hd2160">2160p 4K</option><option value="highres">Maxima</option></select></label>
-              <label class="field-row"><span>Playlists</span><select class="control-input" id="opt-quality-playlist"><option value="auto">Auto</option><option value="large">480p</option><option value="hd720">720p HD</option><option value="hd1080">1080p HD</option><option value="hd1440">1440p</option><option value="hd2160">2160p 4K</option><option value="highres">Maxima</option></select></label>
+              <label class="field-row"><span>Videos</span><select class="control-input" id="opt-quality-video"><option value="auto">Auto</option><option value="medium">360p</option><option value="large">480p</option><option value="hd720" selected>720p HD</option><option value="hd1080">1080p HD</option><option value="hd1440">1440p</option><option value="hd2160">2160p 4K</option><option value="highres">Maxima</option></select></label>
+              <label class="field-row"><span>Playlists</span><select class="control-input" id="opt-quality-playlist"><option value="auto">Auto</option><option value="medium">360p</option><option value="large">480p</option><option value="hd720" selected>720p HD</option><option value="hd1080">1080p HD</option><option value="hd1440">1440p</option><option value="hd2160">2160p 4K</option><option value="highres">Maxima</option></select></label>
+              <label class="field-row"><span>Pop-up e incorporados</span><select class="control-input" data-setting="qualityPopup"><option value="auto">Auto</option><option value="medium" selected>360p</option><option value="large">480p</option><option value="hd720">720p HD</option><option value="hd1080">1080p HD</option><option value="highres">Maxima</option></select></label>
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Qualidade para tela cheia</span><span class="opt-desc">Usa outro alvo quando o player entra em tela cheia.</span></div><label class="switch"><input type="checkbox" id="opt-quality-fullscreen-enabled"><span class="switch-track"></span></label></div>
-              <label class="field-row"><span>Videos em tela cheia</span><select class="control-input" id="opt-quality-fullscreen-video"><option value="auto">Auto</option><option value="large">480p</option><option value="hd720">720p HD</option><option value="hd1080">1080p HD</option><option value="hd1440">1440p</option><option value="hd2160">2160p 4K</option><option value="highres">Maxima</option></select></label>
-              <label class="field-row"><span>Playlists em tela cheia</span><select class="control-input" id="opt-quality-fullscreen-playlist"><option value="auto">Auto</option><option value="large">480p</option><option value="hd720">720p HD</option><option value="hd1080">1080p HD</option><option value="hd1440">1440p</option><option value="hd2160">2160p 4K</option><option value="highres">Maxima</option></select></label>
+              <label class="field-row"><span>Videos em tela cheia</span><select class="control-input" id="opt-quality-fullscreen-video"><option value="auto">Auto</option><option value="medium">360p</option><option value="large">480p</option><option value="hd720">720p HD</option><option value="hd1080" selected>1080p HD</option><option value="hd1440">1440p</option><option value="hd2160">2160p 4K</option><option value="highres">Maxima</option></select></label>
+              <label class="field-row"><span>Playlists em tela cheia</span><select class="control-input" id="opt-quality-fullscreen-playlist"><option value="auto">Auto</option><option value="medium">360p</option><option value="large">480p</option><option value="hd720">720p HD</option><option value="hd1080" selected>1080p HD</option><option value="hd1440">1440p</option><option value="hd2160">2160p 4K</option><option value="highres">Maxima</option></select></label>
+              <label class="field-row"><span>Pop-up/incorporados tela cheia</span><select class="control-input" data-setting="qualityFullscreenPopup"><option value="auto">Auto</option><option value="medium">360p</option><option value="large">480p</option><option value="hd720">720p HD</option><option value="hd1080" selected>1080p HD</option><option value="highres">Maxima</option></select></label>
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Restaurar ao sair da tela cheia</span></div><label class="switch"><input type="checkbox" id="opt-quality-restore"><span class="switch-track"></span></label></div>
             </div>
           </article>
@@ -305,9 +325,11 @@
             <div class="card-body control-stack">
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Miniplayer ao rolar</span><span class="opt-desc">Quando voce desce para comentarios, o player fica flutuante.</span></div><label class="switch"><input type="checkbox" id="opt-miniplayer-enabled" checked><span class="switch-track"></span></label></div>
               <label class="field-row"><span>Tamanho do miniplayer</span><select class="control-input" id="opt-miniplayer-size"><option value="360x203">360x203</option><option value="480x270" selected>480x270</option><option value="640x360">640x360</option></select></label>
+              <label class="field-row"><span>Tamanho customizado</span><input class="control-input" data-setting="miniplayerCustomSize" type="text" value="480x270"></label>
               <label class="field-row"><span>Posicao</span><select class="control-input" id="opt-miniplayer-position"><option value="top-left">Canto superior esquerdo</option><option value="top-right">Canto superior direito</option><option value="bottom-left">Canto inferior esquerdo</option><option value="bottom-right">Canto inferior direito</option></select></label>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Player em pop-up funcional</span><span class="opt-desc">Abre o video em janela separada pela barra do player.</span></div><label class="switch"><input type="checkbox" data-setting="playerPopupEnabled" checked><span class="switch-track"></span></label></div>
               <label class="field-row"><span>Tamanho do player em pop-up</span><select class="control-input" id="opt-player-popup-size"><option value="480x270">480x270</option><option value="640x360" selected>640x360</option><option value="960x540">960x540</option></select></label>
-              <div class="module-note">O botao de pop-up tambem aparece na barra de controles abaixo do player.</div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Suporte a videos incorporados</span><span class="opt-desc">Prepara regras para embeds e players externos.</span></div><label class="switch"><input type="checkbox" data-setting="playerPopupEmbeds"><span class="switch-track"></span></label></div>
             </div>
           </article>
         </div>
@@ -332,27 +354,56 @@
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Ocultar chat</span><span class="opt-desc">Remove chat ao vivo e replay de chat.</span></div><label class="switch"><input type="checkbox" id="opt-appearance-hide-chat"><span class="switch-track"></span></label></div>
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Ocultar comentarios</span><span class="opt-desc">Esconde o bloco de comentarios abaixo do video.</span></div><label class="switch"><input type="checkbox" id="opt-appearance-hide-comments"><span class="switch-track"></span></label></div>
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Ocultar cards finais</span><span class="opt-desc">Remove cards, telas finais e teasers sobre o player.</span></div><label class="switch"><input type="checkbox" id="opt-appearance-hide-endcards"><span class="switch-track"></span></label></div>
-              <div class="module-note">Controles de videos por fileira e layout de grade ficam para uma etapa separada.</div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Ordenar comentarios recentes</span><span class="opt-desc">Planejado para abrir comentarios em ordem de recentes.</span></div><label class="switch"><input type="checkbox" data-setting="appearanceSortNewestComments"><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Aplicar filtros automaticamente</span><span class="opt-desc">Prepara filtros visuais por categoria de video.</span></div><label class="switch"><input type="checkbox" data-setting="appearanceAutoApplyFilters"><span class="switch-track"></span></label></div>
             </div>
           </article>
           <article class="card card--module">
-            <div class="card-header"><span>Tema e CSS customizado</span><span class="tag tag--stage">BASE</span></div>
-            <div class="card-body">
-              <div class="theme-tabs"><button disabled>Tema escuro</button><button disabled>YouTube</button><button disabled>Tube Shield</button><button disabled>Personalizado</button></div>
+            <div class="card-header"><span>Tema e CSS customizado</span><span class="tag tag--stage">MAPA</span></div>
+            <div class="card-body control-stack">
+              <label class="field-row"><span>Motor de tema</span><select class="control-input" data-setting="themeEngine"><option value="tube-shield" selected>Tube Shield</option><option value="youtube">YouTube oficial</option><option value="enhancer">Enhancer style</option><option value="deepdark">YouTube-DeepDark</option><option value="custom">Personalizado</option></select></label>
+              <label class="field-row"><span>Variante</span><select class="control-input" data-setting="themeVariant"><option value="red" selected>Red</option><option value="deep-dark">Deep Dark</option><option value="gray">Gray</option><option value="blue">Blue</option></select></label>
               <div class="theme-swatches" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
-              <div class="code-panel code-panel--css"><span>1</span><code>body {</code><span>2</span><code>  --yt-spec-base-background: #0f0f0f;</code><span>3</span><code>}</code></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">YouTube-DeepDark personalizado</span><span class="opt-desc">Salva as cores para a variante personalizada.</span></div><label class="switch"><input type="checkbox" data-setting="themeDeepDarkCustom"><span class="switch-track"></span></label></div>
+              <div class="color-grid">
+                <label><span>Accent</span><input class="control-input" data-setting="themeCustomAccent" type="color" value="#ff334b"></label>
+                <label><span>Fundo</span><input class="control-input" data-setting="themeCustomBackground" type="color" value="#0f0f0f"></label>
+                <label><span>Texto</span><input class="control-input" data-setting="themeCustomText" type="color" value="#f4f5f7"></label>
+              </div>
+              <textarea class="control-input code-textarea" data-setting="themeCustomCss" rows="5">body {
+  --yt-spec-base-background: #0f0f0f;
+}</textarea>
+              <button class="outline-action" type="button" data-setting-action="themeReset">Redefinir tema</button>
             </div>
           </article>
         </div>
         <article class="card card--module">
-          <div class="card-header"><span>Modo cinema e ultrawide</span><span class="tag tag--stage">BASE</span></div>
+          <div class="card-header"><span>Layout por fileira</span><span class="tag tag--stage">MAPA</span></div>
+          <div class="card-body">
+            <div class="appearance-grid">
+              <label class="field-row"><span>Videos por fileira</span><input class="control-input" data-setting="layoutVideosPerRow" type="number" value="4" min="1" max="8" step="1"></label>
+              <label class="field-row"><span>Videos por fileira no canal</span><input class="control-input" data-setting="layoutChannelVideosPerRow" type="number" value="4" min="1" max="8" step="1"></label>
+              <label class="field-row"><span>Shorts por fileira</span><input class="control-input" data-setting="layoutShortsPerRow" type="number" value="8" min="1" max="12" step="1"></label>
+              <label class="field-row"><span>Shorts por fileira no canal</span><input class="control-input" data-setting="layoutChannelShortsPerRow" type="number" value="5" min="1" max="12" step="1"></label>
+              <label class="field-row"><span>Postagens por fileira</span><input class="control-input" data-setting="layoutPostsPerRow" type="number" value="4" min="1" max="8" step="1"></label>
+              <label><input type="checkbox" data-setting="appearanceKeepBlackBars"><span>Nao alterar barras pretas verticais</span></label>
+              <label><input type="checkbox" data-setting="appearanceAutoTheater"><span>Ativar Modo Teatro automaticamente</span></label>
+              <label><input type="checkbox" data-setting="appearanceAutoExpandPlayer"><span>Expandir player automaticamente</span></label>
+              <label><input type="checkbox" data-setting="appearanceUseViewportPlayer"><span>Usar todo o viewport disponivel</span></label>
+            </div>
+          </div>
+        </article>
+        <article class="card card--module">
+          <div class="card-header"><span>Modo cinema e ultrawide</span><span class="tag tag--stage">MAPA</span></div>
           <div class="card-body cinema-layout">
             <div class="control-stack">
-              <label class="field-row"><span>Cor de fundo</span><input class="control-input" type="text" value="#000000" disabled></label>
-              <label class="field-row"><span>Opacidade</span><input class="control-input" type="number" value="85" disabled></label>
-              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Usar cinema por padrao</span></div><label class="switch"><input type="checkbox" disabled><span class="switch-track"></span></label></div>
-              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Modo ultrawide 21:9 / 32:9</span></div><label class="switch"><input type="checkbox" disabled><span class="switch-track"></span></label></div>
-              <label class="field-row"><span>Ajuste de encaixe</span><select class="control-input" disabled><option>Crop inteligente</option><option>Contain</option><option>Stretch</option></select></label>
+              <label class="field-row"><span>Cor de fundo</span><input class="control-input" data-setting="cinemaColor" type="color" value="#000000"></label>
+              <label class="field-row"><span>Opacidade</span><input class="control-input" data-setting="cinemaOpacity" type="number" value="85" min="0" max="100" step="1"></label>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Usar cinema por padrao</span></div><label class="switch"><input type="checkbox" data-setting="cinemaDefault"><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Expandir/diminuir automaticamente</span><span class="opt-desc">Sincroniza o player ao ligar ou desligar o cinema.</span></div><label class="switch"><input type="checkbox" data-setting="cinemaAutoResize"><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Integrar com Modo Teatro</span><span class="opt-desc">Usa o modo teatro nativo como base quando possivel.</span></div><label class="switch"><input type="checkbox" data-setting="cinemaUseYouTubeTheater" checked><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Modo ultrawide 21:9 / 32:9</span></div><label class="switch"><input type="checkbox" data-setting="ultrawideEnabled"><span class="switch-track"></span></label></div>
+              <label class="field-row"><span>Ajuste de encaixe</span><select class="control-input" data-setting="ultrawideFit"><option value="smart-crop" selected>Crop inteligente</option><option value="contain">Contain</option><option value="stretch">Stretch</option></select></label>
             </div>
             <div class="cinema-preview"><div class="preview-player"><span></span></div><div class="preview-side"></div></div>
           </div>
@@ -373,10 +424,13 @@
             <div class="card-header"><span>Barra de controles do player</span><span class="tag tag--safe">ATIVO</span></div>
             <div class="card-body control-stack">
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Exibir em uma barra</span><span class="opt-desc">Adiciona atalhos abaixo do player do YouTube.</span></div><label class="switch"><input type="checkbox" id="opt-toolbar-enabled" checked><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Exibir dentro do player</span><span class="opt-desc">Planejado para colocar os controles sobre o video.</span></div><label class="switch"><input type="checkbox" data-setting="toolbarInsidePlayer"><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Manter controles visiveis</span><span class="opt-desc">Evita esconder a barra atras do botao de mais opcoes.</span></div><label class="switch"><input type="checkbox" data-setting="toolbarAlwaysVisible"><span class="switch-track"></span></label></div>
               <label class="field-row"><span>Posicao da barra</span><select class="control-input" id="opt-toolbar-position"><option value="below" selected>Abaixo do video</option><option value="above">Acima do video</option></select></label>
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Centralizar ao expandir ou tela cheia</span></div><label class="switch"><input type="checkbox" id="opt-toolbar-center" checked><span class="switch-track"></span></label></div>
               <div class="toolbar-grid">
                 <label><input type="checkbox" id="opt-toolbar-loop" checked><span>Loop</span></label>
+                <label><input type="checkbox" data-setting="toolbarVolumeBoost" checked><span>Volume boost</span></label>
                 <label><input type="checkbox" id="opt-toolbar-speed" checked><span>Velocidade -/+</span></label>
                 <label><input type="checkbox" id="opt-toolbar-popup" checked><span>Pop-up</span></label>
                 <label><input type="checkbox" id="opt-toolbar-pip" checked><span>PiP</span></label>
@@ -387,10 +441,10 @@
             </div>
           </article>
           <article class="card card--module">
-            <div class="card-header"><span>Codecs e formatos</span><span class="tag tag--stage">BASE</span></div>
+            <div class="card-header"><span>Codecs e formatos</span><span class="tag tag--stage">MAPA</span></div>
             <div class="card-body control-stack">
-              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Forcar FPS padrao 24/25/30</span></div><label class="switch"><input type="checkbox" disabled><span class="switch-track"></span></label></div>
-              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Forcar MP4 + AVC (H.264)</span></div><label class="switch"><input type="checkbox" disabled><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Forcar FPS padrao 24/25/30</span></div><label class="switch"><input type="checkbox" data-setting="codecForceStandardFps"><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Forcar MP4 + AVC (H.264)</span><span class="opt-desc">Limita formatos WebM/VP9 quando possivel.</span></div><label class="switch"><input type="checkbox" data-setting="codecForceAvc"><span class="switch-track"></span></label></div>
             </div>
           </article>
         </div>
@@ -404,10 +458,15 @@
           </article>
           <article class="card card--module">
             <div class="card-header"><span>Script personalizado</span><span class="tag tag--risk">BETA</span></div>
-            <div class="card-body">
+            <div class="card-body control-stack">
               <div class="warning-box warning-box--alert">Use apenas scripts seus ou de fontes confiaveis.</div>
-              <div class="code-panel" aria-hidden="true"><span>1</span><code>// seu script aqui</code><span>2</span><code>document.addEventListener("yt-navigate-finish", () =&gt; {});</code></div>
-              <button class="outline-action" disabled>Salvar script</button>
+              <textarea class="control-input code-textarea" data-setting="customScriptCode" rows="7">// seu script aqui
+document.addEventListener("yt-navigate-finish", () =&gt; {});</textarea>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Executar automaticamente no YouTube</span></div><label class="switch"><input type="checkbox" data-setting="customScriptAutoRun"><span class="switch-track"></span></label></div>
+              <div class="action-row">
+                <button class="outline-action" type="button" data-setting-action="customScriptSave">Salvar script</button>
+                <button class="outline-action" type="button" data-setting-action="customScriptRun">Executar manualmente</button>
+              </div>
             </div>
           </article>
         </div>
