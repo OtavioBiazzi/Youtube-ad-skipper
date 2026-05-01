@@ -286,7 +286,11 @@
             <div class="card-body control-stack">
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Inverter direcao da roda</span><span class="opt-desc">Troca subir/descer nos controles de volume e velocidade.</span></div><label class="switch"><input type="checkbox" id="opt-player-wheel-invert"><span class="switch-track"></span></label></div>
               <button class="outline-action" type="button" data-setting-action="shortcutEditor">Configurar atalhos do teclado</button>
-              <div class="module-note">Os campos abaixo representam as combinacoes personalizadas; o editor completo entra quando ligarmos o motor de atalhos.</div>
+              <div class="inline-actions">
+                <button class="outline-action" type="button" data-setting-action="shortcutToggle">Ativar/desativar atalhos</button>
+                <button class="outline-action" type="button" data-setting-action="shortcutReset">Restaurar padrao</button>
+              </div>
+              <div class="module-note">Clique em um campo e pressione a combinacao desejada. Backspace restaura o atalho padrao.</div>
               <div class="keymap-grid">
                 <label><span>Pular anuncio</span><input class="control-input" data-setting="shortcutSkipAd" type="text" value="Shift+S"></label>
                 <label><span>Velocidade -</span><input class="control-input" data-setting="shortcutSpeedDown" type="text" value="Ctrl+,"></label>
@@ -377,7 +381,11 @@
               <div class="color-grid">
                 <label><span>Accent</span><input class="control-input" data-setting="themeCustomAccent" type="color" value="#ff334b"></label>
                 <label><span>Fundo</span><input class="control-input" data-setting="themeCustomBackground" type="color" value="#0f0f0f"></label>
+                <label><span>Superficie</span><input class="control-input" data-setting="themeCustomSurface" type="color" value="#17191f"></label>
+                <label><span>Elevado</span><input class="control-input" data-setting="themeCustomSurfaceRaised" type="color" value="#20232b"></label>
                 <label><span>Texto</span><input class="control-input" data-setting="themeCustomText" type="color" value="#f4f5f7"></label>
+                <label><span>Secundario</span><input class="control-input" data-setting="themeCustomMuted" type="color" value="#a9adb8"></label>
+                <label><span>Borda</span><input class="control-input" data-setting="themeCustomBorder" type="color" value="#343741"></label>
               </div>
               <textarea class="control-input code-textarea" data-setting="themeCustomCss" rows="5">body {
   --yt-spec-base-background: #0f0f0f;
@@ -446,7 +454,7 @@
               <div class="toolbar-grid">
                 <label><input type="checkbox" id="opt-toolbar-loop" checked><span>Loop</span></label>
                 <label><input type="checkbox" data-setting="toolbarVolumeBoost" checked><span>Volume boost</span></label>
-                <label><input type="checkbox" id="opt-toolbar-speed" checked><span>Velocidade -/+</span></label>
+                <label><input type="checkbox" id="opt-toolbar-speed" checked><span>Velocidade</span></label>
                 <label><input type="checkbox" id="opt-toolbar-popup" checked><span>Pop-up</span></label>
                 <label><input type="checkbox" id="opt-toolbar-pip" checked><span>PiP</span></label>
                 <label><input type="checkbox" id="opt-toolbar-screenshot" checked><span>Screenshot</span></label>

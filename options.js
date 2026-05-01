@@ -122,7 +122,11 @@
     themeDeepDarkCustom: false,
     themeCustomAccent: "#ff334b",
     themeCustomBackground: "#0f0f0f",
+    themeCustomSurface: "#17191f",
+    themeCustomSurfaceRaised: "#20232b",
     themeCustomText: "#f4f5f7",
+    themeCustomMuted: "#a9adb8",
+    themeCustomBorder: "#343741",
     themeCustomCss: "body {\n  --yt-spec-base-background: #0f0f0f;\n}",
     layoutVideosPerRow: 4,
     layoutChannelVideosPerRow: 4,
@@ -745,7 +749,11 @@
             themeDeepDarkCustom: PLANNED_DEFAULTS.themeDeepDarkCustom,
             themeCustomAccent: PLANNED_DEFAULTS.themeCustomAccent,
             themeCustomBackground: PLANNED_DEFAULTS.themeCustomBackground,
+            themeCustomSurface: PLANNED_DEFAULTS.themeCustomSurface,
+            themeCustomSurfaceRaised: PLANNED_DEFAULTS.themeCustomSurfaceRaised,
             themeCustomText: PLANNED_DEFAULTS.themeCustomText,
+            themeCustomMuted: PLANNED_DEFAULTS.themeCustomMuted,
+            themeCustomBorder: PLANNED_DEFAULTS.themeCustomBorder,
             themeCustomCss: PLANNED_DEFAULTS.themeCustomCss
           };
           chrome.storage.local.set(resetValues, loadPlannedSettings);
@@ -765,6 +773,16 @@
           firstShortcut?.focus();
           firstShortcut?.select();
           flashBorder(button, "var(--accent)");
+        } else if (action === "shortcutToggle") {
+          optShortcut.checked = !optShortcut.checked;
+          chrome.storage.local.set({ shortcutEnabled: optShortcut.checked });
+          flashBorder(button, optShortcut.checked ? "var(--green)" : "var(--orange)");
+        } else if (action === "shortcutReset") {
+          const resetValues = Object.fromEntries(
+            Object.entries(PLANNED_DEFAULTS).filter(([key]) => isShortcutSettingKey(key))
+          );
+          chrome.storage.local.set(resetValues, loadPlannedSettings);
+          flashBorder(button, "var(--green)");
         } else if (action === "backupExport") {
           exportSettingsBackup(button);
         } else if (action === "backupImport") {
@@ -780,13 +798,12 @@
   }
   function updateCinemaPreview() {
     const preview = document.querySelector(".cinema-preview");
-    const player = document.querySelector(".cinema-preview .preview-player");
-    if (!preview || !player) return;
+    if (!preview) return;
     const color = String(getPlannedInput("cinemaColor")?.value || PLANNED_DEFAULTS.cinemaColor);
     const opacity = Number(getPlannedInput("cinemaOpacity")?.value || PLANNED_DEFAULTS.cinemaOpacity);
     const alpha = Math.min(1, Math.max(0, opacity / 100));
-    preview.style.background = color;
-    player.style.boxShadow = `0 0 0 999px rgba(0, 0, 0, ${alpha})`;
+    preview.style.setProperty("--cinema-preview-color", color);
+    preview.style.setProperty("--cinema-preview-alpha", String(alpha));
   }
   function exportSettingsBackup(button) {
     chrome.storage.local.get(null, (settings) => {

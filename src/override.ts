@@ -284,7 +284,7 @@
   function normalizePlaybackRate(rate) {
     const n = Number(rate);
     if (!Number.isFinite(n) || n <= 0) return 1;
-    return Math.min(16, Math.max(0.0625, n));
+    return Math.min(100, Math.max(0.1, n));
   }
 
   function setNativeMediaValue(descriptor, video, value) {

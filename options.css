@@ -886,7 +886,7 @@ kbd {
 }
 
 .keymap-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
 .keymap-grid label,
@@ -894,13 +894,21 @@ kbd {
   justify-content: space-between;
 }
 
+.keymap-grid label span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .keymap-grid .control-input {
-  max-width: 92px;
+  width: 118px;
+  min-width: 118px;
+  max-width: 118px;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
   text-align: center;
 }
 
 .color-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(142px, 1fr));
 }
 
 .color-grid .control-input {
@@ -1001,6 +1009,12 @@ kbd {
   gap: 8px;
 }
 
+.inline-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px;
+}
+
 .appearance-grid .field-row {
   grid-template-columns: minmax(0, 1fr) 78px;
 }
@@ -1040,6 +1054,19 @@ kbd {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: radial-gradient(circle at 32% 24%, rgba(255,255,255,0.08), transparent 42%), #08090c;
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.cinema-preview::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--cinema-preview-color, #000);
+  opacity: var(--cinema-preview-alpha, 0.85);
+  pointer-events: none;
+  z-index: 0;
 }
 
 .preview-player,
@@ -1047,6 +1074,8 @@ kbd {
   align-self: center;
   border-radius: 8px;
   background: #1f2229;
+  position: relative;
+  z-index: 1;
 }
 
 .preview-player {

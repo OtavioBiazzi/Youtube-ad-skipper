@@ -36,4 +36,9 @@
       });
     }
   });
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message?.type === "youtube-extension:open-options") {
+      chrome.runtime.openOptionsPage();
+    }
+  });
 })();

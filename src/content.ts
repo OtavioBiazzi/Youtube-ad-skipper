@@ -121,7 +121,11 @@ declare global {
     themeDeepDarkCustom: false,
     themeCustomAccent: "#ff334b",
     themeCustomBackground: "#0f0f0f",
+    themeCustomSurface: "#17191f",
+    themeCustomSurfaceRaised: "#20232b",
     themeCustomText: "#f4f5f7",
+    themeCustomMuted: "#a9adb8",
+    themeCustomBorder: "#343741",
     themeCustomCss: "",
     codecForceStandardFps: false,
     codecForceAvc: false,
@@ -141,6 +145,8 @@ declare global {
   const INSTANT_SPEED_THROUGH_RATE = 16;
   const MIN_PLAYBACK_RATE = 0.0625;
   const MAX_PLAYBACK_RATE = 16;
+  const MIN_USER_PLAYBACK_RATE = 0.1;
+  const MAX_USER_PLAYBACK_RATE = 100;
   const SPEED_THROUGH_RETRY_MS = 250;
   const PLAYBACK_RESTORE_RETRY_MS = 150;
   const PLAYBACK_RESTORE_WINDOW_MS = 2400;
@@ -286,7 +292,9 @@ declare global {
             cinemaUseYouTubeTheater: true, ultrawideEnabled: false, ultrawideFit: "smart-crop",
             toolbarInsidePlayer: false, toolbarAlwaysVisible: false, themeEngine: "tube-shield",
             themeVariant: "red", themeDeepDarkCustom: false, themeCustomAccent: "#ff334b",
-            themeCustomBackground: "#0f0f0f", themeCustomText: "#f4f5f7", themeCustomCss: "",
+            themeCustomBackground: "#0f0f0f", themeCustomSurface: "#17191f",
+            themeCustomSurfaceRaised: "#20232b", themeCustomText: "#f4f5f7",
+            themeCustomMuted: "#a9adb8", themeCustomBorder: "#343741", themeCustomCss: "",
             codecForceStandardFps: false, codecForceAvc: false, customScriptEnabled: false,
             customScriptCode: "", customScriptAutoRun: false, customScriptRunAt: 0,
           },
@@ -398,7 +406,11 @@ declare global {
             config.themeDeepDarkCustom = !!s.themeDeepDarkCustom;
             config.themeCustomAccent = normalizeHexColor(s.themeCustomAccent, "#ff334b");
             config.themeCustomBackground = normalizeHexColor(s.themeCustomBackground, "#0f0f0f");
+            config.themeCustomSurface = normalizeHexColor(s.themeCustomSurface, "#17191f");
+            config.themeCustomSurfaceRaised = normalizeHexColor(s.themeCustomSurfaceRaised, "#20232b");
             config.themeCustomText = normalizeHexColor(s.themeCustomText, "#f4f5f7");
+            config.themeCustomMuted = normalizeHexColor(s.themeCustomMuted, "#a9adb8");
+            config.themeCustomBorder = normalizeHexColor(s.themeCustomBorder, "#343741");
             config.themeCustomCss = String(s.themeCustomCss || "");
             config.codecForceStandardFps = !!s.codecForceStandardFps;
             config.codecForceAvc = !!s.codecForceAvc;
@@ -668,7 +680,7 @@ declare global {
       }
       if (changes.cinemaDefault) {
         config.cinemaDefault = !!changes.cinemaDefault.newValue;
-        if (config.cinemaDefault) setCinemaMode(true);
+        setCinemaMode(config.cinemaDefault);
       }
       if (changes.cinemaAutoResize) config.cinemaAutoResize = !!changes.cinemaAutoResize.newValue;
       if (changes.cinemaUseYouTubeTheater) config.cinemaUseYouTubeTheater = changes.cinemaUseYouTubeTheater.newValue !== false;
@@ -690,7 +702,8 @@ declare global {
       }
       const themeKeys = [
         "themeEngine", "themeVariant", "themeDeepDarkCustom", "themeCustomAccent",
-        "themeCustomBackground", "themeCustomText", "themeCustomCss"
+        "themeCustomBackground", "themeCustomSurface", "themeCustomSurfaceRaised",
+        "themeCustomText", "themeCustomMuted", "themeCustomBorder", "themeCustomCss"
       ];
       let themeChanged = false;
       themeKeys.forEach((key) => {
@@ -700,7 +713,11 @@ declare global {
         else if (key === "themeDeepDarkCustom") config.themeDeepDarkCustom = !!changes[key].newValue;
         else if (key === "themeCustomAccent") config.themeCustomAccent = normalizeHexColor(changes[key].newValue, "#ff334b");
         else if (key === "themeCustomBackground") config.themeCustomBackground = normalizeHexColor(changes[key].newValue, "#0f0f0f");
+        else if (key === "themeCustomSurface") config.themeCustomSurface = normalizeHexColor(changes[key].newValue, "#17191f");
+        else if (key === "themeCustomSurfaceRaised") config.themeCustomSurfaceRaised = normalizeHexColor(changes[key].newValue, "#20232b");
         else if (key === "themeCustomText") config.themeCustomText = normalizeHexColor(changes[key].newValue, "#f4f5f7");
+        else if (key === "themeCustomMuted") config.themeCustomMuted = normalizeHexColor(changes[key].newValue, "#a9adb8");
+        else if (key === "themeCustomBorder") config.themeCustomBorder = normalizeHexColor(changes[key].newValue, "#343741");
         else if (key === "themeCustomCss") config.themeCustomCss = String(changes[key].newValue || "");
         themeChanged = true;
       });
@@ -902,7 +919,7 @@ declare global {
   function normalizeUserPlaybackRate(rate, fallback = 1) {
     const n = Number(rate);
     if (!Number.isFinite(n) || n <= 0) return fallback;
-    return Math.min(MAX_PLAYBACK_RATE, Math.max(0.25, n));
+    return Math.min(MAX_USER_PLAYBACK_RATE, Math.max(MIN_USER_PLAYBACK_RATE, Math.round(n * 100) / 100));
   }
 
   function normalizePlayerSpeedStep(step) {
@@ -1081,6 +1098,15 @@ declare global {
     return location.pathname + location.search;
   }
 
+  function getCurrentVideoId() {
+    try {
+      const url = new URL(location.href);
+      return url.searchParams.get("v") || "";
+    } catch (err) {
+      return "";
+    }
+  }
+
   function setUserPlaybackRate(rate, video = getActiveVideo()) {
     const targetRate = normalizeUserPlaybackRate(rate, 1);
 
@@ -1097,7 +1123,7 @@ declare global {
       }
     } catch (err) {}
 
-    requestMainWorldSpeedThrough(targetRate);
+    if (targetRate <= MAX_PLAYBACK_RATE) requestMainWorldSpeedThrough(targetRate);
     return targetRate;
   }
 
@@ -1411,11 +1437,11 @@ declare global {
       return {
         accent: normalizeHexColor(config.themeCustomAccent, "#ff334b"),
         background,
-        surface: background,
-        surfaceRaised: background,
+        surface: normalizeHexColor(config.themeCustomSurface, "#17191f"),
+        surfaceRaised: normalizeHexColor(config.themeCustomSurfaceRaised, "#20232b"),
         text: normalizeHexColor(config.themeCustomText, "#f4f5f7"),
-        muted: "#a9adb8",
-        border: "#343741",
+        muted: normalizeHexColor(config.themeCustomMuted, "#a9adb8"),
+        border: normalizeHexColor(config.themeCustomBorder, "#343741"),
       };
     }
 
@@ -1487,8 +1513,6 @@ declare global {
         background-color: ${palette.accent} !important;
       }
 
-      a,
-      yt-formatted-string a,
       #video-title:hover,
       ytd-toggle-button-renderer[is-icon-button][style-target="button"] yt-icon {
         color: ${palette.accent} !important;
@@ -1635,7 +1659,11 @@ declare global {
       config.themeDeepDarkCustom,
       config.themeCustomAccent,
       config.themeCustomBackground,
+      config.themeCustomSurface,
+      config.themeCustomSurfaceRaised,
       config.themeCustomText,
+      config.themeCustomMuted,
+      config.themeCustomBorder,
       config.themeCustomCss,
       location.pathname,
     ].join(":");
@@ -1715,7 +1743,7 @@ declare global {
   function buildCinemaCss() {
     const color = normalizeHexColor(config.cinemaColor, "#000000");
     const opacity = normalizePercent(config.cinemaOpacity, 85) / 100;
-    const dimOpacity = Math.max(0.12, 1 - opacity);
+    const dimOpacity = Math.max(0.45, 1 - opacity);
     return `
       html.${CINEMA_CLASS},
       html.${CINEMA_CLASS} body,
@@ -1983,8 +2011,20 @@ declare global {
   let playerToolbarSignature = "";
 
   function getPlayerToolbarAnchor() {
+    const watchFlexy = document.querySelector("ytd-watch-flexy");
+    const theater = !!watchFlexy?.hasAttribute("theater");
+    if (theater) {
+      return document.querySelector("#player-theater-container")
+        || document.querySelector("#player-full-bleed-container")
+        || document.querySelector("#player-container-outer")
+        || document.querySelector("#player")
+        || document.querySelector("ytd-player")
+        || getYouTubePlayer();
+    }
+
     return document.querySelector("#player-container-outer")
       || document.querySelector("#player-theater-container")
+      || document.querySelector("#player-full-bleed-container")
       || document.querySelector("#player")
       || document.querySelector("ytd-player")
       || getYouTubePlayer();
@@ -1994,14 +2034,13 @@ declare global {
     const actions: Array<{ action: string; title: string; icon: string }> = [];
     if (config.toolbarLoop) actions.push({ action: "loop", title: "Loop", icon: "loop" });
     if (config.toolbarSpeed && config.playerSpeedButtonsEnabled !== false) {
-      actions.push({ action: "speed-down", title: "Diminuir velocidade", icon: "speed-down" });
-      actions.push({ action: "speed-up", title: "Aumentar velocidade", icon: "speed-up" });
+      actions.push({ action: "speed-control", title: "Velocidade: role a roda; clique para 1x", icon: "speed-control" });
     }
     if (config.toolbarVolumeBoost) actions.push({ action: "volume-boost", title: "Volume boost", icon: "volume-boost" });
     if (config.toolbarPopup && config.playerPopupEnabled !== false) actions.push({ action: "popup", title: "Abrir em pop-up", icon: "popup" });
     if (config.toolbarPip) actions.push({ action: "pip", title: "Picture-in-Picture", icon: "pip" });
     if (config.toolbarScreenshot) actions.push({ action: "screenshot", title: "Capturar frame", icon: "camera" });
-    if (config.toolbarTheater) actions.push({ action: "theater", title: "Modo teatro", icon: "theater" });
+    if (config.toolbarTheater) actions.push({ action: "theater", title: "Modo teatro do YouTube", icon: "theater" });
     if (config.toolbarSettings) actions.push({ action: "settings", title: "Configuracoes", icon: "settings" });
     return actions;
   }
@@ -2134,6 +2173,8 @@ declare global {
         return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 5l-7 7 7 7"/></svg>';
       case "speed-up":
         return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>';
+      case "speed-control":
+        return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14a8 8 0 0 1 16 0"/><path d="M12 14l4-5"/><path d="M12 14h.01"/><path d="M6.5 18h11"/></svg>';
       case "volume-boost":
         return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16 9.5a4 4 0 0 1 0 5"/><path d="M19 8v8"/><path d="M22 12h-6"/></svg>';
       case "popup":
@@ -2158,6 +2199,14 @@ declare global {
     button.title = title;
     button.setAttribute("aria-label", title);
     button.innerHTML = toolbarIcon(icon);
+    if (action === "speed-control") {
+      button.addEventListener("wheel", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const direction = event.deltaY < 0 ? 1 : -1;
+        adjustToolbarSpeed(direction);
+      }, { passive: false });
+    }
     return button;
   }
 
@@ -2277,6 +2326,9 @@ declare global {
 
   function openPopupPlayer() {
     if (config.playerPopupEnabled === false) return;
+    const videoId = getCurrentVideoId();
+    if (!videoId) return;
+
     const size = parsePlayerPopupSize();
     const left = Math.max(0, Math.round(window.screenX + (window.outerWidth - size.width) / 2));
     const top = Math.max(0, Math.round(window.screenY + (window.outerHeight - size.height) / 2));
@@ -2288,7 +2340,13 @@ declare global {
       "left=" + left,
       "top=" + top,
     ].join(",");
-    window.open(location.href, "youtubeExtensionPlayerPopup", features);
+
+    try {
+      getActiveVideo()?.pause();
+    } catch (err) {}
+
+    const embedUrl = "https://www.youtube.com/embed/" + encodeURIComponent(videoId) + "?autoplay=1&playsinline=1";
+    window.open(embedUrl, "youtubeExtensionPlayerPopup", features);
   }
 
   async function togglePictureInPicture(video = getActiveVideo()) {
@@ -2343,11 +2401,40 @@ declare global {
     setTimeout(updatePlayerToolbar, 300);
   }
 
+  function formatPlaybackRate(rate) {
+    const value = Number(rate);
+    if (!Number.isFinite(value)) return "1x";
+    return value.toFixed(value >= 10 ? 1 : 2).replace(/\.?0+$/, "") + "x";
+  }
+
+  function adjustToolbarSpeed(direction, video = getActiveVideo()) {
+    const current = getCurrentPlaybackRate(video);
+    const baseStep = normalizePlayerSpeedStep(config.playerSpeedStep);
+    const scaledStep = current >= 16 ? Math.max(1, baseStep * 10) : current >= 4 ? Math.max(0.25, baseStep * 4) : baseStep;
+    const next = normalizeUserPlaybackRate(current + direction * scaledStep, current);
+    setUserPlaybackRate(next, video);
+    showPlayerFeedback("speed", formatPlaybackRate(next), "Clique para voltar a 1x");
+    return next;
+  }
+
+  function resetToolbarSpeed(video = getActiveVideo()) {
+    const next = setUserPlaybackRate(1, video);
+    showPlayerFeedback("speed", formatPlaybackRate(next), "Restaurado");
+  }
+
   function openOptionsPage() {
     try {
-      window.open(chrome.runtime.getURL("options.html"), "_blank", "noopener=yes");
+      chrome.runtime.sendMessage({ type: "youtube-extension:open-options" }, () => {
+        if (chrome.runtime.lastError) {
+          window.open(chrome.runtime.getURL("options.html"), "_blank", "noopener=yes");
+        }
+      });
     } catch (err) {
-      window.open("/options.html", "_blank", "noopener=yes");
+      try {
+        window.open(chrome.runtime.getURL("options.html"), "_blank", "noopener=yes");
+      } catch (fallbackErr) {
+        window.open("/options.html", "_blank", "noopener=yes");
+      }
     }
   }
 
@@ -2356,17 +2443,23 @@ declare global {
     markUserPlaybackIntent();
 
     if (action === "loop") {
-      if (video) video.loop = !video.loop;
+      if (video) {
+        video.loop = !video.loop;
+        video.toggleAttribute("loop", video.loop);
+        showPlayerFeedback("speed", video.loop ? "Loop on" : "Loop off");
+      }
       updatePlayerToolbarStates();
       return;
     }
 
     if (action === "speed-down" || action === "speed-up") {
       const direction = action === "speed-up" ? 1 : -1;
-      const current = getCurrentPlaybackRate(video);
-      const next = normalizeUserPlaybackRate(current + direction * normalizePlayerSpeedStep(config.playerSpeedStep), current);
-      setUserPlaybackRate(next, video);
-      showPlayerFeedback("speed", next + "x");
+      adjustToolbarSpeed(direction, video);
+      return;
+    }
+
+    if (action === "speed-control") {
+      resetToolbarSpeed(video);
       return;
     }
 
@@ -2391,7 +2484,7 @@ declare global {
     }
 
     if (action === "theater") {
-      toggleCinemaMode();
+      toggleTheaterMode();
       return;
     }
 
@@ -3788,7 +3881,11 @@ declare global {
     return /^\/embed\//.test(location.pathname);
   }
 
+  let initStarted = false;
+
   function init() {
+    if (initStarted) return;
+    initStarted = true;
     if (isInIframe() && !isSupportedEmbedFrame()) return;
     loadSettings().then(() => {
       // garantir que as configurações foram carregadas antes de iniciar o loop
@@ -3802,11 +3899,7 @@ declare global {
     });
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init);
-  } else {
-    init();
-  }
+  init();
 })();
 
 export {};
