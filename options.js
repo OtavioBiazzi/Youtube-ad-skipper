@@ -1,6 +1,85 @@
 (function() {
   "use strict";
-  const DEFAULT = {
+  const SAFE_AD_SPEED_RATE = 3;
+  const DEFAULT_SPEED_THROUGH_RATE = SAFE_AD_SPEED_RATE;
+  const MIN_AD_SPEED_RATE = 1;
+  const MAX_AD_SPEED_RATE = 8;
+  const INSTANT_AD_SPEED_RATE = 16;
+  function normalizeSpeedRate(rate, fallback = DEFAULT_SPEED_THROUGH_RATE) {
+    const n = Number(rate);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.min(MAX_AD_SPEED_RATE, Math.max(MIN_AD_SPEED_RATE, n));
+  }
+  function normalizeSkipDelay(delay, fallback = 1) {
+    const n = Number(delay);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.min(30, Math.max(1, n));
+  }
+  function getSafeAdaptiveSpeed(delay) {
+    const d = normalizeSkipDelay(delay);
+    if (d <= 3) return SAFE_AD_SPEED_RATE;
+    if (d <= 6) return 2.5;
+    if (d <= 10) return 2;
+    if (d <= 20) return 1.5;
+    return 1.25;
+  }
+  function getRiskAdaptiveSpeed(delay) {
+    const d = normalizeSkipDelay(delay);
+    if (d <= 1) return 8;
+    if (d <= 2) return 6;
+    if (d <= 3) return 5;
+    if (d <= 5) return 4;
+    if (d <= 10) return 3;
+    if (d <= 20) return 2;
+    return 1.5;
+  }
+  function formatSpeed(value) {
+    const n = Number(value);
+    const safe = Number.isFinite(n) ? n : SAFE_AD_SPEED_RATE;
+    return safe.toFixed(safe % 1 === 0 ? 0 : 1) + "x";
+  }
+  const PLAYER_DEFAULTS_PROFILE_VERSION = 2;
+  const PLAYER_DEFAULTS_PROFILE = {
+    playerSpeedEnabled: true,
+    playerSpeedStep: 0.02,
+    playerSpeedWheel: true,
+    autoplayBlockBackground: true,
+    autoplayAllowPlaylists: true,
+    miniplayerEnabled: true,
+    miniplayerSize: "480x270",
+    miniplayerPosition: "top-left",
+    playerPopupSize: "640x360",
+    toolbarEnabled: true,
+    toolbarPosition: "below",
+    toolbarCenter: true,
+    toolbarLoop: true,
+    toolbarSpeed: true,
+    toolbarPopup: true,
+    toolbarPip: true,
+    toolbarScreenshot: true,
+    toolbarTheater: true,
+    toolbarSettings: true,
+    toolbarVolumeBoost: true,
+    toolbarFilters: true,
+    appearanceLayoutRowsEnabled: false,
+    appearanceSortNewestComments: false,
+    appearanceAutoApplyFilters: false,
+    shortcutEnabled: false,
+    cinemaUseYouTubeTheater: false,
+    ultrawideEnabled: false,
+    toolbarAlwaysVisible: true,
+    themeEngine: "youtube",
+    shortcutSkipAd: "Alt+Shift+S",
+    shortcutSpeedDown: "Alt+Shift+,",
+    shortcutSpeedUp: "Alt+Shift+.",
+    shortcutVolumeDown: "Alt+Shift+ArrowDown",
+    shortcutVolumeUp: "Alt+Shift+ArrowUp",
+    shortcutCinema: "Alt+Shift+C",
+    shortcutScreenshot: "Alt+Shift+P",
+    shortcutPopup: "Alt+Shift+O",
+    shortcutLoop: "Alt+Shift+L"
+  };
+  const DEFAULT_SETTINGS = {
     enabled: true,
     adSkipperEnabled: true,
     skipDelay: 1,
@@ -32,6 +111,9 @@
     playerVolumeStep: 5,
     playerVolumeWheel: false,
     playerVolumeWheelRightButton: false,
+    volumeBoostEnabled: false,
+    volumeBoostLevel: 2,
+    volumeBoostAuto: false,
     playerWheelInvert: false,
     autoplayBlockBackground: true,
     autoplayBlockForeground: false,
@@ -43,6 +125,8 @@
     qualityFullscreenEnabled: false,
     qualityFullscreenVideo: "hd1080",
     qualityFullscreenPlaylist: "hd1080",
+    qualityPopup: "medium",
+    qualityFullscreenPopup: "hd1080",
     qualityRestoreOnExit: true,
     appearanceConvertShorts: false,
     appearanceHideShorts: false,
@@ -50,10 +134,15 @@
     appearanceHideChat: false,
     appearanceHideComments: false,
     appearanceHideEndcards: false,
+    appearanceLayoutRowsEnabled: false,
+    appearanceSortNewestComments: false,
+    appearanceAutoApplyFilters: false,
     miniplayerEnabled: true,
     miniplayerSize: "480x270",
+    miniplayerCustomSize: "480x270",
     miniplayerPosition: "top-left",
     playerPopupSize: "640x360",
+    playerPopupEmbeds: false,
     toolbarEnabled: true,
     toolbarPosition: "below",
     toolbarCenter: true,
@@ -63,71 +152,25 @@
     toolbarPip: true,
     toolbarScreenshot: true,
     toolbarTheater: true,
-    toolbarSettings: true
-  };
-  const SAFE_AD_SPEED_RATE = 3;
-  const MIN_AD_SPEED_RATE = 1;
-  const MAX_AD_SPEED_RATE = 8;
-  const INSTANT_AD_SPEED_RATE = 16;
-  const PLAYER_DEFAULTS_PROFILE_VERSION = 1;
-  const PLAYER_DEFAULTS_PROFILE = {
-    playerSpeedEnabled: true,
-    playerSpeedStep: 0.02,
-    playerSpeedWheel: true,
-    autoplayBlockBackground: true,
-    autoplayAllowPlaylists: true,
-    miniplayerEnabled: true,
-    miniplayerSize: "480x270",
-    miniplayerPosition: "top-left",
-    playerPopupSize: "640x360",
-    toolbarEnabled: true,
-    toolbarPosition: "below",
-    toolbarCenter: true,
-    toolbarLoop: true,
-    toolbarSpeed: true,
-    toolbarPopup: true,
-    toolbarPip: true,
-    toolbarScreenshot: true,
-    toolbarTheater: true,
-    toolbarSettings: true
-  };
-  const PLANNED_DEFAULTS = {
+    toolbarSettings: true,
+    toolbarVolumeBoost: true,
+    toolbarFilters: true,
     playerSpeedReplaceMenu: true,
     playerSpeedMenuList: "0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4",
     playerSpeedButtonsEnabled: true,
-    volumeBoostEnabled: false,
-    volumeBoostLevel: 2,
-    volumeBoostAuto: false,
-    shortcutSkipAd: "Shift+S",
-    shortcutSpeedDown: "Ctrl+,",
-    shortcutSpeedUp: "Ctrl+.",
-    shortcutVolumeDown: "Alt+,",
-    shortcutVolumeUp: "Alt+.",
-    shortcutCinema: "C",
-    shortcutScreenshot: "P",
-    shortcutPopup: "O",
-    shortcutLoop: "L",
+    playerPopupEnabled: true,
+    shortcutSkipAd: "Alt+Shift+S",
+    shortcutSpeedDown: "Alt+Shift+,",
+    shortcutSpeedUp: "Alt+Shift+.",
+    shortcutVolumeDown: "Alt+Shift+ArrowDown",
+    shortcutVolumeUp: "Alt+Shift+ArrowUp",
+    shortcutCinema: "Alt+Shift+C",
+    shortcutScreenshot: "Alt+Shift+P",
+    shortcutPopup: "Alt+Shift+O",
+    shortcutLoop: "Alt+Shift+L",
     autoplayDisableAll: false,
     autoplayStopPreload: false,
     autoplayIgnorePopup: true,
-    qualityPopup: "medium",
-    qualityFullscreenPopup: "hd1080",
-    miniplayerCustomSize: "480x270",
-    playerPopupEnabled: true,
-    playerPopupEmbeds: false,
-    appearanceSortNewestComments: false,
-    appearanceAutoApplyFilters: false,
-    themeEngine: "tube-shield",
-    themeVariant: "red",
-    themeDeepDarkCustom: false,
-    themeCustomAccent: "#ff334b",
-    themeCustomBackground: "#0f0f0f",
-    themeCustomSurface: "#17191f",
-    themeCustomSurfaceRaised: "#20232b",
-    themeCustomText: "#f4f5f7",
-    themeCustomMuted: "#a9adb8",
-    themeCustomBorder: "#343741",
-    themeCustomCss: "body {\n  --yt-spec-base-background: #0f0f0f;\n}",
     layoutVideosPerRow: 4,
     layoutChannelVideosPerRow: 4,
     layoutShortsPerRow: 8,
@@ -141,19 +184,108 @@
     cinemaOpacity: 85,
     cinemaDefault: false,
     cinemaAutoResize: false,
-    cinemaUseYouTubeTheater: true,
+    cinemaUseYouTubeTheater: false,
     ultrawideEnabled: false,
     ultrawideFit: "smart-crop",
     toolbarInsidePlayer: false,
-    toolbarAlwaysVisible: false,
-    toolbarVolumeBoost: true,
+    toolbarAlwaysVisible: true,
+    themeEngine: "youtube",
+    themeVariant: "red",
+    themeDeepDarkCustom: false,
+    themeCustomAccent: "#ff334b",
+    themeCustomBackground: "#0f0f0f",
+    themeCustomSurface: "#17191f",
+    themeCustomSurfaceRaised: "#20232b",
+    themeCustomText: "#f4f5f7",
+    themeCustomMuted: "#a9adb8",
+    themeCustomBorder: "#343741",
+    themeCustomCss: "body {\n  --yt-spec-base-background: #0f0f0f;\n}",
     codecForceStandardFps: false,
     codecForceAvc: false,
-    customScriptEnabled: false,
-    customScriptCode: '// seu script aqui\ndocument.addEventListener("yt-navigate-finish", () => {});',
-    customScriptAutoRun: false,
-    customScriptRunAt: 0
+    videoFiltersEnabled: false,
+    videoFilterBrightness: 100,
+    videoFilterContrast: 100,
+    videoFilterSaturate: 100,
+    videoFilterGrayscale: 0,
+    videoFilterSepia: 0,
+    language: "pt-BR"
   };
+  const SETTINGS_EXPORT_KEYS = Object.keys(DEFAULT_SETTINGS);
+  function normalizeSettings(raw = {}) {
+    const normalized = { ...DEFAULT_SETTINGS };
+    for (const key of SETTINGS_EXPORT_KEYS) {
+      if (!(key in raw)) continue;
+      const value = raw[key];
+      const fallback = normalized[key];
+      if (Array.isArray(fallback)) {
+        if (Array.isArray(value)) normalized[key] = value.filter((item) => typeof item === "string");
+        continue;
+      }
+      if (fallback === null) {
+        if (value === null || typeof value === "string") normalized[key] = value;
+        continue;
+      }
+      if (typeof fallback === "number") {
+        if (typeof value === "number" && Number.isFinite(value)) normalized[key] = value;
+        continue;
+      }
+      if (typeof value === typeof fallback) normalized[key] = value;
+    }
+    return normalized;
+  }
+  function migrateSettings(raw = {}) {
+    const settings = normalizeSettings(raw);
+    if ((Number(settings.playerDefaultsProfileVersion) || 0) < PLAYER_DEFAULTS_PROFILE_VERSION) {
+      Object.assign(settings, PLAYER_DEFAULTS_PROFILE, {
+        playerDefaultsProfileVersion: PLAYER_DEFAULTS_PROFILE_VERSION
+      });
+    }
+    return settings;
+  }
+  const SHORTCUT_MODIFIERS = ["Ctrl", "Alt", "Shift", "Meta"];
+  function isShortcutSettingKey(key) {
+    return /^shortcut[A-Z]/.test(key);
+  }
+  function normalizeShortcutToken(token) {
+    const raw = String(token || "");
+    if (raw === " ") return "Space";
+    const text = raw.trim();
+    if (!text) return "";
+    const lower = text.toLowerCase();
+    if (lower === "control" || lower === "ctrl") return "Ctrl";
+    if (lower === "option" || lower === "alt") return "Alt";
+    if (lower === "shift") return "Shift";
+    if (lower === "cmd" || lower === "command" || lower === "meta") return "Meta";
+    if (lower === "escape" || lower === "esc") return "Esc";
+    if (lower === "space" || lower === "spacebar") return "Space";
+    if (lower.length === 1) return lower.toUpperCase();
+    return text.charAt(0).toUpperCase() + text.slice(1);
+  }
+  function normalizeShortcutCombo(combo) {
+    const parts = String(combo || "").split("+").map(normalizeShortcutToken).filter(Boolean);
+    const modifiers = SHORTCUT_MODIFIERS.filter((modifier) => parts.includes(modifier));
+    const key = parts.find((part) => !SHORTCUT_MODIFIERS.includes(part)) || "";
+    return [...modifiers, key].filter(Boolean).join("+");
+  }
+  function eventToShortcutCombo(event) {
+    const key = normalizeShortcutToken(event.key);
+    if (!key || SHORTCUT_MODIFIERS.includes(key)) return "";
+    return [
+      event.ctrlKey ? "Ctrl" : "",
+      event.altKey ? "Alt" : "",
+      event.shiftKey ? "Shift" : "",
+      event.metaKey ? "Meta" : "",
+      key
+    ].filter(Boolean).join("+");
+  }
+  const QUALITY_ORDER = ["tiny", "small", "medium", "large", "hd720", "hd1080", "hd1440", "hd2160", "hd2880", "highres"];
+  const QUALITY_ALLOWED = ["auto", ...QUALITY_ORDER];
+  function normalizeQualityLevel(level, fallback = "hd720") {
+    const value = String(level || "");
+    return QUALITY_ALLOWED.includes(value) ? value : fallback;
+  }
+  const DEFAULT = DEFAULT_SETTINGS;
+  const DEFAULT_VALUES = DEFAULT_SETTINGS;
   function byId(id) {
     return document.getElementById(id);
   }
@@ -241,9 +373,10 @@
   const optToolbarVolumeBoost = document.querySelector('[data-setting="toolbarVolumeBoost"]');
   let currentWhitelist = [];
   let initialState = null;
-  chrome.storage.local.get({ ...DEFAULT, ...PLANNED_DEFAULTS }, (s) => {
-    if ((Number(s.playerDefaultsProfileVersion) || 0) < PLAYER_DEFAULTS_PROFILE_VERSION) {
-      Object.assign(s, PLAYER_DEFAULTS_PROFILE, { playerDefaultsProfileVersion: PLAYER_DEFAULTS_PROFILE_VERSION });
+  chrome.storage.local.get(DEFAULT_VALUES, (s) => {
+    const storedProfileVersion = Number(s.playerDefaultsProfileVersion) || 0;
+    s = migrateSettings(s);
+    if (storedProfileVersion < PLAYER_DEFAULTS_PROFILE_VERSION) {
       chrome.storage.local.set({
         ...PLAYER_DEFAULTS_PROFILE,
         playerDefaultsProfileVersion: PLAYER_DEFAULTS_PROFILE_VERSION
@@ -514,7 +647,15 @@
     chrome.storage.local.set({ appearanceHideChat: optAppearanceHideChat.checked });
   });
   optAppearanceHideComments.addEventListener("change", () => {
-    chrome.storage.local.set({ appearanceHideComments: optAppearanceHideComments.checked });
+    const updates = {
+      appearanceHideComments: optAppearanceHideComments.checked
+    };
+    if (optAppearanceHideComments.checked) {
+      updates.appearanceSortNewestComments = false;
+      const sortControl = document.querySelector('[data-setting="appearanceSortNewestComments"]');
+      if (sortControl) sortControl.checked = false;
+    }
+    chrome.storage.local.set(updates);
   });
   optAppearanceHideEndcards.addEventListener("change", () => {
     chrome.storage.local.set({ appearanceHideEndcards: optAppearanceHideEndcards.checked });
@@ -557,7 +698,7 @@
   });
   btnReset.addEventListener("click", () => {
     if (confirm("Isso vai resetar todas as configurações e zerar o contador de anúncios e avisos. Continuar?")) {
-      chrome.storage.local.set({ ...DEFAULT, ...PLANNED_DEFAULTS }, () => {
+      chrome.storage.local.set(DEFAULT_VALUES, () => {
         location.reload();
       });
     }
@@ -629,58 +770,23 @@
   function readPlannedControlValue(control) {
     const key = getPlannedKey(control);
     if (control instanceof HTMLInputElement && isShortcutSettingKey(key)) {
-      return normalizeShortcutCombo(control.value) || PLANNED_DEFAULTS[key] || "";
+      return normalizeShortcutCombo(control.value);
     }
     if (control instanceof HTMLInputElement && control.type === "checkbox") {
       return control.checked;
     }
     if (control instanceof HTMLInputElement && control.type === "number") {
       const value = Number(control.value);
-      return Number.isFinite(value) ? value : PLANNED_DEFAULTS[key] || 0;
+      return Number.isFinite(value) ? value : DEFAULT_VALUES[key] || 0;
     }
     return control.value;
   }
-  function isShortcutSettingKey(key) {
-    return /^shortcut[A-Z]/.test(key);
-  }
-  function normalizeShortcutToken(token) {
-    const raw = String(token || "");
-    if (raw === " ") return "Space";
-    const text = raw.trim();
-    if (!text) return "";
-    const lower = text.toLowerCase();
-    if (lower === "control" || lower === "ctrl") return "Ctrl";
-    if (lower === "option" || lower === "alt") return "Alt";
-    if (lower === "shift") return "Shift";
-    if (lower === "cmd" || lower === "command" || lower === "meta") return "Meta";
-    if (lower === "escape" || lower === "esc") return "Esc";
-    if (lower === "spacebar") return "Space";
-    if (lower.length === 1) return lower.toUpperCase();
-    return text.charAt(0).toUpperCase() + text.slice(1);
-  }
-  function normalizeShortcutCombo(combo) {
-    const parts = String(combo || "").split("+").map(normalizeShortcutToken).filter(Boolean);
-    const modifiers = ["Ctrl", "Alt", "Shift", "Meta"].filter((mod) => parts.includes(mod));
-    const key = parts.find((part) => !["Ctrl", "Alt", "Shift", "Meta"].includes(part)) || "";
-    return [...modifiers, key].filter(Boolean).join("+");
-  }
-  function shortcutFromKeyboardEvent(event) {
-    const key = normalizeShortcutToken(event.key);
-    if (!key || ["Ctrl", "Alt", "Shift", "Meta"].includes(key)) return "";
-    return [
-      event.ctrlKey ? "Ctrl" : "",
-      event.altKey ? "Alt" : "",
-      event.shiftKey ? "Shift" : "",
-      event.metaKey ? "Meta" : "",
-      key
-    ].filter(Boolean).join("+");
-  }
   function loadPlannedSettings() {
-    chrome.storage.local.get(PLANNED_DEFAULTS, (settings) => {
+    chrome.storage.local.get(DEFAULT_VALUES, (settings) => {
       plannedControls.forEach((control) => {
         const key = getPlannedKey(control);
         if (!key) return;
-        setPlannedControlValue(control, settings[key] ?? PLANNED_DEFAULTS[key] ?? "");
+        setPlannedControlValue(control, settings[key] ?? DEFAULT_VALUES[key] ?? "");
       });
       updateCinemaPreview();
     });
@@ -715,17 +821,19 @@
           event.preventDefault();
           event.stopPropagation();
           if (event.key === "Escape") {
-            control.blur();
+            control.value = "";
+            chrome.storage.local.set({ [key]: "" });
+            flashBorder(control, "var(--orange)");
             return;
           }
           if (event.key === "Backspace" || event.key === "Delete") {
-            const fallback = PLANNED_DEFAULTS[key] || "";
+            const fallback = DEFAULT_VALUES[key] || "";
             control.value = String(fallback);
             chrome.storage.local.set({ [key]: fallback });
             flashBorder(control, "var(--orange)");
             return;
           }
-          const combo = shortcutFromKeyboardEvent(event);
+          const combo = eventToShortcutCombo(event);
           if (!combo) return;
           control.value = combo;
           chrome.storage.local.set({ [key]: combo });
@@ -744,29 +852,22 @@
         const action = button.dataset.settingAction || "";
         if (action === "themeReset") {
           const resetValues = {
-            themeEngine: PLANNED_DEFAULTS.themeEngine,
-            themeVariant: PLANNED_DEFAULTS.themeVariant,
-            themeDeepDarkCustom: PLANNED_DEFAULTS.themeDeepDarkCustom,
-            themeCustomAccent: PLANNED_DEFAULTS.themeCustomAccent,
-            themeCustomBackground: PLANNED_DEFAULTS.themeCustomBackground,
-            themeCustomSurface: PLANNED_DEFAULTS.themeCustomSurface,
-            themeCustomSurfaceRaised: PLANNED_DEFAULTS.themeCustomSurfaceRaised,
-            themeCustomText: PLANNED_DEFAULTS.themeCustomText,
-            themeCustomMuted: PLANNED_DEFAULTS.themeCustomMuted,
-            themeCustomBorder: PLANNED_DEFAULTS.themeCustomBorder,
-            themeCustomCss: PLANNED_DEFAULTS.themeCustomCss
+            themeEngine: DEFAULT_VALUES.themeEngine,
+            themeVariant: DEFAULT_VALUES.themeVariant,
+            themeDeepDarkCustom: DEFAULT_VALUES.themeDeepDarkCustom,
+            themeCustomAccent: DEFAULT_VALUES.themeCustomAccent,
+            themeCustomBackground: DEFAULT_VALUES.themeCustomBackground,
+            themeCustomSurface: DEFAULT_VALUES.themeCustomSurface,
+            themeCustomSurfaceRaised: DEFAULT_VALUES.themeCustomSurfaceRaised,
+            themeCustomText: DEFAULT_VALUES.themeCustomText,
+            themeCustomMuted: DEFAULT_VALUES.themeCustomMuted,
+            themeCustomBorder: DEFAULT_VALUES.themeCustomBorder,
+            themeCustomCss: DEFAULT_VALUES.themeCustomCss
           };
           chrome.storage.local.set(resetValues, loadPlannedSettings);
         } else if (action === "themeSave") {
           persistPlannedControls();
           updateCinemaPreview();
-          flashBorder(button, "var(--green)");
-        } else if (action === "customScriptSave") {
-          persistPlannedControls();
-          flashBorder(button, "var(--green)");
-        } else if (action === "customScriptRun") {
-          persistPlannedControls();
-          chrome.storage.local.set({ customScriptEnabled: true, customScriptRunAt: Date.now() });
           flashBorder(button, "var(--green)");
         } else if (action === "shortcutEditor") {
           const firstShortcut = document.querySelector('[data-setting="shortcutSkipAd"]');
@@ -779,7 +880,7 @@
           flashBorder(button, optShortcut.checked ? "var(--green)" : "var(--orange)");
         } else if (action === "shortcutReset") {
           const resetValues = Object.fromEntries(
-            Object.entries(PLANNED_DEFAULTS).filter(([key]) => isShortcutSettingKey(key))
+            Object.entries(DEFAULT_VALUES).filter(([key]) => isShortcutSettingKey(key))
           );
           chrome.storage.local.set(resetValues, loadPlannedSettings);
           flashBorder(button, "var(--green)");
@@ -799,8 +900,8 @@
   function updateCinemaPreview() {
     const preview = document.querySelector(".cinema-preview");
     if (!preview) return;
-    const color = String(getPlannedInput("cinemaColor")?.value || PLANNED_DEFAULTS.cinemaColor);
-    const opacity = Number(getPlannedInput("cinemaOpacity")?.value || PLANNED_DEFAULTS.cinemaOpacity);
+    const color = String(getPlannedInput("cinemaColor")?.value || DEFAULT_VALUES.cinemaColor);
+    const opacity = Number(getPlannedInput("cinemaOpacity")?.value || DEFAULT_VALUES.cinemaOpacity);
     const alpha = Math.min(1, Math.max(0, opacity / 100));
     preview.style.setProperty("--cinema-preview-color", color);
     preview.style.setProperty("--cinema-preview-alpha", String(alpha));
@@ -835,7 +936,7 @@
         try {
           const parsed = JSON.parse(String(reader.result || "{}"));
           const rawSettings = parsed.settings && typeof parsed.settings === "object" ? parsed.settings : parsed;
-          const allowedKeys = /* @__PURE__ */ new Set([...Object.keys(DEFAULT), ...Object.keys(PLANNED_DEFAULTS)]);
+          const allowedKeys = new Set(SETTINGS_EXPORT_KEYS);
           const settings = Object.fromEntries(
             Object.entries(rawSettings).filter(([key]) => allowedKeys.has(key))
           );
@@ -910,9 +1011,7 @@
     }
   }
   function normalizeAdSpeed(value) {
-    const n = Number(value);
-    if (!Number.isFinite(n)) return SAFE_AD_SPEED_RATE;
-    return Math.min(MAX_AD_SPEED_RATE, Math.max(MIN_AD_SPEED_RATE, n));
+    return normalizeSpeedRate(value);
   }
   function normalizePlayerSpeed(value, fallback = 1) {
     const n = Number(value);
@@ -935,8 +1034,7 @@
     return Math.min(25, Math.max(1, Math.round(n)));
   }
   function normalizeQuality(value) {
-    const valid = ["auto", "medium", "large", "hd720", "hd1080", "hd1440", "hd2160", "highres"];
-    return valid.includes(value) ? value : DEFAULT.qualityVideo;
+    return normalizeQualityLevel(value, DEFAULT.qualityVideo);
   }
   function normalizeMiniplayerSize(value) {
     const valid = ["360x203", "480x270", "640x360"];
@@ -957,22 +1055,6 @@
   function formatControlNumber(value) {
     return value.toFixed(2).replace(/\.?0+$/, "");
   }
-  function getSafeAdaptiveSpeed(delay) {
-    if (delay <= 3) return SAFE_AD_SPEED_RATE;
-    if (delay <= 6) return 2.5;
-    if (delay <= 10) return 2;
-    if (delay <= 20) return 1.5;
-    return 1.25;
-  }
-  function getRiskAdaptiveSpeed(delay) {
-    if (delay <= 1) return 8;
-    if (delay <= 2) return 6;
-    if (delay <= 3) return 5;
-    if (delay <= 5) return 4;
-    if (delay <= 10) return 3;
-    if (delay <= 20) return 2;
-    return 1.5;
-  }
   function getTimingState() {
     const aggressive = optAggressive.checked;
     const instant = aggressive && optInstant.checked;
@@ -985,9 +1067,6 @@
       customSpeed,
       adaptiveSpeed
     };
-  }
-  function formatSpeed(value) {
-    return value.toFixed(value % 1 === 0 ? 0 : 1) + "x";
   }
   function renderTimingControls() {
     const delay = parseInt(optDelay.value, 10) || DEFAULT.skipDelay;
@@ -1094,14 +1173,14 @@
   }
   function checkRestartWarning() {
     if (!initialState) return;
-    chrome.storage.local.get({ ...DEFAULT, ...PLANNED_DEFAULTS }, (current) => {
+    chrome.storage.local.get(DEFAULT_VALUES, (current) => {
       const needsReload = [
         "codecForceStandardFps",
         "codecForceAvc"
       ];
       let changed = false;
       for (const key of needsReload) {
-        const initialValue = key in initialState ? initialState[key] : PLANNED_DEFAULTS[key];
+        const initialValue = key in initialState ? initialState[key] : DEFAULT_VALUES[key];
         if (current[key] !== initialValue) {
           changed = true;
           break;
@@ -1251,7 +1330,7 @@
     plannedControls.forEach((control) => {
       const key = getPlannedKey(control);
       if (!key || !changes[key] || document.activeElement === control) return;
-      const nextValue = changes[key].newValue ?? PLANNED_DEFAULTS[key] ?? "";
+      const nextValue = changes[key].newValue ?? DEFAULT_VALUES[key] ?? "";
       setPlannedControlValue(control, nextValue);
     });
     if (changes.cinemaColor || changes.cinemaOpacity) updateCinemaPreview();

@@ -5,12 +5,16 @@
   "type": "module",
   "scripts": {
     "check": "tsc --noEmit",
+    "test": "vitest run",
+    "clean": "node scripts/clean.mjs",
     "build": "node scripts/build-extension.mjs",
-    "verify": "npm run check && npm run build && node scripts/verify-extension.mjs"
+    "package": "npm run check && npm run test && npm run build && node scripts/verify-extension.mjs && node scripts/package-extension.mjs",
+    "verify": "npm run check && npm run test && npm run build && node scripts/verify-extension.mjs"
   },
   "devDependencies": {
     "@types/chrome": "^0.1.33",
     "typescript": "^5.9.3",
-    "vite": "^7.2.4"
+    "vite": "^7.2.4",
+    "vitest": "^4.1.5"
   }
 }

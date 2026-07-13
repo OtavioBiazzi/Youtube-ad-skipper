@@ -238,7 +238,7 @@
             </div>
             <div class="card-body control-stack">
               <div class="opt-row"><div class="opt-info"><span class="opt-title">Notificacao toast</span><span class="opt-desc">Mostra uma notificacao na tela quando pular.</span></div><label class="switch"><input type="checkbox" id="opt-toast"><span class="switch-track"></span></label></div>
-              <div class="opt-row"><div class="opt-info"><span class="opt-title">Atalho de teclado</span><span class="opt-desc">Pressione Shift + S para pular manualmente.</span></div><label class="switch"><input type="checkbox" id="opt-shortcut"><span class="switch-track"></span></label></div>
+              <div class="opt-row"><div class="opt-info"><span class="opt-title">Atalhos do teclado</span><span class="opt-desc">Configure todos os atalhos na area Mouse e atalhos.</span></div><label class="switch"><input type="checkbox" id="opt-shortcut"><span class="switch-track"></span></label></div>
               <div class="opt-row"><div class="opt-info"><span class="opt-title">Player flutuante (PiP)</span><span class="opt-desc">Adiciona um botao para fixar o video na tela.</span></div><label class="switch"><input type="checkbox" id="opt-pip"><span class="switch-track"></span></label></div>
             </div>
           </article>
@@ -290,17 +290,17 @@
                 <button class="outline-action" type="button" data-setting-action="shortcutToggle">Ativar/desativar atalhos</button>
                 <button class="outline-action" type="button" data-setting-action="shortcutReset">Restaurar padrao</button>
               </div>
-              <div class="module-note">Clique em um campo e pressione a combinacao desejada. Backspace restaura o atalho padrao.</div>
+              <div class="module-note">Clique em um campo e pressione a combinacao desejada. Esc remove o atalho; Backspace restaura o padrao.</div>
               <div class="keymap-grid">
-                <label><span>Pular anuncio</span><input class="control-input" data-setting="shortcutSkipAd" type="text" value="Shift+S"></label>
-                <label><span>Velocidade -</span><input class="control-input" data-setting="shortcutSpeedDown" type="text" value="Ctrl+,"></label>
-                <label><span>Velocidade +</span><input class="control-input" data-setting="shortcutSpeedUp" type="text" value="Ctrl+."></label>
-                <label><span>Volume -</span><input class="control-input" data-setting="shortcutVolumeDown" type="text" value="Alt+,"></label>
-                <label><span>Volume +</span><input class="control-input" data-setting="shortcutVolumeUp" type="text" value="Alt+."></label>
-                <label><span>Cinema</span><input class="control-input" data-setting="shortcutCinema" type="text" value="C"></label>
-                <label><span>Screenshot</span><input class="control-input" data-setting="shortcutScreenshot" type="text" value="P"></label>
-                <label><span>Pop-up</span><input class="control-input" data-setting="shortcutPopup" type="text" value="O"></label>
-                <label><span>Loop</span><input class="control-input" data-setting="shortcutLoop" type="text" value="L"></label>
+                <label><span>Pular anuncio</span><input class="control-input" data-setting="shortcutSkipAd" type="text" value="Alt+Shift+S"></label>
+                <label><span>Velocidade -</span><input class="control-input" data-setting="shortcutSpeedDown" type="text" value="Alt+Shift+,"></label>
+                <label><span>Velocidade +</span><input class="control-input" data-setting="shortcutSpeedUp" type="text" value="Alt+Shift+."></label>
+                <label><span>Volume -</span><input class="control-input" data-setting="shortcutVolumeDown" type="text" value="Alt+Shift+ArrowDown"></label>
+                <label><span>Volume +</span><input class="control-input" data-setting="shortcutVolumeUp" type="text" value="Alt+Shift+ArrowUp"></label>
+                <label><span>Cinema</span><input class="control-input" data-setting="shortcutCinema" type="text" value="Alt+Shift+C"></label>
+                <label><span>Screenshot</span><input class="control-input" data-setting="shortcutScreenshot" type="text" value="Alt+Shift+P"></label>
+                <label><span>Pop-up</span><input class="control-input" data-setting="shortcutPopup" type="text" value="Alt+Shift+O"></label>
+                <label><span>Loop</span><input class="control-input" data-setting="shortcutLoop" type="text" value="Alt+Shift+L"></label>
               </div>
             </div>
           </article>
@@ -368,13 +368,13 @@
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Ocultar comentarios</span><span class="opt-desc">Esconde o bloco de comentarios abaixo do video.</span></div><label class="switch"><input type="checkbox" id="opt-appearance-hide-comments"><span class="switch-track"></span></label></div>
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Ocultar cards finais</span><span class="opt-desc">Remove cards, telas finais e teasers sobre o player.</span></div><label class="switch"><input type="checkbox" id="opt-appearance-hide-endcards"><span class="switch-track"></span></label></div>
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Ordenar comentarios recentes</span><span class="opt-desc">Planejado para abrir comentarios em ordem de recentes.</span></div><label class="switch"><input type="checkbox" data-setting="appearanceSortNewestComments"><span class="switch-track"></span></label></div>
-              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Aplicar filtros automaticamente</span><span class="opt-desc">Prepara filtros visuais por categoria de video.</span></div><label class="switch"><input type="checkbox" data-setting="appearanceAutoApplyFilters"><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Aplicar filtros automaticamente</span><span class="opt-desc">Mantem seus filtros de video em todos os videos seguintes.</span></div><label class="switch"><input type="checkbox" data-setting="appearanceAutoApplyFilters"><span class="switch-track"></span></label></div>
             </div>
           </article>
           <article class="card card--module">
             <div class="card-header"><span>Tema e CSS customizado</span><span class="tag tag--on">FUNCIONAL</span></div>
             <div class="card-body control-stack">
-              <label class="field-row"><span>Motor de tema</span><select class="control-input" data-setting="themeEngine"><option value="tube-shield" selected>YouTube Extension</option><option value="youtube">YouTube oficial</option><option value="enhancer">Enhancer style</option><option value="deepdark">YouTube-DeepDark</option><option value="custom">Personalizado</option></select></label>
+              <label class="field-row"><span>Motor de tema</span><select class="control-input" data-setting="themeEngine"><option value="youtube" selected>YouTube oficial</option><option value="tube-shield">YouTube Extension</option><option value="enhancer">Enhancer style</option><option value="deepdark">YouTube-DeepDark</option><option value="custom">Personalizado</option></select></label>
               <label class="field-row"><span>Variante</span><select class="control-input" data-setting="themeVariant"><option value="red" selected>Red</option><option value="deep-dark">Deep Dark</option><option value="gray">Gray</option><option value="blue">Blue</option></select></label>
               <div class="theme-swatches" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">YouTube-DeepDark personalizado</span><span class="opt-desc">Salva as cores para a variante personalizada.</span></div><label class="switch"><input type="checkbox" data-setting="themeDeepDarkCustom"><span class="switch-track"></span></label></div>
@@ -400,6 +400,7 @@
         <article class="card card--module">
           <div class="card-header"><span>Layout por fileira</span><span class="tag tag--on">FUNCIONAL</span></div>
           <div class="card-body">
+            <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Ativar layout por fileira</span><span class="opt-desc">Altera grades do YouTube apenas quando ligado.</span></div><label class="switch"><input type="checkbox" data-setting="appearanceLayoutRowsEnabled"><span class="switch-track"></span></label></div>
             <div class="appearance-grid">
               <label class="field-row"><span>Videos por fileira</span><input class="control-input" data-setting="layoutVideosPerRow" type="number" value="4" min="1" max="8" step="1"></label>
               <label class="field-row"><span>Videos por fileira no canal</span><input class="control-input" data-setting="layoutChannelVideosPerRow" type="number" value="4" min="1" max="8" step="1"></label>
@@ -421,13 +422,26 @@
               <label class="field-row"><span>Opacidade</span><input class="control-input" data-setting="cinemaOpacity" type="number" value="85" min="0" max="100" step="1"></label>
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Usar cinema por padrao</span></div><label class="switch"><input type="checkbox" data-setting="cinemaDefault"><span class="switch-track"></span></label></div>
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Expandir/diminuir automaticamente</span><span class="opt-desc">Sincroniza o player ao ligar ou desligar o cinema.</span></div><label class="switch"><input type="checkbox" data-setting="cinemaAutoResize"><span class="switch-track"></span></label></div>
-              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Integrar com Modo Teatro</span><span class="opt-desc">Usa o modo teatro nativo como base quando possivel.</span></div><label class="switch"><input type="checkbox" data-setting="cinemaUseYouTubeTheater" checked><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Integrar com Modo Teatro</span><span class="opt-desc">Usa o modo teatro nativo como base quando possivel.</span></div><label class="switch"><input type="checkbox" data-setting="cinemaUseYouTubeTheater"><span class="switch-track"></span></label></div>
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Modo ultrawide 21:9 / 32:9</span></div><label class="switch"><input type="checkbox" data-setting="ultrawideEnabled"><span class="switch-track"></span></label></div>
               <label class="field-row"><span>Ajuste de encaixe</span><select class="control-input" data-setting="ultrawideFit"><option value="smart-crop" selected>Crop inteligente</option><option value="contain">Contain</option><option value="stretch">Stretch</option></select></label>
             </div>
             <div class="cinema-preview-shell">
               <div class="preview-label"><strong>Previa</strong><span>video player</span></div>
               <div class="cinema-preview"><div class="preview-player"><span></span></div><div class="preview-side"></div></div>
+            </div>
+          </div>
+        </article>
+        <article class="card card--module">
+          <div class="card-header"><span>Filtros de video</span><span class="tag tag--safe">NOVO</span></div>
+          <div class="card-body control-stack">
+            <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Ativar filtros</span><span class="opt-desc">Aplica os ajustes abaixo no video atual.</span></div><label class="switch"><input type="checkbox" data-setting="videoFiltersEnabled"><span class="switch-track"></span></label></div>
+            <div class="appearance-grid">
+              <label class="field-row"><span>Brilho</span><input class="control-input" data-setting="videoFilterBrightness" type="number" value="100" min="0" max="200" step="5"></label>
+              <label class="field-row"><span>Contraste</span><input class="control-input" data-setting="videoFilterContrast" type="number" value="100" min="0" max="200" step="5"></label>
+              <label class="field-row"><span>Saturacao</span><input class="control-input" data-setting="videoFilterSaturate" type="number" value="100" min="0" max="250" step="5"></label>
+              <label class="field-row"><span>Cinza</span><input class="control-input" data-setting="videoFilterGrayscale" type="number" value="0" min="0" max="100" step="5"></label>
+              <label class="field-row"><span>Sepia</span><input class="control-input" data-setting="videoFilterSepia" type="number" value="0" min="0" max="100" step="5"></label>
             </div>
           </div>
         </article>
@@ -448,7 +462,7 @@
             <div class="card-body control-stack">
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Exibir em uma barra</span><span class="opt-desc">Adiciona atalhos abaixo do player do YouTube.</span></div><label class="switch"><input type="checkbox" id="opt-toolbar-enabled" checked><span class="switch-track"></span></label></div>
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Exibir dentro do player</span><span class="opt-desc">Coloca os controles sobre o video quando houver espaco.</span></div><label class="switch"><input type="checkbox" data-setting="toolbarInsidePlayer"><span class="switch-track"></span></label></div>
-              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Manter controles visiveis</span><span class="opt-desc">Mantem os controles sem precisar clicar ou passar o cursor no icone de mais opcoes.</span></div><label class="switch"><input type="checkbox" data-setting="toolbarAlwaysVisible"><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Manter controles visiveis</span><span class="opt-desc">Mantem os controles sem precisar clicar ou passar o cursor no icone de mais opcoes.</span></div><label class="switch"><input type="checkbox" data-setting="toolbarAlwaysVisible" checked><span class="switch-track"></span></label></div>
               <label class="field-row"><span>Posicao da barra</span><select class="control-input" id="opt-toolbar-position"><option value="below" selected>Abaixo do video</option><option value="above">Acima do video</option></select></label>
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Centralizar ao expandir ou tela cheia</span></div><label class="switch"><input type="checkbox" id="opt-toolbar-center" checked><span class="switch-track"></span></label></div>
               <div class="toolbar-grid">
@@ -458,6 +472,7 @@
                 <label><input type="checkbox" id="opt-toolbar-popup" checked><span>Pop-up</span></label>
                 <label><input type="checkbox" id="opt-toolbar-pip" checked><span>PiP</span></label>
                 <label><input type="checkbox" id="opt-toolbar-screenshot" checked><span>Screenshot</span></label>
+                <label><input type="checkbox" data-setting="toolbarFilters" checked><span>Filtros</span></label>
                 <label><input type="checkbox" id="opt-toolbar-theater" checked><span>Cinema</span></label>
                 <label><input type="checkbox" id="opt-toolbar-settings" checked><span>Configuracoes</span></label>
               </div>
@@ -480,20 +495,6 @@
               <button class="outline-action" type="button" data-setting-action="backupImport">Importar</button>
             </div>
           </article>
-          <article class="card card--module">
-            <div class="card-header"><span>Script personalizado</span><span class="tag tag--risk">BETA</span></div>
-            <div class="card-body control-stack">
-              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Script personalizado</span><span class="opt-desc">Liga o comando da propria secao para executar o script quando voce quiser.</span></div><label class="switch"><input type="checkbox" data-setting="customScriptEnabled"><span class="switch-track"></span></label></div>
-              <div class="warning-box warning-box--alert">Use apenas scripts seus ou de fontes confiaveis.</div>
-              <textarea class="control-input code-textarea" data-setting="customScriptCode" rows="7">// seu script aqui
-document.addEventListener("yt-navigate-finish", () =&gt; {});</textarea>
-              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Executar automaticamente no YouTube</span></div><label class="switch"><input type="checkbox" data-setting="customScriptAutoRun"><span class="switch-track"></span></label></div>
-              <div class="action-row">
-                <button class="outline-action" type="button" data-setting-action="customScriptSave">Salvar script</button>
-                <button class="outline-action" type="button" data-setting-action="customScriptRun">Executar Script personalizado</button>
-              </div>
-            </div>
-          </article>
         </div>
       </section>
 
@@ -514,6 +515,14 @@ document.addEventListener("yt-navigate-finish", () =&gt; {});</textarea>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 2h8l4 4v10l-6 6h-4l-6-6V6z"/><path d="M12 8v5"/><path d="M12 17h.01"/></svg>
             Reportar bug
           </a>
+          <a href="https://github.com/OtavioBiazzi/Youtube-ad-skipper/issues" target="_blank" rel="noopener noreferrer" class="about-link">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a8 8 0 0 0-8 8v4a3 3 0 0 0 3 3h1v-6H6v-1a6 6 0 1 1 12 0v1h-2v6h1a3 3 0 0 0 3-3v-4a8 8 0 0 0-8-8z"/><path d="M9 21h6"/></svg>
+            Suporte
+          </a>
+          <label class="about-link about-link--select">
+            Idioma
+            <select class="control-input" data-setting="language"><option value="pt-BR" selected>Português (Brasil)</option><option value="en">English</option></select>
+          </label>
           <button class="about-link btn-reset" id="btn-reset">Resetar tudo</button>
         </div>
       </section>

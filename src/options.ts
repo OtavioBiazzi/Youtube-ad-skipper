@@ -2,235 +2,41 @@
 // YouTube Extension - Options Logic | Taste Skill
 // ══════════════════════════════════════════════════
 
-type ListMode = 'whitelist' | 'blacklist';
-type QualityLevel = 'auto' | 'medium' | 'large' | 'hd720' | 'hd1080' | 'hd1440' | 'hd2160' | 'highres';
-type MiniplayerSize = '360x203' | '480x270' | '640x360';
-type MiniplayerPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
-type PlayerPopupSize = '480x270' | '640x360' | '960x540';
-type ToolbarPosition = 'below' | 'above';
-type PlannedSettingValue = string | number | boolean;
+import {
+  INSTANT_AD_SPEED_RATE,
+  SAFE_AD_SPEED_RATE,
+  formatSpeed,
+  getRiskAdaptiveSpeed,
+  getSafeAdaptiveSpeed,
+  normalizeSpeedRate,
+} from "./shared/adTiming";
+import {
+  DEFAULT_SETTINGS,
+  PLAYER_DEFAULTS_PROFILE,
+  PLAYER_DEFAULTS_PROFILE_VERSION,
+  SETTINGS_EXPORT_KEYS,
+  migrateSettings,
+  type ExtensionSettings,
+  type ListMode,
+  type MiniplayerPosition,
+  type MiniplayerSize,
+  type PlannedSettingValue,
+  type PlayerPopupSize,
+  type QualityLevel,
+  type ToolbarPosition,
+} from "./shared/settings";
+import {
+  eventToShortcutCombo as shortcutFromKeyboardEvent,
+  isShortcutSettingKey,
+  normalizeShortcutCombo,
+} from "./shared/shortcuts";
+import { normalizeQualityLevel } from "./shared/quality";
 
-type OptionsSettings = {
-  enabled: boolean;
-  adSkipperEnabled: boolean;
-  skipDelay: number;
-  muteAds: boolean;
-  showOverlay: boolean;
-  aggressiveSkip: boolean;
-  warningCount: number;
-  theme: string;
-  totalAdsSkipped: number;
-  adsSkippedToday: number;
-  todayDate: string | null;
-  playerDefaultsProfileVersion: number;
-  whitelist: string[];
-  listMode: ListMode;
-  showToast: boolean;
-  shortcutEnabled: boolean;
-  instantSkip: boolean;
-  pipEnabled: boolean;
-  adSpeedRate: number;
-  customSpeedEnabled: boolean;
-  adaptiveSpeedEnabled: boolean;
-  playerSpeedEnabled: boolean;
-  playerSpeedDefault: number;
-  playerSpeedStep: number;
-  playerSpeedWheel: boolean;
-  playerSpeedWheelRightButton: boolean;
-  playerVolumeEnabled: boolean;
-  playerVolumeDefault: number;
-  playerVolumeStep: number;
-  playerVolumeWheel: boolean;
-  playerVolumeWheelRightButton: boolean;
-  playerWheelInvert: boolean;
-  autoplayBlockBackground: boolean;
-  autoplayBlockForeground: boolean;
-  autoplayAllowPlaylists: boolean;
-  pauseBackgroundTabs: boolean;
-  qualityEnabled: boolean;
-  qualityVideo: QualityLevel;
-  qualityPlaylist: QualityLevel;
-  qualityFullscreenEnabled: boolean;
-  qualityFullscreenVideo: QualityLevel;
-  qualityFullscreenPlaylist: QualityLevel;
-  qualityRestoreOnExit: boolean;
-  appearanceConvertShorts: boolean;
-  appearanceHideShorts: boolean;
-  appearanceHideRelated: boolean;
-  appearanceHideChat: boolean;
-  appearanceHideComments: boolean;
-  appearanceHideEndcards: boolean;
-  miniplayerEnabled: boolean;
-  miniplayerSize: MiniplayerSize;
-  miniplayerPosition: MiniplayerPosition;
-  playerPopupSize: PlayerPopupSize;
-  toolbarEnabled: boolean;
-  toolbarPosition: ToolbarPosition;
-  toolbarCenter: boolean;
-  toolbarLoop: boolean;
-  toolbarSpeed: boolean;
-  toolbarPopup: boolean;
-  toolbarPip: boolean;
-  toolbarScreenshot: boolean;
-  toolbarTheater: boolean;
-  toolbarSettings: boolean;
-};
+type OptionsSettings = ExtensionSettings;
 
-const DEFAULT: OptionsSettings = {
-  enabled: true,
-  adSkipperEnabled: true,
-  skipDelay: 1,
-  muteAds: true,
-  showOverlay: true,
-  aggressiveSkip: true,
-  warningCount: 0,
-  theme: 'dark',
-  totalAdsSkipped: 0,
-  adsSkippedToday: 0,
-  todayDate: null,
-  playerDefaultsProfileVersion: 0,
-  whitelist: [],
-  listMode: 'whitelist',
-  showToast: false,
-  shortcutEnabled: false,
-  instantSkip: false,
-  pipEnabled: false,
-  adSpeedRate: 3,
-  customSpeedEnabled: false,
-  adaptiveSpeedEnabled: false,
-  playerSpeedEnabled: true,
-  playerSpeedDefault: 1,
-  playerSpeedStep: 0.02,
-  playerSpeedWheel: true,
-  playerSpeedWheelRightButton: false,
-  playerVolumeEnabled: false,
-  playerVolumeDefault: 50,
-  playerVolumeStep: 5,
-  playerVolumeWheel: false,
-  playerVolumeWheelRightButton: false,
-  playerWheelInvert: false,
-  autoplayBlockBackground: true,
-  autoplayBlockForeground: false,
-  autoplayAllowPlaylists: true,
-  pauseBackgroundTabs: false,
-  qualityEnabled: false,
-  qualityVideo: 'hd720',
-  qualityPlaylist: 'hd720',
-  qualityFullscreenEnabled: false,
-  qualityFullscreenVideo: 'hd1080',
-  qualityFullscreenPlaylist: 'hd1080',
-  qualityRestoreOnExit: true,
-  appearanceConvertShorts: false,
-  appearanceHideShorts: false,
-  appearanceHideRelated: false,
-  appearanceHideChat: false,
-  appearanceHideComments: false,
-  appearanceHideEndcards: false,
-  miniplayerEnabled: true,
-  miniplayerSize: '480x270',
-  miniplayerPosition: 'top-left',
-  playerPopupSize: '640x360',
-  toolbarEnabled: true,
-  toolbarPosition: 'below',
-  toolbarCenter: true,
-  toolbarLoop: true,
-  toolbarSpeed: true,
-  toolbarPopup: true,
-  toolbarPip: true,
-  toolbarScreenshot: true,
-  toolbarTheater: true,
-  toolbarSettings: true,
-};
+const DEFAULT = DEFAULT_SETTINGS;
+const DEFAULT_VALUES = DEFAULT_SETTINGS as unknown as Record<string, PlannedSettingValue>;
 
-const SAFE_AD_SPEED_RATE = 3;
-const MIN_AD_SPEED_RATE = 1;
-const MAX_AD_SPEED_RATE = 8;
-const INSTANT_AD_SPEED_RATE = 16;
-const PLAYER_DEFAULTS_PROFILE_VERSION = 1;
-const PLAYER_DEFAULTS_PROFILE: Partial<OptionsSettings> = {
-  playerSpeedEnabled: true,
-  playerSpeedStep: 0.02,
-  playerSpeedWheel: true,
-  autoplayBlockBackground: true,
-  autoplayAllowPlaylists: true,
-  miniplayerEnabled: true,
-  miniplayerSize: '480x270',
-  miniplayerPosition: 'top-left',
-  playerPopupSize: '640x360',
-  toolbarEnabled: true,
-  toolbarPosition: 'below',
-  toolbarCenter: true,
-  toolbarLoop: true,
-  toolbarSpeed: true,
-  toolbarPopup: true,
-  toolbarPip: true,
-  toolbarScreenshot: true,
-  toolbarTheater: true,
-  toolbarSettings: true,
-};
-const PLANNED_DEFAULTS: Record<string, PlannedSettingValue> = {
-  playerSpeedReplaceMenu: true,
-  playerSpeedMenuList: '0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4',
-  playerSpeedButtonsEnabled: true,
-  volumeBoostEnabled: false,
-  volumeBoostLevel: 2,
-  volumeBoostAuto: false,
-  shortcutSkipAd: 'Shift+S',
-  shortcutSpeedDown: 'Ctrl+,',
-  shortcutSpeedUp: 'Ctrl+.',
-  shortcutVolumeDown: 'Alt+,',
-  shortcutVolumeUp: 'Alt+.',
-  shortcutCinema: 'C',
-  shortcutScreenshot: 'P',
-  shortcutPopup: 'O',
-  shortcutLoop: 'L',
-  autoplayDisableAll: false,
-  autoplayStopPreload: false,
-  autoplayIgnorePopup: true,
-  qualityPopup: 'medium',
-  qualityFullscreenPopup: 'hd1080',
-  miniplayerCustomSize: '480x270',
-  playerPopupEnabled: true,
-  playerPopupEmbeds: false,
-  appearanceSortNewestComments: false,
-  appearanceAutoApplyFilters: false,
-  themeEngine: 'tube-shield',
-  themeVariant: 'red',
-  themeDeepDarkCustom: false,
-  themeCustomAccent: '#ff334b',
-  themeCustomBackground: '#0f0f0f',
-  themeCustomSurface: '#17191f',
-  themeCustomSurfaceRaised: '#20232b',
-  themeCustomText: '#f4f5f7',
-  themeCustomMuted: '#a9adb8',
-  themeCustomBorder: '#343741',
-  themeCustomCss: 'body {\n  --yt-spec-base-background: #0f0f0f;\n}',
-  layoutVideosPerRow: 4,
-  layoutChannelVideosPerRow: 4,
-  layoutShortsPerRow: 8,
-  layoutChannelShortsPerRow: 5,
-  layoutPostsPerRow: 4,
-  appearanceKeepBlackBars: false,
-  appearanceAutoTheater: false,
-  appearanceAutoExpandPlayer: false,
-  appearanceUseViewportPlayer: false,
-  cinemaColor: '#000000',
-  cinemaOpacity: 85,
-  cinemaDefault: false,
-  cinemaAutoResize: false,
-  cinemaUseYouTubeTheater: true,
-  ultrawideEnabled: false,
-  ultrawideFit: 'smart-crop',
-  toolbarInsidePlayer: false,
-  toolbarAlwaysVisible: false,
-  toolbarVolumeBoost: true,
-  codecForceStandardFps: false,
-  codecForceAvc: false,
-  customScriptEnabled: false,
-  customScriptCode: '// seu script aqui\ndocument.addEventListener("yt-navigate-finish", () => {});',
-  customScriptAutoRun: false,
-  customScriptRunAt: 0,
-};
 
 // ── Elements ─────────────────────────────────────
 
@@ -331,9 +137,10 @@ let initialState: OptionsSettings | null = null;
 
 // ── Load ─────────────────────────────────────────
 
-chrome.storage.local.get({ ...DEFAULT, ...PLANNED_DEFAULTS } as Record<string, any>, (s: any) => {
-  if ((Number(s.playerDefaultsProfileVersion) || 0) < PLAYER_DEFAULTS_PROFILE_VERSION) {
-    Object.assign(s, PLAYER_DEFAULTS_PROFILE, { playerDefaultsProfileVersion: PLAYER_DEFAULTS_PROFILE_VERSION });
+chrome.storage.local.get(DEFAULT_VALUES, (s: any) => {
+  const storedProfileVersion = Number(s.playerDefaultsProfileVersion) || 0;
+  s = migrateSettings(s);
+  if (storedProfileVersion < PLAYER_DEFAULTS_PROFILE_VERSION) {
     chrome.storage.local.set({
       ...PLAYER_DEFAULTS_PROFILE,
       playerDefaultsProfileVersion: PLAYER_DEFAULTS_PROFILE_VERSION,
@@ -665,7 +472,15 @@ optAppearanceHideChat.addEventListener("change", () => {
 });
 
 optAppearanceHideComments.addEventListener("change", () => {
-  chrome.storage.local.set({ appearanceHideComments: optAppearanceHideComments.checked });
+  const updates: Record<string, PlannedSettingValue | boolean> = {
+    appearanceHideComments: optAppearanceHideComments.checked,
+  };
+  if (optAppearanceHideComments.checked) {
+    updates.appearanceSortNewestComments = false;
+    const sortControl = document.querySelector<HTMLInputElement>('[data-setting="appearanceSortNewestComments"]');
+    if (sortControl) sortControl.checked = false;
+  }
+  chrome.storage.local.set(updates);
 });
 
 optAppearanceHideEndcards.addEventListener("change", () => {
@@ -718,7 +533,7 @@ optToolbarCenter.addEventListener("change", () => {
 
 btnReset.addEventListener("click", () => {
   if (confirm("Isso vai resetar todas as configurações e zerar o contador de anúncios e avisos. Continuar?")) {
-    chrome.storage.local.set({ ...DEFAULT, ...PLANNED_DEFAULTS }, () => {
+    chrome.storage.local.set(DEFAULT_VALUES, () => {
       location.reload();
     });
   }
@@ -805,7 +620,7 @@ function setPlannedControlValue(control: HTMLInputElement | HTMLSelectElement | 
 function readPlannedControlValue(control: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement): PlannedSettingValue {
   const key = getPlannedKey(control);
   if (control instanceof HTMLInputElement && isShortcutSettingKey(key)) {
-    return normalizeShortcutCombo(control.value) || PLANNED_DEFAULTS[key] || "";
+    return normalizeShortcutCombo(control.value);
   }
 
   if (control instanceof HTMLInputElement && control.type === "checkbox") {
@@ -814,60 +629,18 @@ function readPlannedControlValue(control: HTMLInputElement | HTMLSelectElement |
 
   if (control instanceof HTMLInputElement && control.type === "number") {
     const value = Number(control.value);
-    return Number.isFinite(value) ? value : PLANNED_DEFAULTS[key] || 0;
+    return Number.isFinite(value) ? value : DEFAULT_VALUES[key] || 0;
   }
 
   return control.value;
 }
 
-function isShortcutSettingKey(key: string) {
-  return /^shortcut[A-Z]/.test(key);
-}
-
-function normalizeShortcutToken(token: string) {
-  const raw = String(token || "");
-  if (raw === " ") return "Space";
-  const text = raw.trim();
-  if (!text) return "";
-  const lower = text.toLowerCase();
-  if (lower === "control" || lower === "ctrl") return "Ctrl";
-  if (lower === "option" || lower === "alt") return "Alt";
-  if (lower === "shift") return "Shift";
-  if (lower === "cmd" || lower === "command" || lower === "meta") return "Meta";
-  if (lower === "escape" || lower === "esc") return "Esc";
-  if (lower === "spacebar") return "Space";
-  if (lower.length === 1) return lower.toUpperCase();
-  return text.charAt(0).toUpperCase() + text.slice(1);
-}
-
-function normalizeShortcutCombo(combo: string) {
-  const parts = String(combo || "")
-    .split("+")
-    .map(normalizeShortcutToken)
-    .filter(Boolean);
-  const modifiers = ["Ctrl", "Alt", "Shift", "Meta"].filter(mod => parts.includes(mod));
-  const key = parts.find(part => !["Ctrl", "Alt", "Shift", "Meta"].includes(part)) || "";
-  return [...modifiers, key].filter(Boolean).join("+");
-}
-
-function shortcutFromKeyboardEvent(event: KeyboardEvent) {
-  const key = normalizeShortcutToken(event.key);
-  if (!key || ["Ctrl", "Alt", "Shift", "Meta"].includes(key)) return "";
-  return [
-    event.ctrlKey ? "Ctrl" : "",
-    event.altKey ? "Alt" : "",
-    event.shiftKey ? "Shift" : "",
-    event.metaKey ? "Meta" : "",
-    key,
-  ].filter(Boolean).join("+");
-}
-
 function loadPlannedSettings() {
-  chrome.storage.local.get(PLANNED_DEFAULTS, (settings: Record<string, PlannedSettingValue>) => {
+  chrome.storage.local.get(DEFAULT_VALUES, (settings: Record<string, PlannedSettingValue>) => {
     plannedControls.forEach((control) => {
       const key = getPlannedKey(control);
       if (!key) return;
-      setPlannedControlValue(control, settings[key] ?? PLANNED_DEFAULTS[key] ?? "");
+      setPlannedControlValue(control, settings[key] ?? DEFAULT_VALUES[key] ?? "");
     });
     updateCinemaPreview();
   });
@@ -907,12 +680,14 @@ function bindPlannedSettingEvents() {
         event.stopPropagation();
 
         if (event.key === "Escape") {
-          control.blur();
+          control.value = "";
+          chrome.storage.local.set({ [key]: "" });
+          flashBorder(control, "var(--orange)");
           return;
         }
 
         if (event.key === "Backspace" || event.key === "Delete") {
-          const fallback = PLANNED_DEFAULTS[key] || "";
+          const fallback = DEFAULT_VALUES[key] || "";
           control.value = String(fallback);
           chrome.storage.local.set({ [key]: fallback });
           flashBorder(control, "var(--orange)");
@@ -940,29 +715,22 @@ function bindPlannedSettingEvents() {
       const action = button.dataset.settingAction || "";
       if (action === "themeReset") {
         const resetValues = {
-          themeEngine: PLANNED_DEFAULTS.themeEngine,
-          themeVariant: PLANNED_DEFAULTS.themeVariant,
-          themeDeepDarkCustom: PLANNED_DEFAULTS.themeDeepDarkCustom,
-          themeCustomAccent: PLANNED_DEFAULTS.themeCustomAccent,
-          themeCustomBackground: PLANNED_DEFAULTS.themeCustomBackground,
-          themeCustomSurface: PLANNED_DEFAULTS.themeCustomSurface,
-          themeCustomSurfaceRaised: PLANNED_DEFAULTS.themeCustomSurfaceRaised,
-          themeCustomText: PLANNED_DEFAULTS.themeCustomText,
-          themeCustomMuted: PLANNED_DEFAULTS.themeCustomMuted,
-          themeCustomBorder: PLANNED_DEFAULTS.themeCustomBorder,
-          themeCustomCss: PLANNED_DEFAULTS.themeCustomCss,
+          themeEngine: DEFAULT_VALUES.themeEngine,
+          themeVariant: DEFAULT_VALUES.themeVariant,
+          themeDeepDarkCustom: DEFAULT_VALUES.themeDeepDarkCustom,
+          themeCustomAccent: DEFAULT_VALUES.themeCustomAccent,
+          themeCustomBackground: DEFAULT_VALUES.themeCustomBackground,
+          themeCustomSurface: DEFAULT_VALUES.themeCustomSurface,
+          themeCustomSurfaceRaised: DEFAULT_VALUES.themeCustomSurfaceRaised,
+          themeCustomText: DEFAULT_VALUES.themeCustomText,
+          themeCustomMuted: DEFAULT_VALUES.themeCustomMuted,
+          themeCustomBorder: DEFAULT_VALUES.themeCustomBorder,
+          themeCustomCss: DEFAULT_VALUES.themeCustomCss,
         };
         chrome.storage.local.set(resetValues, loadPlannedSettings);
       } else if (action === "themeSave") {
         persistPlannedControls();
         updateCinemaPreview();
-        flashBorder(button, "var(--green)");
-      } else if (action === "customScriptSave") {
-        persistPlannedControls();
-        flashBorder(button, "var(--green)");
-      } else if (action === "customScriptRun") {
-        persistPlannedControls();
-        chrome.storage.local.set({ customScriptEnabled: true, customScriptRunAt: Date.now() });
         flashBorder(button, "var(--green)");
       } else if (action === "shortcutEditor") {
         const firstShortcut = document.querySelector<HTMLInputElement>('[data-setting="shortcutSkipAd"]');
@@ -975,7 +743,7 @@ function bindPlannedSettingEvents() {
         flashBorder(button, optShortcut.checked ? "var(--green)" : "var(--orange)");
       } else if (action === "shortcutReset") {
         const resetValues = Object.fromEntries(
-          Object.entries(PLANNED_DEFAULTS).filter(([key]) => isShortcutSettingKey(key))
+          Object.entries(DEFAULT_VALUES).filter(([key]) => isShortcutSettingKey(key))
         );
         chrome.storage.local.set(resetValues, loadPlannedSettings);
         flashBorder(button, "var(--green)");
@@ -998,8 +766,8 @@ function updateCinemaPreview() {
   const preview = document.querySelector<HTMLElement>(".cinema-preview");
   if (!preview) return;
 
-  const color = String((getPlannedInput("cinemaColor") as HTMLInputElement | null)?.value || PLANNED_DEFAULTS.cinemaColor);
-  const opacity = Number((getPlannedInput("cinemaOpacity") as HTMLInputElement | null)?.value || PLANNED_DEFAULTS.cinemaOpacity);
+  const color = String((getPlannedInput("cinemaColor") as HTMLInputElement | null)?.value || DEFAULT_VALUES.cinemaColor);
+  const opacity = Number((getPlannedInput("cinemaOpacity") as HTMLInputElement | null)?.value || DEFAULT_VALUES.cinemaOpacity);
   const alpha = Math.min(1, Math.max(0, opacity / 100));
   preview.style.setProperty("--cinema-preview-color", color);
   preview.style.setProperty("--cinema-preview-alpha", String(alpha));
@@ -1037,7 +805,7 @@ function importSettingsBackup(button: HTMLElement) {
       try {
         const parsed = JSON.parse(String(reader.result || "{}"));
         const rawSettings = parsed.settings && typeof parsed.settings === "object" ? parsed.settings : parsed;
-        const allowedKeys = new Set([...Object.keys(DEFAULT), ...Object.keys(PLANNED_DEFAULTS)]);
+        const allowedKeys = new Set(SETTINGS_EXPORT_KEYS);
         const settings = Object.fromEntries(
           Object.entries(rawSettings).filter(([key]) => allowedKeys.has(key))
         );
@@ -1122,9 +890,7 @@ function renderListMode(mode: ListMode) {
 }
 
 function normalizeAdSpeed(value: unknown) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return SAFE_AD_SPEED_RATE;
-  return Math.min(MAX_AD_SPEED_RATE, Math.max(MIN_AD_SPEED_RATE, n));
+  return normalizeSpeedRate(value);
 }
 
 function normalizePlayerSpeed(value: unknown, fallback = 1) {
@@ -1152,8 +918,7 @@ function normalizeVolumeStep(value: unknown) {
 }
 
 function normalizeQuality(value: unknown): QualityLevel {
-  const valid: QualityLevel[] = ['auto', 'medium', 'large', 'hd720', 'hd1080', 'hd1440', 'hd2160', 'highres'];
-  return valid.includes(value as QualityLevel) ? value as QualityLevel : DEFAULT.qualityVideo;
+  return normalizeQualityLevel(value, DEFAULT.qualityVideo) as QualityLevel;
 }
 
 function normalizeMiniplayerSize(value: unknown): MiniplayerSize {
@@ -1180,24 +945,6 @@ function formatControlNumber(value: number) {
   return value.toFixed(2).replace(/\.?0+$/, "");
 }
 
-function getSafeAdaptiveSpeed(delay: number) {
-  if (delay <= 3) return SAFE_AD_SPEED_RATE;
-  if (delay <= 6) return 2.5;
-  if (delay <= 10) return 2;
-  if (delay <= 20) return 1.5;
-  return 1.25;
-}
-
-function getRiskAdaptiveSpeed(delay: number) {
-  if (delay <= 1) return 8;
-  if (delay <= 2) return 6;
-  if (delay <= 3) return 5;
-  if (delay <= 5) return 4;
-  if (delay <= 10) return 3;
-  if (delay <= 20) return 2;
-  return 1.5;
-}
-
 function getTimingState() {
   const aggressive = optAggressive.checked;
   const instant = aggressive && optInstant.checked;
@@ -1210,10 +957,6 @@ function getTimingState() {
     customSpeed,
     adaptiveSpeed,
   };
-}
-
-function formatSpeed(value: number) {
-  return value.toFixed(value % 1 === 0 ? 0 : 1) + "x";
 }
 
 function renderTimingControls() {
@@ -1337,14 +1080,14 @@ function renderWarnings(count: number) {
 
 function checkRestartWarning() {
   if (!initialState) return;
-  chrome.storage.local.get({ ...DEFAULT, ...PLANNED_DEFAULTS } as Record<string, any>, (current: Record<string, any>) => {
+  chrome.storage.local.get(DEFAULT_VALUES, (current: Record<string, any>) => {
     const needsReload = [
       'codecForceStandardFps', 'codecForceAvc'
     ];
     let changed = false;
     
     for (const key of needsReload) {
-      const initialValue = key in initialState ? (initialState as unknown as Record<string, PlannedSettingValue>)[key] : PLANNED_DEFAULTS[key];
+      const initialValue = key in initialState ? (initialState as unknown as Record<string, PlannedSettingValue>)[key] : DEFAULT_VALUES[key];
       if (current[key] !== initialValue) { changed = true; break; }
     }
     
@@ -1506,7 +1249,7 @@ chrome.storage.onChanged.addListener((changes) => {
   plannedControls.forEach((control) => {
     const key = getPlannedKey(control);
     if (!key || !changes[key] || document.activeElement === control) return;
-    const nextValue = (changes[key].newValue ?? PLANNED_DEFAULTS[key] ?? "") as PlannedSettingValue;
+    const nextValue = (changes[key].newValue ?? DEFAULT_VALUES[key] ?? "") as PlannedSettingValue;
     setPlannedControlValue(control, nextValue);
   });
   if (changes.cinemaColor || changes.cinemaOpacity) updateCinemaPreview();

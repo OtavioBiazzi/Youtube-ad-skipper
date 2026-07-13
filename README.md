@@ -87,11 +87,13 @@ O projeto usa **TypeScript + Vite** para gerar os scripts finais da extensão.
 ```bash
 npm install
 npm run verify
+npm run package
 ```
 
 - `npm run check` valida os arquivos em `src/` com TypeScript.
 - `npm run build` gera os scripts finais na raiz e monta a extensão limpa em `dist/`.
 - `npm run verify` roda a checagem TypeScript, build e valida os arquivos referenciados pelo `manifest.json`.
+- `npm run package` gera o ZIP de release em `release/` usando os arquivos de `dist/`.
 
 ### Como funciona tecnicamente
 
@@ -108,6 +110,8 @@ Inspirado no projeto open-source [yt-ad-autoskipper](https://github.com/squgeim/
 ## 📄 Licença
 
 Este projeto é de uso pessoal e educacional. Use por sua própria conta e risco.
+
+Consulte tambem [LICENSE](LICENSE) e [PRIVACY.md](PRIVACY.md).
 
 ---
 

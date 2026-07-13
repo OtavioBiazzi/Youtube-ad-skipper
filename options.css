@@ -768,6 +768,17 @@ kbd {
   stroke-linejoin: round;
 }
 
+.about-link--select {
+  padding-right: 10px;
+}
+
+.about-link--select .control-input {
+  width: auto;
+  min-height: 28px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
 .about-link--warning {
   color: var(--yellow);
 }

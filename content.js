@@ -1,134 +1,490 @@
 (function() {
   "use strict";
+  const SAFE_AD_SPEED_RATE = 3;
+  const DEFAULT_SPEED_THROUGH_RATE = SAFE_AD_SPEED_RATE;
+  const MIN_AD_SPEED_RATE = 1;
+  const MAX_AD_SPEED_RATE = 8;
+  const INSTANT_AD_SPEED_RATE = 16;
+  const INSTANT_SPEED_THROUGH_RATE = INSTANT_AD_SPEED_RATE;
+  function normalizeSpeedRate(rate, fallback = DEFAULT_SPEED_THROUGH_RATE) {
+    const n = Number(rate);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.min(MAX_AD_SPEED_RATE, Math.max(MIN_AD_SPEED_RATE, n));
+  }
+  function normalizeSkipDelay(delay, fallback = 1) {
+    const n = Number(delay);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.min(30, Math.max(1, n));
+  }
+  function getSafeAdaptiveSpeed(delay) {
+    const d = normalizeSkipDelay(delay);
+    if (d <= 3) return SAFE_AD_SPEED_RATE;
+    if (d <= 6) return 2.5;
+    if (d <= 10) return 2;
+    if (d <= 20) return 1.5;
+    return 1.25;
+  }
+  function getRiskAdaptiveSpeed(delay) {
+    const d = normalizeSkipDelay(delay);
+    if (d <= 1) return 8;
+    if (d <= 2) return 6;
+    if (d <= 3) return 5;
+    if (d <= 5) return 4;
+    if (d <= 10) return 3;
+    if (d <= 20) return 2;
+    return 1.5;
+  }
+  function channelMatchesEntry(channel, entry) {
+    const needle = String(entry || "").toLowerCase().trim();
+    if (!needle) return false;
+    const name = String(channel.name || "").toLowerCase().trim();
+    const link = String(channel.link || "").toLowerCase().trim();
+    if (name && (name.includes(needle) || needle.includes(name))) return true;
+    if (link && needle.length > 3 && (link.includes(needle) || needle.includes(link))) return true;
+    return false;
+  }
+  function shouldProtectChannel(channel, entries = [], mode = "whitelist") {
+    const list = Array.isArray(entries) ? entries : [];
+    if (list.length === 0) return mode === "blacklist";
+    if (!channel) return false;
+    const matched = list.some((entry) => channelMatchesEntry(channel, entry));
+    if (mode === "blacklist") {
+      return !matched;
+    }
+    return matched;
+  }
+  const MIN_SEEKABLE_AD_DURATION_SECONDS = 0.5;
+  const MIN_REMAINING_AD_SECONDS = 0.15;
+  function getAdSeekTarget(duration, currentTime) {
+    const normalizedDuration = Number(duration);
+    const normalizedCurrentTime = Number(currentTime);
+    if (!Number.isFinite(normalizedDuration) || normalizedDuration < MIN_SEEKABLE_AD_DURATION_SECONDS) {
+      return null;
+    }
+    if (!Number.isFinite(normalizedCurrentTime) || normalizedCurrentTime < 0) {
+      return null;
+    }
+    if (normalizedCurrentTime >= normalizedDuration - MIN_REMAINING_AD_SECONDS) {
+      return null;
+    }
+    return Math.min(
+      normalizedDuration - 0.05,
+      Math.max(normalizedCurrentTime + 0.25, normalizedDuration - 0.05)
+    );
+  }
+  function chooseAdSkipAction(input) {
+    if (!input.adConfirmed || input.watching) return "none";
+    if (!input.delayElapsed) return input.aggressive ? "speed-through" : "wait";
+    if (input.skipButtonAvailable) return "click";
+    if (!input.aggressive) return "wait";
+    return getAdSeekTarget(input.duration, input.currentTime) === null ? "speed-through" : "seek-end";
+  }
+  function isLikelySkipControlText(value) {
+    const text = String(value || "").trim().toLocaleLowerCase();
+    return ["skip", "pular", "ignorar", "omitir", "saltar"].some((term) => text.includes(term));
+  }
+  const SKIP_BUTTON_CLASSES = [
+    "videoAdUiSkipButton",
+    "ytp-ad-skip-button ytp-button",
+    "ytp-ad-skip-button-modern ytp-button",
+    "ytp-skip-ad-button"
+  ];
+  const SKIP_BUTTON_SELECTORS = [
+    ".ytp-skip-ad-button",
+    ".ytp-ad-skip-button",
+    ".ytp-ad-skip-button-modern",
+    ".ytp-ad-skip-button-slot button",
+    ".ytp-ad-skip-button-container button",
+    'button[id^="skip-button"]',
+    "div.ytp-ad-skip-button-slot button",
+    '[aria-label*="Skip" i]',
+    '[aria-label*="Pular" i]',
+    '[title*="Skip" i]',
+    '[title*="Pular" i]',
+    '[class*="skip"][class*="ad" i]',
+    ".ytp-ad-overlay-close-button"
+  ];
+  function getYouTubePlayer(doc = document) {
+    return doc.getElementById("movie_player") || doc.querySelector(".html5-video-player");
+  }
+  function getClickableTarget(element) {
+    if (!element) return null;
+    return element.closest(
+      'button, [role="button"], .ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-ad-skip-button-modern, .videoAdUiSkipButton'
+    ) || element;
+  }
+  function isClickableVisible(element) {
+    if (!element) return false;
+    const rect = element.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return false;
+    const style = window.getComputedStyle(element);
+    return style.display !== "none" && style.visibility !== "hidden" && style.pointerEvents !== "none";
+  }
+  function clickElement(element) {
+    const target = getClickableTarget(element);
+    if (!isClickableVisible(target) || typeof target.click !== "function") return false;
+    target.click();
+    return true;
+  }
+  function getAdPlaying(doc = document) {
+    const player = getYouTubePlayer(doc);
+    if (player?.classList.contains("ad-showing") || player?.classList.contains("ad-interrupting")) {
+      return true;
+    }
+    const root = player || doc;
+    const badges = root.querySelectorAll(
+      ".ytp-ad-badge, .ytp-ad-visit-advertiser-button, .ytp-visit-advertiser-link"
+    );
+    return Array.from(badges).some((badge) => badge.offsetWidth > 0 || badge.offsetHeight > 0);
+  }
+  function findSkipAdButton(doc = document) {
+    const root = getYouTubePlayer(doc) || doc.documentElement;
+    for (const className of SKIP_BUTTON_CLASSES) {
+      for (const element of root.getElementsByClassName(className)) {
+        const target = getClickableTarget(element);
+        if (isClickableVisible(target)) return target;
+      }
+    }
+    for (const selector of SKIP_BUTTON_SELECTORS) {
+      for (const element of root.querySelectorAll(selector)) {
+        const target = getClickableTarget(element);
+        if (isClickableVisible(target)) return target;
+      }
+    }
+    for (const element of root.querySelectorAll("button, [role='button'], a")) {
+      const label = [element.textContent, element.getAttribute("aria-label"), element.getAttribute("title")].filter(Boolean).join(" ");
+      const target = getClickableTarget(element);
+      if (isLikelySkipControlText(label) && isClickableVisible(target)) return target;
+    }
+    return null;
+  }
+  function clickSkipAdBtn(candidate = findSkipAdButton()) {
+    return clickElement(candidate);
+  }
+  const MAIN_SESSION_MESSAGE = "youtube-extension:main-session";
+  const MAIN_FORCE_SKIP_MESSAGE = "yt-ad-skipper:force-skip";
+  const MAIN_SPEED_THROUGH_MESSAGE = "yt-ad-skipper:speed-through";
+  const MAIN_FORCE_SKIP_RESULT = "yt-ad-skipper:force-skip-result";
+  const MAIN_QUALITY_MESSAGE = "youtube-extension:set-quality";
+  const CODEC_SETTINGS_MESSAGE = "youtube-extension:codec-settings";
+  const CODEC_SETTINGS_STORAGE_KEY = "youtubeExtensionCodecSettings";
+  function createBridgeSessionToken() {
+    try {
+      const bytes = new Uint32Array(4);
+      crypto.getRandomValues(bytes);
+      return Array.from(bytes, (value) => value.toString(36)).join("-");
+    } catch (err) {
+      return Date.now().toString(36) + "-" + Math.random().toString(36).slice(2);
+    }
+  }
+  function isBridgeMessage(data) {
+    return !!data && typeof data === "object" && typeof data.source === "string";
+  }
+  const SHORTCUT_MODIFIERS = ["Ctrl", "Alt", "Shift", "Meta"];
+  function normalizeShortcutText(value, fallback = "") {
+    const text = String(value || "").trim();
+    return text || fallback;
+  }
+  function normalizeShortcutSetting(value, fallback = "") {
+    if (value === "") return "";
+    return normalizeShortcutText(value, fallback);
+  }
+  function normalizeShortcutToken(token) {
+    const raw = String(token || "");
+    if (raw === " ") return "Space";
+    const text = raw.trim();
+    if (!text) return "";
+    const lower = text.toLowerCase();
+    if (lower === "control" || lower === "ctrl") return "Ctrl";
+    if (lower === "option" || lower === "alt") return "Alt";
+    if (lower === "shift") return "Shift";
+    if (lower === "cmd" || lower === "command" || lower === "meta") return "Meta";
+    if (lower === "escape" || lower === "esc") return "Esc";
+    if (lower === "space" || lower === "spacebar") return "Space";
+    if (lower.length === 1) return lower.toUpperCase();
+    return text.charAt(0).toUpperCase() + text.slice(1);
+  }
+  function normalizeShortcutCombo(combo) {
+    const parts = String(combo || "").split("+").map(normalizeShortcutToken).filter(Boolean);
+    const modifiers = SHORTCUT_MODIFIERS.filter((modifier) => parts.includes(modifier));
+    const key = parts.find((part) => !SHORTCUT_MODIFIERS.includes(part)) || "";
+    return [...modifiers, key].filter(Boolean).join("+");
+  }
+  function eventToShortcutCombo(event) {
+    const key = normalizeShortcutToken(event.key);
+    if (!key || SHORTCUT_MODIFIERS.includes(key)) return "";
+    return [
+      event.ctrlKey ? "Ctrl" : "",
+      event.altKey ? "Alt" : "",
+      event.shiftKey ? "Shift" : "",
+      event.metaKey ? "Meta" : "",
+      key
+    ].filter(Boolean).join("+");
+  }
+  function shortcutMatches(event, combo) {
+    const wanted = normalizeShortcutCombo(combo);
+    return !!wanted && eventToShortcutCombo(event) === wanted;
+  }
+  const PLAYER_DEFAULTS_PROFILE_VERSION = 2;
+  const PLAYER_DEFAULTS_PROFILE = {
+    playerSpeedEnabled: true,
+    playerSpeedStep: 0.02,
+    playerSpeedWheel: true,
+    autoplayBlockBackground: true,
+    autoplayAllowPlaylists: true,
+    miniplayerEnabled: true,
+    miniplayerSize: "480x270",
+    miniplayerPosition: "top-left",
+    playerPopupSize: "640x360",
+    toolbarEnabled: true,
+    toolbarPosition: "below",
+    toolbarCenter: true,
+    toolbarLoop: true,
+    toolbarSpeed: true,
+    toolbarPopup: true,
+    toolbarPip: true,
+    toolbarScreenshot: true,
+    toolbarTheater: true,
+    toolbarSettings: true,
+    toolbarVolumeBoost: true,
+    toolbarFilters: true,
+    appearanceLayoutRowsEnabled: false,
+    appearanceSortNewestComments: false,
+    appearanceAutoApplyFilters: false,
+    shortcutEnabled: false,
+    cinemaUseYouTubeTheater: false,
+    ultrawideEnabled: false,
+    toolbarAlwaysVisible: true,
+    themeEngine: "youtube",
+    shortcutSkipAd: "Alt+Shift+S",
+    shortcutSpeedDown: "Alt+Shift+,",
+    shortcutSpeedUp: "Alt+Shift+.",
+    shortcutVolumeDown: "Alt+Shift+ArrowDown",
+    shortcutVolumeUp: "Alt+Shift+ArrowUp",
+    shortcutCinema: "Alt+Shift+C",
+    shortcutScreenshot: "Alt+Shift+P",
+    shortcutPopup: "Alt+Shift+O",
+    shortcutLoop: "Alt+Shift+L"
+  };
+  const DEFAULT_SETTINGS = {
+    enabled: true,
+    adSkipperEnabled: true,
+    skipDelay: 1,
+    muteAds: true,
+    showOverlay: true,
+    aggressiveSkip: true,
+    warningCount: 0,
+    theme: "dark",
+    totalAdsSkipped: 0,
+    adsSkippedToday: 0,
+    todayDate: null,
+    playerDefaultsProfileVersion: 0,
+    whitelist: [],
+    listMode: "whitelist",
+    showToast: false,
+    shortcutEnabled: false,
+    instantSkip: false,
+    pipEnabled: false,
+    adSpeedRate: 3,
+    customSpeedEnabled: false,
+    adaptiveSpeedEnabled: false,
+    playerSpeedEnabled: true,
+    playerSpeedDefault: 1,
+    playerSpeedStep: 0.02,
+    playerSpeedWheel: true,
+    playerSpeedWheelRightButton: false,
+    playerVolumeEnabled: false,
+    playerVolumeDefault: 50,
+    playerVolumeStep: 5,
+    playerVolumeWheel: false,
+    playerVolumeWheelRightButton: false,
+    volumeBoostEnabled: false,
+    volumeBoostLevel: 2,
+    volumeBoostAuto: false,
+    playerWheelInvert: false,
+    autoplayBlockBackground: true,
+    autoplayBlockForeground: false,
+    autoplayAllowPlaylists: true,
+    pauseBackgroundTabs: false,
+    qualityEnabled: false,
+    qualityVideo: "hd720",
+    qualityPlaylist: "hd720",
+    qualityFullscreenEnabled: false,
+    qualityFullscreenVideo: "hd1080",
+    qualityFullscreenPlaylist: "hd1080",
+    qualityPopup: "medium",
+    qualityFullscreenPopup: "hd1080",
+    qualityRestoreOnExit: true,
+    appearanceConvertShorts: false,
+    appearanceHideShorts: false,
+    appearanceHideRelated: false,
+    appearanceHideChat: false,
+    appearanceHideComments: false,
+    appearanceHideEndcards: false,
+    appearanceLayoutRowsEnabled: false,
+    appearanceSortNewestComments: false,
+    appearanceAutoApplyFilters: false,
+    miniplayerEnabled: true,
+    miniplayerSize: "480x270",
+    miniplayerCustomSize: "480x270",
+    miniplayerPosition: "top-left",
+    playerPopupSize: "640x360",
+    playerPopupEmbeds: false,
+    toolbarEnabled: true,
+    toolbarPosition: "below",
+    toolbarCenter: true,
+    toolbarLoop: true,
+    toolbarSpeed: true,
+    toolbarPopup: true,
+    toolbarPip: true,
+    toolbarScreenshot: true,
+    toolbarTheater: true,
+    toolbarSettings: true,
+    toolbarVolumeBoost: true,
+    toolbarFilters: true,
+    playerSpeedReplaceMenu: true,
+    playerSpeedMenuList: "0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4",
+    playerSpeedButtonsEnabled: true,
+    playerPopupEnabled: true,
+    shortcutSkipAd: "Alt+Shift+S",
+    shortcutSpeedDown: "Alt+Shift+,",
+    shortcutSpeedUp: "Alt+Shift+.",
+    shortcutVolumeDown: "Alt+Shift+ArrowDown",
+    shortcutVolumeUp: "Alt+Shift+ArrowUp",
+    shortcutCinema: "Alt+Shift+C",
+    shortcutScreenshot: "Alt+Shift+P",
+    shortcutPopup: "Alt+Shift+O",
+    shortcutLoop: "Alt+Shift+L",
+    autoplayDisableAll: false,
+    autoplayStopPreload: false,
+    autoplayIgnorePopup: true,
+    layoutVideosPerRow: 4,
+    layoutChannelVideosPerRow: 4,
+    layoutShortsPerRow: 8,
+    layoutChannelShortsPerRow: 5,
+    layoutPostsPerRow: 4,
+    appearanceKeepBlackBars: false,
+    appearanceAutoTheater: false,
+    appearanceAutoExpandPlayer: false,
+    appearanceUseViewportPlayer: false,
+    cinemaColor: "#000000",
+    cinemaOpacity: 85,
+    cinemaDefault: false,
+    cinemaAutoResize: false,
+    cinemaUseYouTubeTheater: false,
+    ultrawideEnabled: false,
+    ultrawideFit: "smart-crop",
+    toolbarInsidePlayer: false,
+    toolbarAlwaysVisible: true,
+    themeEngine: "youtube",
+    themeVariant: "red",
+    themeDeepDarkCustom: false,
+    themeCustomAccent: "#ff334b",
+    themeCustomBackground: "#0f0f0f",
+    themeCustomSurface: "#17191f",
+    themeCustomSurfaceRaised: "#20232b",
+    themeCustomText: "#f4f5f7",
+    themeCustomMuted: "#a9adb8",
+    themeCustomBorder: "#343741",
+    themeCustomCss: "body {\n  --yt-spec-base-background: #0f0f0f;\n}",
+    codecForceStandardFps: false,
+    codecForceAvc: false,
+    videoFiltersEnabled: false,
+    videoFilterBrightness: 100,
+    videoFilterContrast: 100,
+    videoFilterSaturate: 100,
+    videoFilterGrayscale: 0,
+    videoFilterSepia: 0,
+    language: "pt-BR"
+  };
+  const SETTINGS_EXPORT_KEYS = Object.keys(DEFAULT_SETTINGS);
+  function normalizeSettings(raw = {}) {
+    const normalized = { ...DEFAULT_SETTINGS };
+    for (const key of SETTINGS_EXPORT_KEYS) {
+      if (!(key in raw)) continue;
+      const value = raw[key];
+      const fallback = normalized[key];
+      if (Array.isArray(fallback)) {
+        if (Array.isArray(value)) normalized[key] = value.filter((item) => typeof item === "string");
+        continue;
+      }
+      if (fallback === null) {
+        if (value === null || typeof value === "string") normalized[key] = value;
+        continue;
+      }
+      if (typeof fallback === "number") {
+        if (typeof value === "number" && Number.isFinite(value)) normalized[key] = value;
+        continue;
+      }
+      if (typeof value === typeof fallback) normalized[key] = value;
+    }
+    return normalized;
+  }
+  function migrateSettings(raw = {}) {
+    const settings = normalizeSettings(raw);
+    if ((Number(settings.playerDefaultsProfileVersion) || 0) < PLAYER_DEFAULTS_PROFILE_VERSION) {
+      Object.assign(settings, PLAYER_DEFAULTS_PROFILE, {
+        playerDefaultsProfileVersion: PLAYER_DEFAULTS_PROFILE_VERSION
+      });
+    }
+    return settings;
+  }
+  const QUALITY_ORDER = ["tiny", "small", "medium", "large", "hd720", "hd1080", "hd1440", "hd2160", "hd2880", "highres"];
+  const QUALITY_ALLOWED = ["auto", ...QUALITY_ORDER];
+  function normalizeQualityLevel(level, fallback = "hd720") {
+    const value = String(level || "");
+    return QUALITY_ALLOWED.includes(value) ? value : fallback;
+  }
+  function pickBestQualityLevel(target, available = []) {
+    const normalizedTarget = normalizeQualityLevel(target);
+    if (normalizedTarget === "auto") return "auto";
+    const normalizedAvailable = available.map((level) => normalizeQualityLevel(level, "")).filter((level) => level && level !== "auto");
+    if (normalizedAvailable.length === 0) return normalizedTarget;
+    if (normalizedAvailable.includes(normalizedTarget)) return normalizedTarget;
+    const targetRank = QUALITY_ORDER.indexOf(normalizedTarget);
+    let best = "";
+    let bestRank = -1;
+    for (const level of normalizedAvailable) {
+      const rank = QUALITY_ORDER.indexOf(level);
+      if (rank >= 0 && rank <= targetRank && rank > bestRank) {
+        best = level;
+        bestRank = rank;
+      }
+    }
+    if (best) return best;
+    return normalizedAvailable.slice().sort((a, b) => QUALITY_ORDER.indexOf(b) - QUALITY_ORDER.indexOf(a))[0] || normalizedTarget;
+  }
+  function getYouTubeVideoIdFromUrl(input) {
+    let url;
+    try {
+      url = input instanceof URL ? input : new URL(String(input), "https://www.youtube.com");
+    } catch (err) {
+      return "";
+    }
+    const queryId = url.searchParams.get("v");
+    if (queryId) return queryId;
+    const embedMatch = url.pathname.match(/^\/embed\/([^/?#]+)/);
+    if (embedMatch?.[1]) return decodeURIComponent(embedMatch[1]);
+    const shortsMatch = url.pathname.match(/^\/shorts\/([^/?#]+)/);
+    if (shortsMatch?.[1]) return decodeURIComponent(shortsMatch[1]);
+    return "";
+  }
+  function getYouTubeVideoKeyFromUrl(input) {
+    let url;
+    try {
+      url = input instanceof URL ? input : new URL(String(input), "https://www.youtube.com");
+    } catch (err) {
+      return "";
+    }
+    const videoId = getYouTubeVideoIdFromUrl(url);
+    if (videoId) return "watch:" + videoId;
+    return url.pathname + url.search;
+  }
   (function() {
-    const _skipClasses = [
-      "videoAdUiSkipButton",
-      "ytp-ad-skip-button ytp-button",
-      "ytp-ad-skip-button-modern ytp-button",
-      "ytp-skip-ad-button"
-    ];
-    let config = {
-      enabled: true,
-      adSkipperEnabled: true,
-      skipDelay: 1,
-      muteAds: true,
-      showOverlay: true,
-      aggressiveSkip: true,
-      instantSkip: false,
-      showToast: false,
-      shortcutEnabled: false,
-      listMode: "whitelist",
-      playerDefaultsProfileVersion: 0,
-      whitelist: [],
-      pipEnabled: false,
-      adSpeedRate: 3,
-      customSpeedEnabled: false,
-      adaptiveSpeedEnabled: false,
-      playerSpeedEnabled: true,
-      playerSpeedDefault: 1,
-      playerSpeedStep: 0.02,
-      playerSpeedWheel: true,
-      playerSpeedWheelRightButton: false,
-      playerVolumeEnabled: false,
-      playerVolumeDefault: 50,
-      playerVolumeStep: 5,
-      playerVolumeWheel: false,
-      playerVolumeWheelRightButton: false,
-      volumeBoostEnabled: false,
-      volumeBoostLevel: 2,
-      volumeBoostAuto: false,
-      playerWheelInvert: false,
-      autoplayBlockBackground: true,
-      autoplayBlockForeground: false,
-      autoplayAllowPlaylists: true,
-      pauseBackgroundTabs: false,
-      qualityEnabled: false,
-      qualityVideo: "hd720",
-      qualityPlaylist: "hd720",
-      qualityFullscreenEnabled: false,
-      qualityFullscreenVideo: "hd1080",
-      qualityFullscreenPlaylist: "hd1080",
-      qualityPopup: "medium",
-      qualityFullscreenPopup: "hd1080",
-      qualityRestoreOnExit: true,
-      appearanceConvertShorts: false,
-      appearanceHideShorts: false,
-      appearanceHideRelated: false,
-      appearanceHideChat: false,
-      appearanceHideComments: false,
-      appearanceHideEndcards: false,
-      miniplayerEnabled: true,
-      miniplayerSize: "480x270",
-      miniplayerPosition: "top-left",
-      playerPopupSize: "640x360",
-      toolbarEnabled: true,
-      toolbarPosition: "below",
-      toolbarCenter: true,
-      toolbarLoop: true,
-      toolbarSpeed: true,
-      toolbarPopup: true,
-      toolbarPip: true,
-      toolbarScreenshot: true,
-      toolbarTheater: true,
-      toolbarSettings: true,
-      toolbarVolumeBoost: true,
-      playerSpeedButtonsEnabled: true,
-      shortcutSkipAd: "Shift+S",
-      shortcutSpeedDown: "Ctrl+,",
-      shortcutSpeedUp: "Ctrl+.",
-      shortcutVolumeDown: "Alt+,",
-      shortcutVolumeUp: "Alt+.",
-      shortcutCinema: "C",
-      shortcutScreenshot: "P",
-      shortcutPopup: "O",
-      shortcutLoop: "L",
-      autoplayDisableAll: false,
-      autoplayStopPreload: false,
-      autoplayIgnorePopup: true,
-      playerPopupEnabled: true,
-      layoutVideosPerRow: 4,
-      layoutChannelVideosPerRow: 4,
-      layoutShortsPerRow: 8,
-      layoutChannelShortsPerRow: 5,
-      layoutPostsPerRow: 4,
-      appearanceAutoTheater: false,
-      appearanceAutoExpandPlayer: false,
-      appearanceUseViewportPlayer: false,
-      cinemaColor: "#000000",
-      cinemaOpacity: 85,
-      cinemaDefault: false,
-      cinemaAutoResize: false,
-      cinemaUseYouTubeTheater: true,
-      ultrawideEnabled: false,
-      ultrawideFit: "smart-crop",
-      toolbarInsidePlayer: false,
-      toolbarAlwaysVisible: false,
-      themeEngine: "tube-shield",
-      themeVariant: "red",
-      themeDeepDarkCustom: false,
-      themeCustomAccent: "#ff334b",
-      themeCustomBackground: "#0f0f0f",
-      themeCustomSurface: "#17191f",
-      themeCustomSurfaceRaised: "#20232b",
-      themeCustomText: "#f4f5f7",
-      themeCustomMuted: "#a9adb8",
-      themeCustomBorder: "#343741",
-      themeCustomCss: "",
-      codecForceStandardFps: false,
-      codecForceAvc: false,
-      customScriptEnabled: false,
-      customScriptCode: "",
-      customScriptAutoRun: false,
-      customScriptRunAt: 0
-    };
+    let config = { ...DEFAULT_SETTINGS };
     const CHECK_INTERVAL = 500;
-    const FORCE_SKIP_RETRY_MS = 120;
-    const FORCE_SKIP_WINDOW_MS = 6e3;
-    const DEFAULT_SPEED_THROUGH_RATE = 3;
-    const MIN_SPEED_THROUGH_RATE = 1;
-    const MAX_SPEED_THROUGH_RATE = 8;
-    const SAFE_SPEED_THROUGH_RATE = 3;
-    const INSTANT_SPEED_THROUGH_RATE = 16;
+    const FORCE_SKIP_RETRY_MS = 250;
+    const FORCE_SKIP_WINDOW_MS = 4e3;
     const MIN_PLAYBACK_RATE = 0.0625;
     const MAX_PLAYBACK_RATE = 16;
     const MIN_USER_PLAYBACK_RATE = 0.1;
@@ -137,36 +493,12 @@
     const PLAYBACK_RESTORE_RETRY_MS = 150;
     const PLAYBACK_RESTORE_WINDOW_MS = 2400;
     const POST_SKIP_RESTORE_DELAYS_MS = [180, 450, 900, 1500];
-    const MAIN_FORCE_SKIP_MESSAGE = "yt-ad-skipper:force-skip";
-    const MAIN_SPEED_THROUGH_MESSAGE = "yt-ad-skipper:speed-through";
-    const MAIN_FORCE_SKIP_RESULT = "yt-ad-skipper:force-skip-result";
-    const CODEC_SETTINGS_MESSAGE = "youtube-extension:codec-settings";
-    const CODEC_SETTINGS_STORAGE_KEY = "youtubeExtensionCodecSettings";
-    const PLAYER_DEFAULTS_PROFILE_VERSION = 1;
-    const PLAYER_DEFAULTS_PROFILE = {
-      playerSpeedEnabled: true,
-      playerSpeedStep: 0.02,
-      playerSpeedWheel: true,
-      autoplayBlockBackground: true,
-      autoplayAllowPlaylists: true,
-      miniplayerEnabled: true,
-      miniplayerSize: "480x270",
-      miniplayerPosition: "top-left",
-      playerPopupSize: "640x360",
-      toolbarEnabled: true,
-      toolbarPosition: "below",
-      toolbarCenter: true,
-      toolbarLoop: true,
-      toolbarSpeed: true,
-      toolbarPopup: true,
-      toolbarPip: true,
-      toolbarScreenshot: true,
-      toolbarTheater: true,
-      toolbarSettings: true,
-      toolbarVolumeBoost: true,
-      playerSpeedButtonsEnabled: true,
-      playerPopupEnabled: true
-    };
+    const USER_PLAYBACK_INTENT_WINDOW_MS = 12e3;
+    const BACKGROUND_PLAYBACK_INTENT_WINDOW_MS = 2e4;
+    const APPEARANCE_TASK_INTERVAL_MS = 1200;
+    const PLAYER_UI_TASK_INTERVAL_MS = 650;
+    const MAIN_LOOP_SLOW_THRESHOLD_MS = 16;
+    const DIAGNOSTIC_STORAGE_KEY = "youtubeExtensionDiagnostics";
     let adState = {
       active: false,
       currentAd: void 0,
@@ -195,6 +527,9 @@
       defaultVolumeAppliedKey: "",
       rightMouseDown: false,
       lastUserPlaybackIntentAt: 0,
+      lastUserPlaybackIntentReason: "",
+      lastPlaybackPauseReason: "",
+      lastPlaybackPauseAt: 0,
       autoplayVideo: null,
       tabPlaybackToken: Date.now() + "-" + Math.random().toString(36).slice(2),
       qualityVideoKey: "",
@@ -208,18 +543,33 @@
       cinemaInitialized: false,
       autoTheaterAppliedKey: "",
       autoExpandAppliedKey: "",
-      customScriptAutoKey: "",
-      customScriptLastRunAt: 0
+      commentsSortKey: "",
+      commentsSortAttemptAt: 0,
+      loopVideoKey: "",
+      loopEnabled: false,
+      videoFiltersSessionKey: "",
+      videoFiltersSessionEnabled: false
     };
     let adblockObserver = null;
     let adblockBodyWaitObserver = null;
     let skipButtonObserver = null;
     let appearanceSignature = "";
     let cinemaSignature = "";
+    let videoFilterSignature = "";
     let miniplayerSignature = "";
     let miniplayerUpdateRaf = 0;
+    let playerToolbarUpdateRaf = 0;
+    let visualMaintenanceRaf = 0;
+    let visualMaintenanceTimeout = null;
+    let visualMaintenanceForcePending = false;
+    let appearanceTasksLastRunAt = 0;
+    let playerUiTasksLastRunAt = 0;
     let adWatchdogVideo = null;
+    let playerStateVideo = null;
+    let playerStateCleanup = null;
     let adWatchdogTimeout = null;
+    const mainWorldSessionToken = createBridgeSessionToken();
+    let mainWorldSessionLastSyncAt = 0;
     const volumeBoostGraphs = /* @__PURE__ */ new WeakMap();
     let playerFeedbackTimer = null;
     function humanDelay(baseMs) {
@@ -231,127 +581,11 @@
       return new Promise((resolve) => {
         if (chrome?.storage?.local) {
           chrome.storage.local.get(
-            {
-              enabled: true,
-              adSkipperEnabled: true,
-              skipDelay: 1,
-              muteAds: true,
-              showOverlay: true,
-              aggressiveSkip: true,
-              instantSkip: false,
-              showToast: false,
-              shortcutEnabled: false,
-              listMode: "whitelist",
-              whitelist: [],
-              warningCount: 0,
-              totalAdsSkipped: 0,
-              adsSkippedToday: 0,
-              todayDate: null,
-              playerDefaultsProfileVersion: 0,
-              pipEnabled: false,
-              adSpeedRate: DEFAULT_SPEED_THROUGH_RATE,
-              customSpeedEnabled: false,
-              adaptiveSpeedEnabled: false,
-              playerSpeedEnabled: true,
-              playerSpeedDefault: 1,
-              playerSpeedStep: 0.02,
-              playerSpeedWheel: true,
-              playerSpeedWheelRightButton: false,
-              playerVolumeEnabled: false,
-              playerVolumeDefault: 50,
-              playerVolumeStep: 5,
-              playerVolumeWheel: false,
-              playerVolumeWheelRightButton: false,
-              volumeBoostEnabled: false,
-              volumeBoostLevel: 2,
-              volumeBoostAuto: false,
-              playerWheelInvert: false,
-              autoplayBlockBackground: true,
-              autoplayBlockForeground: false,
-              autoplayAllowPlaylists: true,
-              pauseBackgroundTabs: false,
-              qualityEnabled: false,
-              qualityVideo: "hd720",
-              qualityPlaylist: "hd720",
-              qualityFullscreenEnabled: false,
-              qualityFullscreenVideo: "hd1080",
-              qualityFullscreenPlaylist: "hd1080",
-              qualityPopup: "medium",
-              qualityFullscreenPopup: "hd1080",
-              qualityRestoreOnExit: true,
-              appearanceConvertShorts: false,
-              appearanceHideShorts: false,
-              appearanceHideRelated: false,
-              appearanceHideChat: false,
-              appearanceHideComments: false,
-              appearanceHideEndcards: false,
-              miniplayerEnabled: true,
-              miniplayerSize: "480x270",
-              miniplayerPosition: "top-left",
-              playerPopupSize: "640x360",
-              toolbarEnabled: true,
-              toolbarPosition: "below",
-              toolbarCenter: true,
-              toolbarLoop: true,
-              toolbarSpeed: true,
-              toolbarPopup: true,
-              toolbarPip: true,
-              toolbarScreenshot: true,
-              toolbarTheater: true,
-              toolbarSettings: true,
-              toolbarVolumeBoost: true,
-              playerSpeedButtonsEnabled: true,
-              shortcutSkipAd: "Shift+S",
-              shortcutSpeedDown: "Ctrl+,",
-              shortcutSpeedUp: "Ctrl+.",
-              shortcutVolumeDown: "Alt+,",
-              shortcutVolumeUp: "Alt+.",
-              shortcutCinema: "C",
-              shortcutScreenshot: "P",
-              shortcutPopup: "O",
-              shortcutLoop: "L",
-              autoplayDisableAll: false,
-              autoplayStopPreload: false,
-              autoplayIgnorePopup: true,
-              playerPopupEnabled: true,
-              layoutVideosPerRow: 4,
-              layoutChannelVideosPerRow: 4,
-              layoutShortsPerRow: 8,
-              layoutChannelShortsPerRow: 5,
-              layoutPostsPerRow: 4,
-              appearanceAutoTheater: false,
-              appearanceAutoExpandPlayer: false,
-              appearanceUseViewportPlayer: false,
-              cinemaColor: "#000000",
-              cinemaOpacity: 85,
-              cinemaDefault: false,
-              cinemaAutoResize: false,
-              cinemaUseYouTubeTheater: true,
-              ultrawideEnabled: false,
-              ultrawideFit: "smart-crop",
-              toolbarInsidePlayer: false,
-              toolbarAlwaysVisible: false,
-              themeEngine: "tube-shield",
-              themeVariant: "red",
-              themeDeepDarkCustom: false,
-              themeCustomAccent: "#ff334b",
-              themeCustomBackground: "#0f0f0f",
-              themeCustomSurface: "#17191f",
-              themeCustomSurfaceRaised: "#20232b",
-              themeCustomText: "#f4f5f7",
-              themeCustomMuted: "#a9adb8",
-              themeCustomBorder: "#343741",
-              themeCustomCss: "",
-              codecForceStandardFps: false,
-              codecForceAvc: false,
-              customScriptEnabled: false,
-              customScriptCode: "",
-              customScriptAutoRun: false,
-              customScriptRunAt: 0
-            },
+            DEFAULT_SETTINGS,
             (s) => {
-              if ((Number(s.playerDefaultsProfileVersion) || 0) < PLAYER_DEFAULTS_PROFILE_VERSION) {
-                Object.assign(s, PLAYER_DEFAULTS_PROFILE, { playerDefaultsProfileVersion: PLAYER_DEFAULTS_PROFILE_VERSION });
+              const storedProfileVersion = Number(s.playerDefaultsProfileVersion) || 0;
+              s = migrateSettings(s);
+              if (storedProfileVersion < PLAYER_DEFAULTS_PROFILE_VERSION) {
                 chrome.storage.local.set({
                   ...PLAYER_DEFAULTS_PROFILE,
                   playerDefaultsProfileVersion: PLAYER_DEFAULTS_PROFILE_VERSION
@@ -359,7 +593,7 @@
               }
               config.enabled = !!s.enabled;
               config.adSkipperEnabled = s.adSkipperEnabled !== false;
-              config.skipDelay = normalizeSkipDelay(s.skipDelay);
+              config.skipDelay = normalizeSkipDelay$1(s.skipDelay);
               config.muteAds = !!s.muteAds;
               config.showOverlay = !!s.showOverlay;
               config.aggressiveSkip = !!s.aggressiveSkip;
@@ -369,7 +603,7 @@
               config.listMode = s.listMode === "blacklist" ? "blacklist" : "whitelist";
               config.whitelist = Array.isArray(s.whitelist) ? s.whitelist : [];
               config.pipEnabled = !!s.pipEnabled;
-              config.adSpeedRate = normalizeSpeedRate(s.adSpeedRate);
+              config.adSpeedRate = normalizeSpeedRate$1(s.adSpeedRate);
               config.customSpeedEnabled = !!s.customSpeedEnabled;
               config.adaptiveSpeedEnabled = !!s.adaptiveSpeedEnabled;
               config.playerSpeedEnabled = !!s.playerSpeedEnabled;
@@ -405,6 +639,9 @@
               config.appearanceHideChat = !!s.appearanceHideChat;
               config.appearanceHideComments = !!s.appearanceHideComments;
               config.appearanceHideEndcards = !!s.appearanceHideEndcards;
+              config.appearanceLayoutRowsEnabled = !!s.appearanceLayoutRowsEnabled;
+              config.appearanceSortNewestComments = !!s.appearanceSortNewestComments;
+              config.appearanceAutoApplyFilters = !!s.appearanceAutoApplyFilters;
               config.miniplayerEnabled = s.miniplayerEnabled !== false;
               config.miniplayerSize = normalizeMiniplayerSize(s.miniplayerSize);
               config.miniplayerPosition = normalizeMiniplayerPosition(s.miniplayerPosition);
@@ -420,16 +657,17 @@
               config.toolbarTheater = s.toolbarTheater !== false;
               config.toolbarSettings = s.toolbarSettings !== false;
               config.toolbarVolumeBoost = s.toolbarVolumeBoost !== false;
+              config.toolbarFilters = s.toolbarFilters !== false;
               config.playerSpeedButtonsEnabled = s.playerSpeedButtonsEnabled !== false;
-              config.shortcutSkipAd = normalizeShortcutText(s.shortcutSkipAd, "Shift+S");
-              config.shortcutSpeedDown = normalizeShortcutText(s.shortcutSpeedDown, "Ctrl+,");
-              config.shortcutSpeedUp = normalizeShortcutText(s.shortcutSpeedUp, "Ctrl+.");
-              config.shortcutVolumeDown = normalizeShortcutText(s.shortcutVolumeDown, "Alt+,");
-              config.shortcutVolumeUp = normalizeShortcutText(s.shortcutVolumeUp, "Alt+.");
-              config.shortcutCinema = normalizeShortcutText(s.shortcutCinema, "C");
-              config.shortcutScreenshot = normalizeShortcutText(s.shortcutScreenshot, "P");
-              config.shortcutPopup = normalizeShortcutText(s.shortcutPopup, "O");
-              config.shortcutLoop = normalizeShortcutText(s.shortcutLoop, "L");
+              config.shortcutSkipAd = normalizeShortcutSetting(s.shortcutSkipAd, "Alt+Shift+S");
+              config.shortcutSpeedDown = normalizeShortcutSetting(s.shortcutSpeedDown, "Alt+Shift+,");
+              config.shortcutSpeedUp = normalizeShortcutSetting(s.shortcutSpeedUp, "Alt+Shift+.");
+              config.shortcutVolumeDown = normalizeShortcutSetting(s.shortcutVolumeDown, "Alt+Shift+ArrowDown");
+              config.shortcutVolumeUp = normalizeShortcutSetting(s.shortcutVolumeUp, "Alt+Shift+ArrowUp");
+              config.shortcutCinema = normalizeShortcutSetting(s.shortcutCinema, "Alt+Shift+C");
+              config.shortcutScreenshot = normalizeShortcutSetting(s.shortcutScreenshot, "Alt+Shift+P");
+              config.shortcutPopup = normalizeShortcutSetting(s.shortcutPopup, "Alt+Shift+O");
+              config.shortcutLoop = normalizeShortcutSetting(s.shortcutLoop, "Alt+Shift+L");
               config.autoplayDisableAll = !!s.autoplayDisableAll;
               config.autoplayStopPreload = !!s.autoplayStopPreload;
               config.autoplayIgnorePopup = s.autoplayIgnorePopup !== false;
@@ -462,12 +700,15 @@
               config.themeCustomMuted = normalizeHexColor(s.themeCustomMuted, "#a9adb8");
               config.themeCustomBorder = normalizeHexColor(s.themeCustomBorder, "#343741");
               config.themeCustomCss = String(s.themeCustomCss || "");
+              config.videoFiltersEnabled = !!s.videoFiltersEnabled;
+              config.videoFilterBrightness = normalizePercent(s.videoFilterBrightness, 100);
+              config.videoFilterContrast = normalizePercent(s.videoFilterContrast, 100);
+              config.videoFilterSaturate = normalizePercent(s.videoFilterSaturate, 100);
+              config.videoFilterGrayscale = normalizePercent(s.videoFilterGrayscale, 0);
+              config.videoFilterSepia = normalizePercent(s.videoFilterSepia, 0);
+              config.language = normalizeLanguage(s.language);
               config.codecForceStandardFps = !!s.codecForceStandardFps;
               config.codecForceAvc = !!s.codecForceAvc;
-              config.customScriptEnabled = !!s.customScriptEnabled;
-              config.customScriptCode = String(s.customScriptCode || "");
-              config.customScriptAutoRun = !!s.customScriptAutoRun;
-              config.customScriptRunAt = Number(s.customScriptRunAt) || 0;
               adState.warningCount = s.warningCount || 0;
               adState.totalSkipped = s.totalAdsSkipped || 0;
               adState.adsSkippedToday = s.adsSkippedToday || 0;
@@ -492,8 +733,7 @@
             stopAdblockProtection();
             removePipButton();
           }
-          applyAppearanceFilters();
-          updateMiniplayer();
+          scheduleVisualMaintenanceTasks(true);
         }
         if (changes.adSkipperEnabled) {
           config.adSkipperEnabled = changes.adSkipperEnabled.newValue !== false;
@@ -506,7 +746,7 @@
           }
         }
         if (changes.skipDelay) {
-          config.skipDelay = normalizeSkipDelay(changes.skipDelay.newValue);
+          config.skipDelay = normalizeSkipDelay$1(changes.skipDelay.newValue);
         }
         if (changes.muteAds) config.muteAds = !!changes.muteAds.newValue;
         if (changes.showOverlay) {
@@ -527,7 +767,7 @@
             removePipButton();
           }
         }
-        if (changes.adSpeedRate) config.adSpeedRate = normalizeSpeedRate(changes.adSpeedRate.newValue);
+        if (changes.adSpeedRate) config.adSpeedRate = normalizeSpeedRate$1(changes.adSpeedRate.newValue);
         if (changes.customSpeedEnabled) config.customSpeedEnabled = !!changes.customSpeedEnabled.newValue;
         if (changes.adaptiveSpeedEnabled) config.adaptiveSpeedEnabled = !!changes.adaptiveSpeedEnabled.newValue;
         if (changes.playerSpeedEnabled) {
@@ -555,7 +795,7 @@
         if (changes.volumeBoostEnabled) {
           config.volumeBoostEnabled = !!changes.volumeBoostEnabled.newValue;
           applyVolumeBoost();
-          updatePlayerToolbar();
+          schedulePlayerToolbarUpdate();
         }
         if (changes.volumeBoostLevel) {
           config.volumeBoostLevel = normalizeVolumeBoostLevel(changes.volumeBoostLevel.newValue);
@@ -627,70 +867,88 @@
           config.appearanceHideEndcards = !!changes.appearanceHideEndcards.newValue;
           applyAppearanceFilters();
         }
+        if (changes.appearanceLayoutRowsEnabled) {
+          config.appearanceLayoutRowsEnabled = !!changes.appearanceLayoutRowsEnabled.newValue;
+          applyAppearanceFilters();
+          scheduleYouTubeLayoutRefresh();
+        }
+        if (changes.appearanceSortNewestComments) {
+          config.appearanceSortNewestComments = !!changes.appearanceSortNewestComments.newValue;
+          adState.commentsSortKey = "";
+          adState.commentsSortAttemptAt = 0;
+        }
+        if (changes.appearanceAutoApplyFilters) {
+          config.appearanceAutoApplyFilters = !!changes.appearanceAutoApplyFilters.newValue;
+          applyVideoFilters();
+        }
         if (changes.miniplayerEnabled) {
           config.miniplayerEnabled = changes.miniplayerEnabled.newValue !== false;
-          updateMiniplayer();
+          scheduleMiniplayerUpdate();
         }
         if (changes.miniplayerSize) {
           config.miniplayerSize = normalizeMiniplayerSize(changes.miniplayerSize.newValue);
-          updateMiniplayer();
+          scheduleMiniplayerUpdate();
         }
         if (changes.miniplayerPosition) {
           config.miniplayerPosition = normalizeMiniplayerPosition(changes.miniplayerPosition.newValue);
-          updateMiniplayer();
+          scheduleMiniplayerUpdate();
         }
         if (changes.playerPopupSize) config.playerPopupSize = normalizePlayerPopupSize(changes.playerPopupSize.newValue);
         if (changes.toolbarEnabled) {
           config.toolbarEnabled = changes.toolbarEnabled.newValue !== false;
-          updatePlayerToolbar();
+          schedulePlayerToolbarUpdate();
         }
         if (changes.toolbarPosition) {
           config.toolbarPosition = normalizeToolbarPosition(changes.toolbarPosition.newValue);
-          updatePlayerToolbar();
+          schedulePlayerToolbarUpdate();
         }
         if (changes.toolbarCenter) {
           config.toolbarCenter = changes.toolbarCenter.newValue !== false;
-          updatePlayerToolbar();
+          schedulePlayerToolbarUpdate();
         }
         if (changes.toolbarLoop) {
           config.toolbarLoop = changes.toolbarLoop.newValue !== false;
-          updatePlayerToolbar();
+          schedulePlayerToolbarUpdate();
         }
         if (changes.toolbarSpeed) {
           config.toolbarSpeed = changes.toolbarSpeed.newValue !== false;
-          updatePlayerToolbar();
+          schedulePlayerToolbarUpdate();
         }
         if (changes.toolbarPopup) {
           config.toolbarPopup = changes.toolbarPopup.newValue !== false;
-          updatePlayerToolbar();
+          schedulePlayerToolbarUpdate();
         }
         if (changes.toolbarPip) {
           config.toolbarPip = changes.toolbarPip.newValue !== false;
-          updatePlayerToolbar();
+          schedulePlayerToolbarUpdate();
         }
         if (changes.toolbarScreenshot) {
           config.toolbarScreenshot = changes.toolbarScreenshot.newValue !== false;
-          updatePlayerToolbar();
+          schedulePlayerToolbarUpdate();
         }
         if (changes.toolbarTheater) {
           config.toolbarTheater = changes.toolbarTheater.newValue !== false;
-          updatePlayerToolbar();
+          schedulePlayerToolbarUpdate();
         }
         if (changes.toolbarSettings) {
           config.toolbarSettings = changes.toolbarSettings.newValue !== false;
-          updatePlayerToolbar();
+          schedulePlayerToolbarUpdate();
         }
         if (changes.toolbarVolumeBoost) {
           config.toolbarVolumeBoost = changes.toolbarVolumeBoost.newValue !== false;
-          updatePlayerToolbar();
+          schedulePlayerToolbarUpdate();
+        }
+        if (changes.toolbarFilters) {
+          config.toolbarFilters = changes.toolbarFilters.newValue !== false;
+          schedulePlayerToolbarUpdate();
         }
         if (changes.playerSpeedButtonsEnabled) {
           config.playerSpeedButtonsEnabled = changes.playerSpeedButtonsEnabled.newValue !== false;
-          updatePlayerToolbar();
+          schedulePlayerToolbarUpdate();
         }
         if (changes.playerPopupEnabled) {
           config.playerPopupEnabled = changes.playerPopupEnabled.newValue !== false;
-          updatePlayerToolbar();
+          schedulePlayerToolbarUpdate();
         }
         const shortcutKeys = [
           "shortcutSkipAd",
@@ -704,7 +962,7 @@
           "shortcutLoop"
         ];
         shortcutKeys.forEach((key) => {
-          if (changes[key]) config[key] = normalizeShortcutText(changes[key].newValue, config[key]);
+          if (changes[key]) config[key] = normalizeShortcutText(changes[key].newValue, "");
         });
         if (changes.autoplayDisableAll) config.autoplayDisableAll = !!changes.autoplayDisableAll.newValue;
         if (changes.autoplayStopPreload) config.autoplayStopPreload = !!changes.autoplayStopPreload.newValue;
@@ -754,11 +1012,11 @@
         }
         if (changes.toolbarInsidePlayer) {
           config.toolbarInsidePlayer = !!changes.toolbarInsidePlayer.newValue;
-          updatePlayerToolbar();
+          schedulePlayerToolbarUpdate();
         }
         if (changes.toolbarAlwaysVisible) {
           config.toolbarAlwaysVisible = !!changes.toolbarAlwaysVisible.newValue;
-          updatePlayerToolbar();
+          schedulePlayerToolbarUpdate();
         }
         const themeKeys = [
           "themeEngine",
@@ -790,6 +1048,23 @@
           themeChanged = true;
         });
         if (themeChanged) applyAppearanceFilters();
+        const videoFilterKeys = [
+          "videoFiltersEnabled",
+          "videoFilterBrightness",
+          "videoFilterContrast",
+          "videoFilterSaturate",
+          "videoFilterGrayscale",
+          "videoFilterSepia"
+        ];
+        let videoFiltersChanged = false;
+        videoFilterKeys.forEach((key) => {
+          if (!changes[key]) return;
+          if (key === "videoFiltersEnabled") config.videoFiltersEnabled = !!changes[key].newValue;
+          else config[key] = normalizePercent(changes[key].newValue, key === "videoFilterBrightness" || key === "videoFilterContrast" || key === "videoFilterSaturate" ? 100 : 0);
+          videoFiltersChanged = true;
+        });
+        if (videoFiltersChanged) applyVideoFilters();
+        if (changes.language) config.language = normalizeLanguage(changes.language.newValue);
         if (changes.codecForceStandardFps) {
           config.codecForceStandardFps = !!changes.codecForceStandardFps.newValue;
           syncCodecSettingsToMainWorld();
@@ -797,13 +1072,6 @@
         if (changes.codecForceAvc) {
           config.codecForceAvc = !!changes.codecForceAvc.newValue;
           syncCodecSettingsToMainWorld();
-        }
-        if (changes.customScriptEnabled) config.customScriptEnabled = !!changes.customScriptEnabled.newValue;
-        if (changes.customScriptCode) config.customScriptCode = String(changes.customScriptCode.newValue || "");
-        if (changes.customScriptAutoRun) config.customScriptAutoRun = !!changes.customScriptAutoRun.newValue;
-        if (changes.customScriptRunAt) {
-          config.customScriptRunAt = Number(changes.customScriptRunAt.newValue) || 0;
-          runCustomScript("manual");
         }
         if (changes.tubeShieldActivePlayback) {
           handleExternalPlaybackSignal(changes.tubeShieldActivePlayback.newValue);
@@ -813,125 +1081,26 @@
     window.addEventListener("message", (event) => {
       if (event.source !== window) return;
       const data = event.data || {};
-      if (data.source !== MAIN_FORCE_SKIP_RESULT || !data.ok) return;
+      if (!isBridgeMessage(data)) return;
+      if (data.source !== MAIN_FORCE_SKIP_RESULT || data.token !== mainWorldSessionToken || !data.ok) return;
       if (data.method === "click") {
         finishSkipClick();
       }
     });
-    function getAdPlaying() {
-      const player = getYouTubePlayer();
-      if (player && (player.classList.contains("ad-showing") || player.classList.contains("ad-interrupting"))) {
-        return true;
-      }
-      const badges = document.querySelectorAll(".ytp-ad-badge, .ytp-ad-visit-advertiser-button, .ytp-visit-advertiser-link");
-      for (const badge of badges) {
-        if (badge && (badge.offsetWidth > 0 || badge.offsetHeight > 0)) {
-          return true;
-        }
-      }
-      return false;
-    }
-    function getClickableTarget(el) {
-      if (!el) return null;
-      return el.closest?.(
-        'button, [role="button"], .ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-ad-skip-button-modern, .videoAdUiSkipButton'
-      ) || el;
-    }
-    function isClickableVisible(el) {
-      if (!el) return false;
-      const rect = el.getBoundingClientRect?.();
-      if (!rect || rect.width <= 0 || rect.height <= 0) return false;
-      const style = window.getComputedStyle(el);
-      return style.display !== "none" && style.visibility !== "hidden" && style.pointerEvents !== "none";
-    }
-    function clickElement(el) {
-      const target = getClickableTarget(el);
-      if (!target || !isClickableVisible(target)) return false;
-      if (typeof target.click !== "function") return false;
-      target.dispatchEvent(new MouseEvent("mouseover", { bubbles: true, cancelable: true, view: window }));
-      target.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, view: window }));
-      target.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, view: window }));
-      target.click();
-      return true;
-    }
-    function clickSkipAdBtn() {
-      for (const className of _skipClasses) {
-        const elems = document.getElementsByClassName(className);
-        for (const el of elems) {
-          if (clickElement(el)) return true;
-        }
-      }
-      const extraSelectors = [
-        ".ytp-skip-ad-button",
-        ".ytp-ad-skip-button",
-        ".ytp-ad-skip-button-modern",
-        ".ytp-ad-skip-button-slot button",
-        ".ytp-ad-skip-button-container button",
-        'button[id^="skip-button"]',
-        "div.ytp-ad-skip-button-slot button",
-        '[aria-label*="Skip" i]',
-        '[aria-label*="Pular" i]',
-        '[title*="Skip" i]',
-        '[title*="Pular" i]',
-        '[class*="skip"][class*="ad" i]'
-      ];
-      for (const sel of extraSelectors) {
-        const candidates = document.querySelectorAll(sel);
-        for (const btn of candidates) {
-          if (clickElement(btn)) return true;
-        }
-      }
-      const allBtns = document.querySelectorAll("button, a, .ytp-ad-overlay-close-button");
-      for (const btn of allBtns) {
-        const text = (btn.textContent || "").toLowerCase().trim();
-        if ((text.includes("pular") || text.includes("skip") || text.includes("ignorar")) && clickElement(btn)) {
-          return true;
-        }
-      }
-      const dismiss = document.querySelector(
-        'button[id="dismiss-button"], tp-yt-paper-button#dismiss-button'
-      );
-      if (clickElement(dismiss)) return true;
-      return false;
-    }
-    function getYouTubePlayer() {
-      const player = document.getElementById("movie_player") || document.querySelector(".html5-video-player");
-      return player || null;
-    }
     function isAdSkipperActive() {
       return !!config.enabled && config.adSkipperEnabled !== false;
     }
-    function getFinitePositiveNumber(value) {
-      const n = Number(value);
-      return Number.isFinite(n) && n > 0 ? n : 0;
+    function normalizeSpeedRate$1(rate) {
+      return normalizeSpeedRate(rate);
     }
-    function normalizeSpeedRate(rate) {
-      const n = Number(rate);
-      if (!Number.isFinite(n)) return DEFAULT_SPEED_THROUGH_RATE;
-      return Math.min(MAX_SPEED_THROUGH_RATE, Math.max(MIN_SPEED_THROUGH_RATE, n));
+    function normalizeSkipDelay$1(delay = config.skipDelay) {
+      return normalizeSkipDelay(delay);
     }
-    function normalizeSkipDelay(delay = config.skipDelay) {
-      const n = Number(delay);
-      if (!Number.isFinite(n)) return 1;
-      return Math.min(30, Math.max(1, n));
+    function getSafeAdaptiveSpeed$1(delay = config.skipDelay) {
+      return getSafeAdaptiveSpeed(delay);
     }
-    function getSafeAdaptiveSpeed(delay = config.skipDelay) {
-      const d = normalizeSkipDelay(delay);
-      if (d <= 3) return SAFE_SPEED_THROUGH_RATE;
-      if (d <= 6) return 2.5;
-      if (d <= 10) return 2;
-      if (d <= 20) return 1.5;
-      return 1.25;
-    }
-    function getRiskAdaptiveSpeed(delay = config.skipDelay) {
-      const d = normalizeSkipDelay(delay);
-      if (d <= 1) return 8;
-      if (d <= 2) return 6;
-      if (d <= 3) return 5;
-      if (d <= 5) return 4;
-      if (d <= 10) return 3;
-      if (d <= 20) return 2;
-      return 1.5;
+    function getRiskAdaptiveSpeed$1(delay = config.skipDelay) {
+      return getRiskAdaptiveSpeed(delay);
     }
     function isInstantSkipEnabled() {
       return config.aggressiveSkip && config.instantSkip;
@@ -1002,15 +1171,15 @@
     }
     function normalizeThemeEngine(value) {
       const text = String(value || "");
-      return ["youtube", "tube-shield", "enhancer", "deepdark", "custom"].includes(text) ? text : "tube-shield";
+      return ["youtube", "tube-shield", "enhancer", "deepdark", "custom"].includes(text) ? text : "youtube";
     }
     function normalizeThemeVariant(value) {
       const text = String(value || "");
       return ["red", "deep-dark", "gray", "blue"].includes(text) ? text : "red";
     }
-    function normalizeShortcutText(value, fallback = "") {
-      const text = String(value || "").trim();
-      return text || fallback;
+    function normalizeLanguage(value) {
+      const text = String(value || "");
+      return ["pt-BR", "en"].includes(text) ? text : "pt-BR";
     }
     function isEditableTarget(target) {
       if (!target || !(target instanceof Element)) return false;
@@ -1018,48 +1187,27 @@
       const tag = element.tagName;
       return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || element.isContentEditable;
     }
-    function normalizeShortcutToken(token) {
-      const raw = String(token || "");
-      if (raw === " ") return "Space";
-      const text = raw.trim();
-      if (!text) return "";
-      const lower = text.toLowerCase();
-      if (lower === "control") return "Ctrl";
-      if (lower === "ctrl") return "Ctrl";
-      if (lower === "option") return "Alt";
-      if (lower === "alt") return "Alt";
-      if (lower === "shift") return "Shift";
-      if (lower === "cmd" || lower === "command" || lower === "meta") return "Meta";
-      if (lower === "space") return "Space";
-      if (lower.length === 1) return lower.toUpperCase();
-      return text.charAt(0).toUpperCase() + text.slice(1);
-    }
-    function normalizeShortcutCombo(combo) {
-      const parts = String(combo || "").split("+").map(normalizeShortcutToken).filter(Boolean);
-      const modifiers = ["Ctrl", "Alt", "Shift", "Meta"].filter((mod) => parts.includes(mod));
-      const key = parts.find((part) => !["Ctrl", "Alt", "Shift", "Meta"].includes(part)) || "";
-      return [...modifiers, key].filter(Boolean).join("+");
-    }
-    function eventToShortcutCombo(event) {
-      const key = normalizeShortcutToken(event.key);
-      if (!key || ["Ctrl", "Alt", "Shift", "Meta"].includes(key)) return "";
-      return [
-        event.ctrlKey ? "Ctrl" : "",
-        event.altKey ? "Alt" : "",
-        event.shiftKey ? "Shift" : "",
-        event.metaKey ? "Meta" : "",
-        key
-      ].filter(Boolean).join("+");
-    }
-    function shortcutMatches(event, combo) {
-      const wanted = normalizeShortcutCombo(combo);
-      return !!wanted && eventToShortcutCombo(event) === wanted;
-    }
     function getCodecSettings() {
       return {
         forceStandardFps: !!config.codecForceStandardFps,
         forceAvc: !!config.codecForceAvc
       };
+    }
+    function syncMainWorldSession(force = false) {
+      const now = Date.now();
+      if (!force && now - mainWorldSessionLastSyncAt < 2e3) return;
+      mainWorldSessionLastSyncAt = now;
+      window.postMessage({
+        source: MAIN_SESSION_MESSAGE,
+        token: mainWorldSessionToken
+      }, "*");
+    }
+    function postMainWorldMessage(message) {
+      syncMainWorldSession();
+      window.postMessage({
+        ...message,
+        token: mainWorldSessionToken
+      }, "*");
     }
     function syncCodecSettingsToMainWorld() {
       const settings = getCodecSettings();
@@ -1067,7 +1215,13 @@
         localStorage.setItem(CODEC_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
       } catch (err) {
       }
-      window.postMessage({ source: CODEC_SETTINGS_MESSAGE, settings }, "*");
+      postMainWorldMessage({ source: CODEC_SETTINGS_MESSAGE, settings });
+    }
+    function requestMainWorldQuality(level) {
+      try {
+        postMainWorldMessage({ source: MAIN_QUALITY_MESSAGE, level });
+      } catch (err) {
+      }
     }
     function parseMiniplayerSize(size = config.miniplayerSize) {
       const [width, height] = normalizeMiniplayerSize(size).split("x").map((part) => parseInt(part, 10));
@@ -1087,21 +1241,59 @@
       return document.querySelector("video");
     }
     function getCurrentVideoKey() {
-      try {
-        const url = new URL(location.href);
-        const videoId = url.searchParams.get("v");
-        if (videoId) return "watch:" + videoId;
-      } catch (err) {
-      }
-      return location.pathname + location.search;
+      return getYouTubeVideoKeyFromUrl(location.href);
     }
     function getCurrentVideoId() {
-      try {
-        const url = new URL(location.href);
-        return url.searchParams.get("v") || "";
-      } catch (err) {
-        return "";
+      return getYouTubeVideoIdFromUrl(location.href);
+    }
+    function syncLoopState(video = getActiveVideo()) {
+      if (!video || !isWatchPage()) return;
+      const key = getCurrentVideoKey();
+      if (adState.loopVideoKey && adState.loopVideoKey !== key) {
+        adState.loopVideoKey = "";
+        adState.loopEnabled = false;
       }
+      if (!adState.loopEnabled || adState.loopVideoKey !== key) return;
+      try {
+        if (!video.loop) video.loop = true;
+        video.setAttribute("loop", "");
+      } catch (err) {
+      }
+    }
+    function bindPersistentVideoState() {
+      const video = getActiveVideo();
+      if (!video || playerStateVideo === video) return;
+      if (playerStateCleanup) {
+        playerStateCleanup();
+        playerStateCleanup = null;
+      }
+      playerStateVideo = video;
+      const reapply = () => {
+        syncLoopState(video);
+        if (config.volumeBoostEnabled) applyVolumeBoost(video);
+        applyVideoFilters();
+      };
+      const handleEnded = () => {
+        syncLoopState(video);
+        if (adState.loopEnabled && adState.loopVideoKey === getCurrentVideoKey()) {
+          try {
+            video.currentTime = 0;
+            video.play().catch(() => {
+            });
+          } catch (err) {
+          }
+        }
+      };
+      video.addEventListener("loadedmetadata", reapply, true);
+      video.addEventListener("durationchange", reapply, true);
+      video.addEventListener("emptied", reapply, true);
+      video.addEventListener("ended", handleEnded, true);
+      playerStateCleanup = () => {
+        video.removeEventListener("loadedmetadata", reapply, true);
+        video.removeEventListener("durationchange", reapply, true);
+        video.removeEventListener("emptied", reapply, true);
+        video.removeEventListener("ended", handleEnded, true);
+      };
     }
     function setUserPlaybackRate(rate, video = getActiveVideo()) {
       const targetRate = normalizeUserPlaybackRate(rate, 1);
@@ -1192,11 +1384,63 @@
       }
       return applyVolumeBoost(video, true);
     }
-    const QUALITY_ORDER = ["tiny", "small", "medium", "large", "hd720", "hd1080", "hd1440", "hd2160", "hd2880", "highres"];
-    const QUALITY_ALLOWED = ["auto", ...QUALITY_ORDER];
-    function normalizeQualityLevel(level, fallback = "hd720") {
-      const value = String(level || "");
-      return QUALITY_ALLOWED.includes(value) ? value : fallback;
+    const VIDEO_FILTER_STYLE_ID = "youtube-extension-video-filter-style";
+    function getVideoFilterValue() {
+      return [
+        "brightness(" + normalizePercent(config.videoFilterBrightness, 100) + "%)",
+        "contrast(" + normalizePercent(config.videoFilterContrast, 100) + "%)",
+        "saturate(" + normalizePercent(config.videoFilterSaturate, 100) + "%)",
+        "grayscale(" + normalizePercent(config.videoFilterGrayscale, 0) + "%)",
+        "sepia(" + normalizePercent(config.videoFilterSepia, 0) + "%)"
+      ].join(" ");
+    }
+    function shouldUseVideoFilters() {
+      if (!config.enabled) return false;
+      const key = getCurrentVideoKey();
+      if (!config.appearanceAutoApplyFilters && adState.videoFiltersSessionKey && adState.videoFiltersSessionKey !== key) {
+        adState.videoFiltersSessionKey = "";
+        adState.videoFiltersSessionEnabled = false;
+      }
+      return config.appearanceAutoApplyFilters ? !!config.videoFiltersEnabled : !!adState.videoFiltersSessionEnabled;
+    }
+    function applyVideoFilters() {
+      const existing = document.getElementById(VIDEO_FILTER_STYLE_ID);
+      if (!shouldUseVideoFilters()) {
+        existing?.remove();
+        videoFilterSignature = "";
+        updatePlayerToolbarStates();
+        return;
+      }
+      const filterValue = getVideoFilterValue();
+      if (existing && videoFilterSignature === filterValue) {
+        updatePlayerToolbarStates();
+        return;
+      }
+      const style = existing || document.createElement("style");
+      style.id = VIDEO_FILTER_STYLE_ID;
+      style.textContent = `
+      #movie_player video.html5-main-video,
+      .html5-video-container video {
+        filter: ${filterValue} !important;
+      }
+    `;
+      if (!existing) (document.head || document.documentElement).appendChild(style);
+      videoFilterSignature = filterValue;
+      updatePlayerToolbarStates();
+    }
+    function setVideoFiltersEnabled(enabled) {
+      if (config.appearanceAutoApplyFilters) {
+        config.videoFiltersEnabled = !!enabled;
+        try {
+          chrome.storage.local.set({ videoFiltersEnabled: config.videoFiltersEnabled });
+        } catch (err) {
+        }
+      } else {
+        adState.videoFiltersSessionKey = getCurrentVideoKey();
+        adState.videoFiltersSessionEnabled = !!enabled;
+      }
+      applyVideoFilters();
+      showPlayerFeedback("filters", enabled ? "Filtros on" : "Filtros off", config.appearanceAutoApplyFilters ? "Aplicacao automatica" : "Somente neste video");
     }
     function resetQualityState() {
       adState.qualityRequestKey = "";
@@ -1228,23 +1472,7 @@
       return [];
     }
     function pickAvailableQuality(target) {
-      const normalizedTarget = normalizeQualityLevel(target);
-      if (normalizedTarget === "auto") return "auto";
-      const available = getAvailableQualityLevels();
-      if (available.length === 0) return normalizedTarget;
-      if (available.includes(normalizedTarget)) return normalizedTarget;
-      const targetRank = QUALITY_ORDER.indexOf(normalizedTarget);
-      let best = "";
-      let bestRank = -1;
-      for (const level of available) {
-        const rank = QUALITY_ORDER.indexOf(level);
-        if (rank >= 0 && rank <= targetRank && rank > bestRank) {
-          best = level;
-          bestRank = rank;
-        }
-      }
-      if (best) return best;
-      return available.slice().sort((a, b) => QUALITY_ORDER.indexOf(b) - QUALITY_ORDER.indexOf(a))[0] || normalizedTarget;
+      return pickBestQualityLevel(target, getAvailableQualityLevels());
     }
     function setPlaybackQuality(target) {
       const player = getYouTubePlayer();
@@ -1269,6 +1497,8 @@
         }
       } catch (err) {
       }
+      requestMainWorldQuality(level);
+      attempted = true;
       return attempted;
     }
     function isFullscreenMode() {
@@ -1436,9 +1666,7 @@
       ytd-multi-page-menu-renderer,
       ytd-guide-renderer,
       ytd-mini-guide-renderer,
-      ytd-rich-grid-renderer,
       ytd-watch-flexy #secondary-inner,
-      ytd-comments,
       ytd-live-chat-frame {
         background: ${palette.surface} !important;
         color: ${palette.text} !important;
@@ -1541,19 +1769,56 @@
         }
       `);
       }
-      const videosPerRow = isChannelPage() ? config.layoutChannelVideosPerRow : config.layoutVideosPerRow;
-      const shortsPerRow = isChannelPage() ? config.layoutChannelShortsPerRow : config.layoutShortsPerRow;
-      blocks.push(`
-      ytd-rich-grid-renderer {
-        --ytd-rich-grid-items-per-row: ${normalizeGridCount(videosPerRow, 4, 1, 8)} !important;
-        --ytd-rich-grid-posts-per-row: ${normalizeGridCount(config.layoutPostsPerRow, 4, 1, 8)} !important;
-      }
+      if (config.appearanceLayoutRowsEnabled) {
+        const videosPerRow = isChannelPage() ? config.layoutChannelVideosPerRow : config.layoutVideosPerRow;
+        const shortsPerRow = isChannelPage() ? config.layoutChannelShortsPerRow : config.layoutShortsPerRow;
+        blocks.push(`
+        ytd-rich-grid-renderer {
+          --ytd-rich-grid-items-per-row: ${normalizeGridCount(videosPerRow, 4, 1, 8)} !important;
+          --ytd-rich-grid-posts-per-row: ${normalizeGridCount(config.layoutPostsPerRow, 4, 1, 8)} !important;
+        }
 
-      ytd-rich-shelf-renderer[is-shorts] #contents,
-      ytd-reel-shelf-renderer #contents {
-        --ytd-rich-grid-items-per-row: ${normalizeGridCount(shortsPerRow, 8, 1, 12)} !important;
+        ytd-rich-shelf-renderer[is-shorts] #contents,
+        ytd-reel-shelf-renderer #contents {
+          --ytd-rich-grid-items-per-row: ${normalizeGridCount(shortsPerRow, 8, 1, 12)} !important;
+        }
+      `);
       }
-    `);
+      if (isPopupWindow()) {
+        blocks.push(`
+        ytd-masthead,
+        #masthead-container,
+        ytd-watch-flexy #secondary,
+        ytd-watch-flexy #below,
+        ytd-watch-flexy ytd-watch-metadata,
+        ytd-comments,
+        ytd-guide-renderer,
+        ytd-mini-guide-renderer {
+          display: none !important;
+        }
+
+        ytd-app,
+        #page-manager,
+        ytd-watch-flexy,
+        ytd-watch-flexy #columns,
+        ytd-watch-flexy #primary,
+        ytd-watch-flexy #primary-inner,
+        ytd-watch-flexy #player,
+        ytd-watch-flexy #player-container-outer {
+          width: 100vw !important;
+          max-width: none !important;
+          margin: 0 !important;
+          padding: 0 !important;
+        }
+
+        ytd-watch-flexy #player-container-outer,
+        ytd-watch-flexy #player-theater-container,
+        ytd-watch-flexy #player-full-bleed-container {
+          min-height: 100vh !important;
+          background: #0f0f0f !important;
+        }
+      `);
+      }
       if (config.appearanceUseViewportPlayer) {
         blocks.push(`
         ytd-watch-flexy[theater] #player-theater-container,
@@ -1566,8 +1831,18 @@
         const fit = normalizeUltrawideFit(config.ultrawideFit);
         const objectFit = fit === "stretch" ? "fill" : fit === "contain" ? "contain" : "cover";
         blocks.push(`
+        ytd-watch-flexy #movie_player .html5-video-container,
+        ytd-watch-flexy #movie_player video.html5-main-video,
+        ytd-watch-flexy #movie_player video {
+          width: 100% !important;
+          height: 100% !important;
+        }
+
+        ytd-watch-flexy #movie_player video.html5-main-video,
         ytd-watch-flexy #movie_player video {
           object-fit: ${objectFit} !important;
+          left: 0 !important;
+          top: 0 !important;
         }
       `);
       }
@@ -1581,6 +1856,9 @@
         config.appearanceHideChat,
         config.appearanceHideComments,
         config.appearanceHideEndcards,
+        config.appearanceLayoutRowsEnabled,
+        config.appearanceSortNewestComments,
+        config.appearanceAutoApplyFilters,
         config.layoutVideosPerRow,
         config.layoutChannelVideosPerRow,
         config.layoutShortsPerRow,
@@ -1608,12 +1886,27 @@
       const existing = document.getElementById(APPEARANCE_STYLE_ID);
       if (!css) {
         existing?.remove();
+        scheduleYouTubeLayoutRefresh();
         return;
       }
       const style = existing || document.createElement("style");
       style.id = APPEARANCE_STYLE_ID;
       style.textContent = css;
       if (!existing) (document.head || document.documentElement).appendChild(style);
+      scheduleYouTubeLayoutRefresh();
+    }
+    function scheduleYouTubeLayoutRefresh() {
+      window.dispatchEvent(new Event("resize"));
+      document.dispatchEvent(new CustomEvent("yt-resize"));
+      const player = getYouTubePlayer();
+      try {
+        if (player && typeof player.dispatchEvent === "function") {
+          player.dispatchEvent(new Event("resize"));
+        }
+      } catch (err) {
+      }
+      window.setTimeout(() => window.dispatchEvent(new Event("resize")), 120);
+      window.setTimeout(() => window.dispatchEvent(new Event("resize")), 420);
     }
     function convertShortsUrlIfNeeded() {
       if (!config.enabled || !config.appearanceConvertShorts) return;
@@ -1624,6 +1917,30 @@
       if (location.href !== target) {
         location.replace(target);
       }
+    }
+    function sortCommentsNewestIfNeeded() {
+      if (!config.enabled || !config.appearanceSortNewestComments || config.appearanceHideComments || !isWatchPage()) return;
+      const key = getCurrentVideoKey();
+      if (adState.commentsSortKey === key) return;
+      const now = Date.now();
+      if (now - adState.commentsSortAttemptAt < 2500) return;
+      adState.commentsSortAttemptAt = now;
+      const comments = document.querySelector("ytd-comments, #comments");
+      if (!comments) return;
+      const sortButton = comments.querySelector(
+        '#sort-menu button, #sort-menu [role="button"], [aria-label*="Classificar" i], [aria-label*="Ordenar" i], [aria-label*="Sort" i]'
+      );
+      if (!sortButton || !clickElement(sortButton)) return;
+      window.setTimeout(() => {
+        const candidates = Array.from(document.querySelectorAll("ytd-menu-service-item-renderer, tp-yt-paper-item, yt-formatted-string, [role='menuitem']"));
+        const newest = candidates.find((item) => {
+          const text = (item.textContent || "").toLowerCase();
+          return text.includes("mais recentes") || text.includes("newest first") || text.includes("newest");
+        });
+        if (newest && clickElement(newest)) {
+          adState.commentsSortKey = key;
+        }
+      }, 180);
     }
     function ensureTheaterMode(active) {
       const watchFlexy = document.querySelector("ytd-watch-flexy");
@@ -1658,6 +1975,38 @@
       convertShortsUrlIfNeeded();
       runAutoLayoutTasks();
       applyCinemaMode();
+    }
+    function runVisualMaintenanceTasks(force = false) {
+      const now = Date.now();
+      if (force || now - appearanceTasksLastRunAt >= APPEARANCE_TASK_INTERVAL_MS) {
+        appearanceTasksLastRunAt = now;
+        runAppearanceTasks();
+        applyVideoFilters();
+        sortCommentsNewestIfNeeded();
+      }
+      if (force || now - playerUiTasksLastRunAt >= PLAYER_UI_TASK_INTERVAL_MS) {
+        playerUiTasksLastRunAt = now;
+        updateMiniplayer();
+        updatePlayerToolbar();
+      }
+    }
+    function scheduleVisualMaintenanceTasks(force = false, delay = 0) {
+      visualMaintenanceForcePending = visualMaintenanceForcePending || force;
+      const run = () => {
+        visualMaintenanceTimeout = null;
+        visualMaintenanceRaf = 0;
+        const shouldForce = visualMaintenanceForcePending;
+        visualMaintenanceForcePending = false;
+        runVisualMaintenanceTasks(shouldForce);
+      };
+      if (delay > 0) {
+        if (visualMaintenanceTimeout !== null) window.clearTimeout(visualMaintenanceTimeout);
+        visualMaintenanceTimeout = window.setTimeout(run, delay);
+        return;
+      }
+      if (visualMaintenanceTimeout !== null) return;
+      if (visualMaintenanceRaf) return;
+      visualMaintenanceRaf = window.requestAnimationFrame(run);
     }
     const CINEMA_STYLE_ID = "youtube-extension-cinema-style";
     const CINEMA_CLASS = "youtube-extension-cinema-active";
@@ -1779,8 +2128,9 @@
         feedback.id = PLAYER_FEEDBACK_ID;
         document.body.appendChild(feedback);
       }
+      const kindLabel = kind === "volume" ? "Volume" : kind === "filters" ? "Filtros" : kind === "settings" ? "Configuracoes" : kind === "popup" ? "Pop-up" : kind === "speed" ? "Velocidade" : "YouTube Extension";
       feedback.innerHTML = `
-      <span class="feedback-label">${kind === "volume" ? "Volume" : "Velocidade"}</span>
+      <span class="feedback-label">${kindLabel}</span>
       <span class="feedback-value">${value}</span>
       ${label ? `<span class="feedback-label">${label}</span>` : ""}
     `;
@@ -1796,6 +2146,11 @@
     const MINIPLAYER_ACTIVE_CLASS = "tube-shield-miniplayer-active";
     function getPlayerAnchor() {
       return document.querySelector("#player-container-outer") || document.querySelector("#player") || document.querySelector("ytd-player") || getYouTubePlayer();
+    }
+    function getMastheadHeight() {
+      const masthead = document.querySelector("ytd-masthead, #masthead-container");
+      const rect = masthead?.getBoundingClientRect?.();
+      return rect && rect.height > 0 ? rect.height : 56;
     }
     function getMiniplayerPositionCss() {
       const margin = "18px";
@@ -1815,17 +2170,30 @@
     function buildMiniplayerCss() {
       const size = parseMiniplayerSize();
       return `
+      html.${MINIPLAYER_ACTIVE_CLASS} ytd-watch-flexy #player,
+      html.${MINIPLAYER_ACTIVE_CLASS} ytd-watch-flexy #player-container-outer,
+      html.${MINIPLAYER_ACTIVE_CLASS} ytd-watch-flexy #player-theater-container,
+      html.${MINIPLAYER_ACTIVE_CLASS} ytd-watch-flexy #player-full-bleed-container,
+      html.${MINIPLAYER_ACTIVE_CLASS} ytd-watch-flexy ytd-player {
+        position: relative !important;
+        z-index: 2147482500 !important;
+        overflow: visible !important;
+        transform: none !important;
+        contain: none !important;
+      }
+
       html.${MINIPLAYER_ACTIVE_CLASS} #movie_player.html5-video-player {
         position: fixed !important;
         ${getMiniplayerPositionCss()}
         width: min(${size.width}px, calc(100vw - 36px)) !important;
         height: min(${size.height}px, calc(100vh - 90px)) !important;
-        z-index: 2147483000 !important;
+        z-index: 2147483600 !important;
         border-radius: 10px !important;
         overflow: hidden !important;
         box-shadow: 0 22px 60px rgba(0, 0, 0, 0.48), 0 0 0 1px rgba(255, 255, 255, 0.14) !important;
         background: #000 !important;
         transform: translateZ(0) !important;
+        isolation: isolate !important;
       }
 
       html.${MINIPLAYER_ACTIVE_CLASS} #movie_player .html5-video-container,
@@ -1870,7 +2238,8 @@
       const anchor = getPlayerAnchor();
       if (!player || !video || !anchor?.getBoundingClientRect) return false;
       const rect = anchor.getBoundingClientRect();
-      return window.scrollY > 320 && rect.bottom < 80;
+      const activationOffset = Math.max(80, getMastheadHeight() + 16);
+      return window.scrollY > 320 && rect.bottom < activationOffset;
     }
     function updateMiniplayer() {
       const root = document.documentElement;
@@ -1912,6 +2281,7 @@
       if (config.toolbarPopup && config.playerPopupEnabled !== false) actions.push({ action: "popup", title: "Abrir em pop-up", icon: "popup" });
       if (config.toolbarPip) actions.push({ action: "pip", title: "Picture-in-Picture", icon: "pip" });
       if (config.toolbarScreenshot) actions.push({ action: "screenshot", title: "Capturar frame", icon: "camera" });
+      if (config.toolbarFilters) actions.push({ action: "filters", title: "Filtros de video", icon: "filters" });
       if (config.toolbarTheater) actions.push({ action: "theater", title: "Modo teatro do YouTube", icon: "theater" });
       if (config.toolbarSettings) actions.push({ action: "settings", title: "Configuracoes", icon: "settings" });
       return actions;
@@ -1919,6 +2289,10 @@
     function buildPlayerToolbarCss() {
       return `
       #${PLAYER_TOOLBAR_ID} {
+        --yse-toolbar-bg: rgba(18, 18, 20, 0.9);
+        --yse-toolbar-border: rgba(255, 255, 255, 0.14);
+        --yse-toolbar-color: rgba(255, 255, 255, 0.84);
+        --yse-toolbar-hover: rgba(255, 255, 255, 0.12);
         display: flex;
         align-items: center;
         gap: 6px;
@@ -1926,14 +2300,22 @@
         max-width: calc(100% - 16px);
         margin: 8px 0 12px;
         padding: 6px;
-        border: 1px solid rgba(255, 255, 255, 0.14);
+        border: 1px solid var(--yse-toolbar-border);
         border-radius: 999px;
-        background: rgba(12, 12, 14, 0.9);
-        color: #fff;
+        background: var(--yse-toolbar-bg);
+        color: var(--yse-toolbar-color);
         box-shadow: 0 10px 24px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.08);
         backdrop-filter: blur(12px);
         -webkit-backdrop-filter: blur(12px);
         box-sizing: border-box;
+      }
+
+      html:not([dark]) #${PLAYER_TOOLBAR_ID} {
+        --yse-toolbar-bg: rgba(255, 255, 255, 0.92);
+        --yse-toolbar-border: rgba(15, 15, 15, 0.13);
+        --yse-toolbar-color: rgba(15, 15, 15, 0.82);
+        --yse-toolbar-hover: rgba(15, 15, 15, 0.08);
+        box-shadow: 0 10px 24px rgba(15, 15, 15, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.82);
       }
 
       #${PLAYER_TOOLBAR_ID}.is-centered {
@@ -1971,7 +2353,7 @@
         border: 1px solid transparent;
         border-radius: 999px;
         background: transparent;
-        color: rgba(255, 255, 255, 0.82);
+        color: var(--yse-toolbar-color);
         cursor: pointer;
         transition: transform 160ms ease, background 160ms ease, color 160ms ease, border-color 160ms ease;
       }
@@ -1979,8 +2361,8 @@
       #${PLAYER_TOOLBAR_ID} .tube-shield-toolbar-btn:hover,
       #${PLAYER_TOOLBAR_ID} .tube-shield-toolbar-btn:focus-visible {
         color: #fff;
-        background: rgba(255, 255, 255, 0.12);
-        border-color: rgba(255, 255, 255, 0.16);
+        background: var(--yse-toolbar-hover);
+        border-color: var(--yse-toolbar-border);
         outline: none;
       }
 
@@ -2052,6 +2434,8 @@
           return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="13" y="11" width="6" height="4" rx="1" fill="currentColor" stroke="none"/></svg>';
         case "camera":
           return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h4l2-3h4l2 3h4v11H4z"/><circle cx="12" cy="14" r="3"/></svg>';
+        case "filters":
+          return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21v-7"/><path d="M4 10V3"/><path d="M12 21v-9"/><path d="M12 8V3"/><path d="M20 21v-5"/><path d="M20 12V3"/><path d="M2 14h4"/><path d="M10 8h4"/><path d="M18 16h4"/></svg>';
         case "theater":
           return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h10"/></svg>';
         case "settings":
@@ -2091,6 +2475,7 @@
         config.toolbarTheater,
         config.toolbarSettings,
         config.toolbarVolumeBoost,
+        config.toolbarFilters,
         config.playerSpeedButtonsEnabled,
         config.playerPopupEnabled,
         config.toolbarInsidePlayer,
@@ -2109,13 +2494,15 @@
       if (!toolbar) return;
       const video = getActiveVideo();
       const loopButton = toolbar.querySelector('[data-toolbar-action="loop"]');
-      loopButton?.classList.toggle("is-active", !!video?.loop);
+      loopButton?.classList.toggle("is-active", !!video?.loop || adState.loopEnabled && adState.loopVideoKey === getCurrentVideoKey());
       const pipButton = toolbar.querySelector('[data-toolbar-action="pip"]');
       pipButton?.classList.toggle("is-active", !!document.pictureInPictureElement);
       const theaterButton = toolbar.querySelector('[data-toolbar-action="theater"]');
-      theaterButton?.classList.toggle("is-active", !!adState.cinemaActive);
+      theaterButton?.classList.toggle("is-active", !!document.querySelector("ytd-watch-flexy")?.hasAttribute("theater") || !!adState.cinemaActive);
       const boostButton = toolbar.querySelector('[data-toolbar-action="volume-boost"]');
       boostButton?.classList.toggle("is-active", shouldUseVolumeBoost());
+      const filterButton = toolbar.querySelector('[data-toolbar-action="filters"]');
+      filterButton?.classList.toggle("is-active", shouldUseVideoFilters());
     }
     function updatePlayerToolbar() {
       if (!config.enabled || !config.toolbarEnabled || !isWatchPage()) {
@@ -2174,10 +2561,20 @@
       playerToolbarSignature = signature;
       updatePlayerToolbarStates();
     }
+    function schedulePlayerToolbarUpdate() {
+      if (playerToolbarUpdateRaf) return;
+      playerToolbarUpdateRaf = window.requestAnimationFrame(() => {
+        playerToolbarUpdateRaf = 0;
+        updatePlayerToolbar();
+      });
+    }
     function openPopupPlayer() {
       if (config.playerPopupEnabled === false) return;
       const videoId = getCurrentVideoId();
-      if (!videoId) return;
+      if (!videoId) {
+        showPlayerFeedback("popup", "Indisponivel", "Nao encontrei o ID do video");
+        return;
+      }
       const size = parsePlayerPopupSize();
       const left = Math.max(0, Math.round(window.screenX + (window.outerWidth - size.width) / 2));
       const top = Math.max(0, Math.round(window.screenY + (window.outerHeight - size.height) / 2));
@@ -2193,8 +2590,20 @@
         getActiveVideo()?.pause();
       } catch (err) {
       }
-      const embedUrl = "https://www.youtube.com/embed/" + encodeURIComponent(videoId) + "?autoplay=1&playsinline=1";
-      window.open(embedUrl, "youtubeExtensionPlayerPopup", features);
+      const popupUrl = new URL("/watch", location.origin);
+      popupUrl.searchParams.set("v", videoId);
+      popupUrl.searchParams.set("yse_popup", "1");
+      const current = getActiveVideo();
+      if (current && Number.isFinite(current.currentTime) && current.currentTime > 5) {
+        popupUrl.searchParams.set("t", Math.floor(current.currentTime) + "s");
+      }
+      try {
+        const source = new URL(location.href);
+        const list = source.searchParams.get("list");
+        if (list) popupUrl.searchParams.set("list", list);
+      } catch (err) {
+      }
+      window.open(popupUrl.toString(), "youtubeExtensionPlayerPopup", features);
     }
     async function togglePictureInPicture(video = getActiveVideo()) {
       if (!video) return;
@@ -2231,7 +2640,7 @@
       const theaterButton = document.querySelector(".ytp-size-button, button.ytp-size-button");
       if (theaterButton) {
         theaterButton.click();
-        setTimeout(updatePlayerToolbar, 300);
+        setTimeout(schedulePlayerToolbarUpdate, 300);
         return;
       }
       const watchFlexy = document.querySelector("ytd-watch-flexy");
@@ -2241,7 +2650,7 @@
       } else {
         watchFlexy.setAttribute("theater", "");
       }
-      setTimeout(updatePlayerToolbar, 300);
+      setTimeout(schedulePlayerToolbarUpdate, 300);
     }
     function formatPlaybackRate(rate) {
       const value = Number(rate);
@@ -2263,27 +2672,26 @@
     }
     function openOptionsPage() {
       try {
-        chrome.runtime.sendMessage({ type: "youtube-extension:open-options" }, () => {
-          if (chrome.runtime.lastError) {
-            window.open(chrome.runtime.getURL("options.html"), "_blank", "noopener=yes");
+        chrome.runtime.sendMessage({ type: "youtube-extension:open-options" }, (response) => {
+          if (chrome.runtime.lastError || !response?.ok) {
+            showPlayerFeedback("settings", "Abra pelo icone", "O navegador bloqueou a aba de opcoes");
           }
         });
       } catch (err) {
-        try {
-          window.open(chrome.runtime.getURL("options.html"), "_blank", "noopener=yes");
-        } catch (fallbackErr) {
-          window.open("/options.html", "_blank", "noopener=yes");
-        }
+        showPlayerFeedback("settings", "Abra pelo icone", "O navegador bloqueou a aba de opcoes");
       }
     }
     function handlePlayerToolbarAction(action) {
       const video = getActiveVideo();
-      markUserPlaybackIntent();
+      markUserPlaybackIntent("toolbar");
       if (action === "loop") {
         if (video) {
-          video.loop = !video.loop;
-          video.toggleAttribute("loop", video.loop);
-          showPlayerFeedback("speed", video.loop ? "Loop on" : "Loop off");
+          const next = !(adState.loopEnabled && adState.loopVideoKey === getCurrentVideoKey());
+          adState.loopEnabled = next;
+          adState.loopVideoKey = next ? getCurrentVideoKey() : "";
+          video.loop = next;
+          video.toggleAttribute("loop", next);
+          showPlayerFeedback("speed", next ? "Loop on" : "Loop off");
         }
         updatePlayerToolbarStates();
         return;
@@ -2313,6 +2721,10 @@
         captureVideoFrame(video);
         return;
       }
+      if (action === "filters") {
+        setVideoFiltersEnabled(!shouldUseVideoFilters());
+        return;
+      }
       if (action === "theater") {
         toggleTheaterMode();
         return;
@@ -2339,9 +2751,10 @@
         setUserVolume(config.playerVolumeDefault, false, video);
         adState.defaultVolumeAppliedKey = key;
       }
-      if (config.volumeBoostEnabled && config.volumeBoostAuto) {
+      if (config.volumeBoostEnabled) {
         applyVolumeBoost(video);
       }
+      applyVideoFilters();
       applyQualityPreferences();
     }
     function isPointerInsidePlayer(target) {
@@ -2387,29 +2800,59 @@
       }
       return !!document.querySelector("ytd-playlist-panel-renderer, ytd-playlist-video-list-renderer");
     }
-    function markUserPlaybackIntent() {
-      adState.lastUserPlaybackIntentAt = Date.now();
+    function isDiagnosticsEnabled() {
+      try {
+        return localStorage.getItem(DIAGNOSTIC_STORAGE_KEY) === "1" || localStorage.getItem("tubeShieldDebug") === "1";
+      } catch (err) {
+        return false;
+      }
     }
-    function hasRecentPlaybackIntent() {
-      return Date.now() - (adState.lastUserPlaybackIntentAt || 0) < 2600;
+    function debugPlayback(message, data = {}) {
+      if (!isDiagnosticsEnabled()) return;
+      console.debug("[YouTube Extension][playback]", message, data);
+    }
+    function markUserPlaybackIntent(reason = "user") {
+      adState.lastUserPlaybackIntentAt = Date.now();
+      adState.lastUserPlaybackIntentReason = reason;
+    }
+    function hasRecentPlaybackIntent(windowMs = USER_PLAYBACK_INTENT_WINDOW_MS) {
+      return Date.now() - (adState.lastUserPlaybackIntentAt || 0) < windowMs;
     }
     function isNearVideoStart(video) {
       const current = Number(video?.currentTime || 0);
       return !Number.isFinite(current) || current < 4;
     }
     function isPopupWindow() {
+      try {
+        if (new URL(location.href).searchParams.get("yse_popup") === "1") return true;
+      } catch (err) {
+      }
       return window.name === "youtubeExtensionPlayerPopup" || !!window.opener && window.outerWidth <= 1040 && window.outerHeight <= 680;
     }
-    function shouldBlockAutoplay(video = getActiveVideo()) {
-      if (!video || !config.enabled || adState.active || getAdPlaying()) return false;
-      if (!isNearVideoStart(video)) return false;
-      if (config.autoplayIgnorePopup && isPopupWindow()) return false;
-      if (config.autoplayAllowPlaylists && isPlaylistContext()) return false;
-      if (config.autoplayDisableAll) return !hasRecentPlaybackIntent();
-      if (document.hidden) return !!config.autoplayBlockBackground;
-      return !!config.autoplayBlockForeground && !hasRecentPlaybackIntent();
+    function getAutoplayBlockReason(video = getActiveVideo()) {
+      if (!video || !config.enabled || adState.active || getAdPlaying()) return "";
+      if (!isNearVideoStart(video)) return "";
+      if (config.autoplayIgnorePopup && isPopupWindow()) return "";
+      if (config.autoplayAllowPlaylists && isPlaylistContext()) return "";
+      if (document.hidden && isAdSkipperActive() && isWatchPage()) return "";
+      const intentWindow = document.hidden ? BACKGROUND_PLAYBACK_INTENT_WINDOW_MS : USER_PLAYBACK_INTENT_WINDOW_MS;
+      if (hasRecentPlaybackIntent(intentWindow)) return "";
+      if (config.autoplayDisableAll) return "autoplay-disable-all";
+      if (document.hidden && config.autoplayBlockBackground) return "background-autoplay";
+      if (!document.hidden && config.autoplayBlockForeground) return "foreground-autoplay";
+      return "";
     }
-    function pauseVideo(video = getActiveVideo()) {
+    function resumeAdPlaybackIfNeeded() {
+      if (!isAdSkipperActive() || !(adState.active || getAdPlaying())) return;
+      const video = getActiveVideo();
+      if (!video || !video.paused) return;
+      try {
+        video.play().catch(() => {
+        });
+      } catch (err) {
+      }
+    }
+    function pauseVideo(video = getActiveVideo(), reason = "unknown") {
       if (!video) return false;
       let paused = false;
       try {
@@ -2424,6 +2867,19 @@
           paused = true;
         }
       } catch (err) {
+      }
+      if (paused) {
+        adState.lastPlaybackPauseReason = reason;
+        adState.lastPlaybackPauseAt = Date.now();
+        debugPlayback("paused video", {
+          reason,
+          url: location.href,
+          hidden: document.hidden,
+          currentTime: Number(video.currentTime || 0),
+          videoKey: getCurrentVideoKey(),
+          recentIntent: hasRecentPlaybackIntent(document.hidden ? BACKGROUND_PLAYBACK_INTENT_WINDOW_MS : USER_PLAYBACK_INTENT_WINDOW_MS),
+          intentReason: adState.lastUserPlaybackIntentReason
+        });
       }
       return paused;
     }
@@ -2441,8 +2897,9 @@
     function handleVideoPlayEvent() {
       const video = getActiveVideo();
       if (!video) return;
-      if (shouldBlockAutoplay(video)) {
-        pauseVideo(video);
+      const blockReason = getAutoplayBlockReason(video);
+      if (blockReason) {
+        pauseVideo(video, blockReason);
         return;
       }
       announceForegroundPlayback();
@@ -2450,56 +2907,75 @@
     function handleExternalPlaybackSignal(signal) {
       if (!config.enabled || !config.pauseBackgroundTabs || !document.hidden) return;
       if (!signal || signal.token === adState.tabPlaybackToken) return;
+      const signalTime = Number(signal.time) || 0;
+      if (!signalTime || Date.now() - signalTime > 5e3) return;
+      if (hasRecentPlaybackIntent(BACKGROUND_PLAYBACK_INTENT_WINDOW_MS)) {
+        debugPlayback("ignored background pause due recent intent", {
+          signalUrl: signal.url || "",
+          intentReason: adState.lastUserPlaybackIntentReason
+        });
+        return;
+      }
       const video = getActiveVideo();
       if (video && !video.paused && !adState.active && !getAdPlaying()) {
-        pauseVideo(video);
+        pauseVideo(video, "background-tab-playback-signal");
       }
     }
     function bindAutoplayGuards() {
       const video = getActiveVideo();
       if (!video || adState.autoplayVideo === video) return;
+      if (adState.autoplayVideo) {
+        try {
+          adState.autoplayVideo.removeEventListener("play", handleVideoPlayEvent, true);
+          adState.autoplayVideo.removeEventListener("playing", handleVideoPlayEvent, true);
+        } catch (err) {
+        }
+      }
       adState.autoplayVideo = video;
       video.addEventListener("play", handleVideoPlayEvent, true);
       video.addEventListener("playing", handleVideoPlayEvent, true);
-      if (!video.paused && shouldBlockAutoplay(video)) {
-        pauseVideo(video);
+      const initialBlockReason = getAutoplayBlockReason(video);
+      if (!video.paused && initialBlockReason) {
+        pauseVideo(video, initialBlockReason);
       }
     }
     function enforceAutoplayGuards() {
       bindAutoplayGuards();
+      resumeAdPlaybackIfNeeded();
       const video = getActiveVideo();
       if (!video) return;
-      if (config.autoplayStopPreload && shouldBlockAutoplay(video)) {
+      const blockReason = getAutoplayBlockReason(video);
+      if (config.autoplayStopPreload && blockReason) {
         try {
           video.preload = "none";
         } catch (err) {
         }
       }
       if (video.paused) return;
-      if (shouldBlockAutoplay(video)) {
-        pauseVideo(video);
+      if (blockReason) {
+        pauseVideo(video, blockReason);
       } else {
         announceForegroundPlayback();
       }
     }
     function getSpeedThroughRate() {
       if (isInstantSkipEnabled()) return INSTANT_SPEED_THROUGH_RATE;
-      if (config.customSpeedEnabled && config.adaptiveSpeedEnabled) return getRiskAdaptiveSpeed();
-      if (config.customSpeedEnabled) return normalizeSpeedRate(config.adSpeedRate);
-      return getSafeAdaptiveSpeed();
+      if (config.customSpeedEnabled && config.adaptiveSpeedEnabled) return getRiskAdaptiveSpeed$1();
+      if (config.customSpeedEnabled) return normalizeSpeedRate$1(config.adSpeedRate);
+      return getSafeAdaptiveSpeed$1();
     }
     function requestMainWorldSkip() {
-      window.postMessage({
+      postMainWorldMessage({
         source: MAIN_FORCE_SKIP_MESSAGE,
         targetTime: adState.skipTargetTime || Date.now(),
         rate: getSpeedThroughRate()
-      }, "*");
+      });
     }
     function requestMainWorldSpeedThrough(rate = getSpeedThroughRate()) {
-      window.postMessage({
+      postMainWorldMessage({
         source: MAIN_SPEED_THROUGH_MESSAGE,
         rate
-      }, "*");
+      });
     }
     function forceSkipAd(video = document.querySelector("video")) {
       if (!isAdSkipperActive() || !config.aggressiveSkip || adState.watching) return false;
@@ -2507,29 +2983,27 @@
       const player = getYouTubePlayer();
       let attempted = false;
       if (video) {
-        const duration = getFinitePositiveNumber(video.duration);
-        const currentTime = getFinitePositiveNumber(video.currentTime);
-        const target = duration > 0 ? Math.max(duration - 0.05, currentTime + 0.25) : currentTime + 600;
+        const duration = Number(video.duration);
+        const currentTime = Number(video.currentTime);
+        const target = getAdSeekTarget(duration, currentTime);
         try {
           video.playbackRate = getSpeedThroughRate();
           attempted = true;
         } catch (err) {
         }
-        try {
-          if (typeof video.fastSeek === "function") {
-            video.fastSeek(target);
-          }
+        if (target !== null) try {
+          if (typeof video.fastSeek === "function") video.fastSeek(target);
           video.currentTime = target;
           attempted = true;
         } catch (err) {
           try {
-            video.currentTime = currentTime + 30;
+            video.currentTime = target;
             attempted = true;
           } catch (innerErr) {
           }
         }
         try {
-          if (player && typeof player.seekTo === "function" && duration > 0) {
+          if (player && typeof player.seekTo === "function" && target !== null) {
             player.seekTo(target, true);
             attempted = true;
           }
@@ -2648,6 +3122,10 @@
         }
       }, PLAYBACK_RESTORE_RETRY_MS);
     }
+    function getCapturedPlaybackRate() {
+      const rate = Number(adState.preAdPlaybackRate);
+      return Number.isFinite(rate) && rate > 0 ? normalizePlaybackRate(rate) : null;
+    }
     function clearPostSkipRestoreChecks() {
       for (const timeoutId of adState.postSkipRestoreTimeouts || []) {
         clearTimeout(timeoutId);
@@ -2656,7 +3134,8 @@
     }
     function queuePlaybackRateRestoreAfterSkip() {
       clearPostSkipRestoreChecks();
-      const targetRate = adState.preAdPlaybackRate || 1;
+      const targetRate = getCapturedPlaybackRate();
+      if (targetRate === null) return;
       adState.postSkipRestoreTimeouts = POST_SKIP_RESTORE_DELAYS_MS.map((delay) => setTimeout(() => {
         if (!isAdSkipperActive() || adState.watching || !getAdPlaying()) {
           stopSpeedThrough();
@@ -2683,13 +3162,25 @@
     function attemptScheduledSkip() {
       if (!isAdSkipperActive() || !adState.active || adState.watching) return false;
       const video = document.querySelector("video");
-      if (clickSkipAdBtn()) {
+      const skipButton = findSkipAdButton();
+      const action = chooseAdSkipAction({
+        adConfirmed: getAdPlaying(),
+        aggressive: !!config.aggressiveSkip,
+        delayElapsed: !adState.skipTargetTime || Date.now() >= adState.skipTargetTime,
+        skipButtonAvailable: !!skipButton,
+        watching: !!adState.watching,
+        duration: Number(video?.duration),
+        currentTime: Number(video?.currentTime)
+      });
+      if (action === "click" && clickSkipAdBtn(skipButton)) {
         finishSkipClick();
         return true;
       }
-      if (config.aggressiveSkip) {
+      if (action === "seek-end") {
         forceSkipAd(video);
         startForceSkipBurst(video);
+      } else if (action === "speed-through") {
+        applySpeedThrough(video);
       }
       return false;
     }
@@ -2722,7 +3213,7 @@
     }
     function startSkipButtonObserver() {
       if (skipButtonObserver) return;
-      const root = document.body || document.documentElement;
+      const root = getYouTubePlayer() || document.documentElement;
       if (!root) return;
       skipButtonObserver = new MutationObserver(() => {
         if (!isAdSkipperActive() || !adState.active || adState.watching || !adState.skipTargetTime) return;
@@ -3026,25 +3517,7 @@
       return null;
     }
     function isChannelWhitelisted() {
-      if (!config.whitelist || config.whitelist.length === 0) {
-        return config.listMode === "blacklist" ? true : false;
-      }
-      const ch = getCurrentChannel();
-      if (!ch) return false;
-      const matched = config.whitelist.some((w) => {
-        const wLower = w.toLowerCase().trim();
-        if (!wLower) return false;
-        if (ch.name.includes(wLower) || wLower.includes(ch.name)) return true;
-        if (ch.link && wLower.length > 3) {
-          if (ch.link.includes(wLower) || wLower.includes(ch.link)) return true;
-        }
-        return false;
-      });
-      if (config.listMode === "blacklist") {
-        return !matched;
-      } else {
-        return matched;
-      }
+      return shouldProtectChannel(getCurrentChannel(), config.whitelist, config.listMode);
     }
     function showToastNotification() {
       if (!config.showToast) return;
@@ -3103,7 +3576,12 @@
       return true;
     }
     function resetPlaybackRate() {
-      startPlaybackRateRestore(adState.preAdPlaybackRate || 1);
+      const targetRate = getCapturedPlaybackRate();
+      if (targetRate === null) {
+        stopPlaybackRateRestore();
+        return;
+      }
+      startPlaybackRateRestore(targetRate);
     }
     function cleanupRuntimeState() {
       stopForceSkipBurst();
@@ -3156,37 +3634,28 @@
         video.addEventListener(eventName, scheduleAdWatchdogTick, true);
       });
     }
-    function runCustomScript(reason = "manual") {
-      if (!config.enabled) return false;
-      const manual = reason === "manual";
-      if (!manual && (!config.customScriptEnabled || !config.customScriptAutoRun)) return false;
-      if (manual && config.customScriptRunAt && config.customScriptRunAt <= adState.customScriptLastRunAt) return false;
-      const code = String(config.customScriptCode || "").trim();
-      if (!code) return false;
-      if (!manual) {
-        const key = reason + ":" + getCurrentVideoKey();
-        if (adState.customScriptAutoKey === key) return false;
-        adState.customScriptAutoKey = key;
-      }
-      if (manual) adState.customScriptLastRunAt = config.customScriptRunAt || Date.now();
-      try {
-        const fn = new Function(code + "\n//# sourceURL=youtube-extension-custom-script.js");
-        fn.call(window);
-        return true;
-      } catch (err) {
-        console.warn("[YouTube Extension] Custom script error:", err);
-        return false;
-      }
-    }
-    function scheduleCustomScriptAutoRun(reason = "auto") {
-      window.setTimeout(() => {
-        runCustomScript(reason);
-      }, 350);
-    }
     function mainLoop() {
-      runAppearanceTasks();
-      updateMiniplayer();
-      updatePlayerToolbar();
+      const startedAt = isDiagnosticsEnabled() ? performance.now() : 0;
+      try {
+        mainLoopBody();
+      } finally {
+        if (startedAt) {
+          const duration = performance.now() - startedAt;
+          if (duration >= MAIN_LOOP_SLOW_THRESHOLD_MS) {
+            debugPlayback("mainLoop slow", {
+              duration: Math.round(duration * 10) / 10,
+              hidden: document.hidden,
+              url: location.href,
+              videoKey: getCurrentVideoKey()
+            });
+          }
+        }
+      }
+    }
+    function mainLoopBody() {
+      bindPersistentVideoState();
+      syncLoopState();
+      runVisualMaintenanceTasks();
       if (!config.enabled) {
         if (adState.active || adState.overlayEl) cleanupRuntimeState();
         stopAdblockProtection();
@@ -3300,16 +3769,17 @@
     });
     document.addEventListener("wheel", handlePlayerWheel, { capture: true, passive: false });
     document.addEventListener("pointerdown", (event) => {
-      markUserPlaybackIntent();
+      markUserPlaybackIntent("pointerdown");
       if (config.volumeBoostEnabled && config.volumeBoostAuto && isPointerInsidePlayer(event.target)) {
         setTimeout(() => applyVolumeBoost(getActiveVideo()), 0);
       }
     }, true);
     document.addEventListener("keydown", (event) => {
       const playbackKeys = [" ", "Enter", "k", "K", "MediaPlayPause", "MediaPlay"];
-      if (playbackKeys.includes(event.key)) markUserPlaybackIntent();
+      if (playbackKeys.includes(event.key)) markUserPlaybackIntent("keyboard");
     }, true);
     document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) markUserPlaybackIntent("tab-visible");
       enforceAutoplayGuards();
       scheduleAdWatchdogTick();
     });
@@ -3441,18 +3911,13 @@
         if (config.enabled && config.pipEnabled) {
           setTimeout(injectPipButton, 1500);
         }
-        setTimeout(updateMiniplayer, 500);
-        setTimeout(updatePlayerToolbar, 500);
-        scheduleCustomScriptAutoRun("navigation");
+        scheduleVisualMaintenanceTasks(true, 500);
       }
     });
     _pipNavObserver.observe(document.documentElement, { childList: true, subtree: true });
     document.addEventListener("yt-navigate-finish", () => {
-      scheduleCustomScriptAutoRun("yt-navigate-finish");
       setTimeout(() => {
-        runAppearanceTasks();
-        updateMiniplayer();
-        updatePlayerToolbar();
+        runVisualMaintenanceTasks(true);
         if (config.volumeBoostEnabled && config.volumeBoostAuto) applyVolumeBoost();
       }, 350);
     });
@@ -3472,6 +3937,7 @@
       initStarted = true;
       if (isInIframe() && !isSupportedEmbedFrame()) return;
       loadSettings().then(() => {
+        syncMainWorldSession(true);
         syncCodecSettingsToMainWorld();
         if (isAdSkipperActive()) startAdblockProtection();
         try {
@@ -3479,7 +3945,6 @@
         } catch (e) {
         }
         setInterval(mainLoop, CHECK_INTERVAL);
-        scheduleCustomScriptAutoRun("load");
         injectPipButton();
       });
     }

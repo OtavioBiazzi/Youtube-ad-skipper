@@ -1,4 +1,26 @@
+import {
+  CODEC_SETTINGS_MESSAGE,
+  CODEC_SETTINGS_STORAGE_KEY,
+  MAIN_FORCE_SKIP_MESSAGE,
+  MAIN_FORCE_SKIP_RESULT,
+  MAIN_QUALITY_MESSAGE,
+  MAIN_SESSION_MESSAGE,
+  MAIN_SPEED_THROUGH_MESSAGE,
+  isBridgeMessage,
+} from "./shared/messages";
+import { getAdSeekTarget } from "./shared/adStrategy";
+
 (function() {
+  const pageWindow: any = window;
+  const OVERRIDE_GUARD_KEY = "__youtubeExtensionOverrideInstalled";
+  if (pageWindow[OVERRIDE_GUARD_KEY]) return;
+  pageWindow[OVERRIDE_GUARD_KEY] = true;
+
+  const OVERRIDE_FEATURES = {
+    codecResponseFilters: true,
+    trustedSkipClickProxy: true,
+  };
+
   function isInIframe() {
     try { return window.self !== window.top; } catch (err) { return true; }
   }
@@ -13,11 +35,7 @@
   const nativeCurrentTime = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, "currentTime");
   const nativePlaybackRate = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, "playbackRate");
   const wrappedListeners = new WeakMap();
-  const MAIN_FORCE_SKIP_MESSAGE = "yt-ad-skipper:force-skip";
-  const MAIN_SPEED_THROUGH_MESSAGE = "yt-ad-skipper:speed-through";
-  const MAIN_FORCE_SKIP_RESULT = "yt-ad-skipper:force-skip-result";
-  const CODEC_SETTINGS_MESSAGE = "youtube-extension:codec-settings";
-  const CODEC_SETTINGS_STORAGE_KEY = "youtubeExtensionCodecSettings";
+  let bridgeSessionToken = "";
   let codecSettings = readCodecSettings();
 
   function normalizeCodecSettings(settings: any = {}) {
@@ -113,15 +131,13 @@
   }
 
   function applyCodecFiltersToKnownGlobals() {
-    if (!hasCodecFilters()) return;
+    if (!OVERRIDE_FEATURES.codecResponseFilters || !hasCodecFilters()) return;
 
     try {
-      const pageWindow: any = window;
       if (pageWindow.ytInitialPlayerResponse) filterPlayerResponse(pageWindow.ytInitialPlayerResponse);
     } catch (err) {}
 
     try {
-      const pageWindow: any = window;
       const args = pageWindow.ytplayer?.config?.args;
       if (args?.raw_player_response) {
         if (typeof args.raw_player_response === "string") {
@@ -136,8 +152,8 @@
   }
 
   function installPlayerResponseSetter() {
+    if (!OVERRIDE_FEATURES.codecResponseFilters) return;
     try {
-      const pageWindow: any = window;
       let currentValue = pageWindow.ytInitialPlayerResponse;
       Object.defineProperty(pageWindow, "ytInitialPlayerResponse", {
         configurable: true,
@@ -158,6 +174,25 @@
       localStorage.setItem(CODEC_SETTINGS_STORAGE_KEY, JSON.stringify(codecSettings));
     } catch (err) {}
     applyCodecFiltersToKnownGlobals();
+  }
+
+  function setPlayerQuality(level) {
+    const target = String(level || "");
+    if (!target) return;
+    const player: any = document.getElementById("movie_player") || document.querySelector(".html5-video-player");
+    if (!player) return;
+
+    try {
+      if (typeof player.setPlaybackQualityRange === "function") {
+        target === "auto" ? player.setPlaybackQualityRange("auto") : player.setPlaybackQualityRange(target, target);
+      }
+    } catch (err) {}
+
+    try {
+      if (typeof player.setPlaybackQuality === "function") {
+        player.setPlaybackQuality(target);
+      }
+    } catch (err) {}
   }
 
   function textLooksLikePlayerResponse(text) {
@@ -184,20 +219,22 @@
     );
   }
 
-  JSON.parse = function(text, reviver) {
-    const parsed = originalJsonParse(text, reviver);
-    return textLooksLikePlayerResponse(text) ? filterPlayerResponse(parsed) : parsed;
-  };
-
-  if (originalResponseJson) {
-    Response.prototype.json = function(...args) {
-      return originalResponseJson.apply(this, args).then(result => {
-        if (responseLooksLikePlayerEndpoint(this) || resultLooksLikePlayerResponse(result)) {
-          return filterPlayerResponse(result);
-        }
-        return result;
-      });
+  if (OVERRIDE_FEATURES.codecResponseFilters) {
+    JSON.parse = function(text, reviver) {
+      const parsed = originalJsonParse(text, reviver);
+      return textLooksLikePlayerResponse(text) ? filterPlayerResponse(parsed) : parsed;
     };
+
+    if (originalResponseJson) {
+      Response.prototype.json = function(...args) {
+        return originalResponseJson.apply(this, args).then(result => {
+          if (responseLooksLikePlayerEndpoint(this) || resultLooksLikePlayerResponse(result)) {
+            return filterPlayerResponse(result);
+          }
+          return result;
+        });
+      };
+    }
   }
 
   function getCapture(options) {
@@ -310,11 +347,9 @@
     let attempted = false;
 
     if (video) {
-      const duration = getFinitePositiveNumber(video.duration);
-      const currentTime = getFinitePositiveNumber(video.currentTime);
-      const target = duration > 0
-        ? Math.max(duration - 0.05, currentTime + 0.25)
-        : currentTime + 600;
+      const duration = Number(video.duration);
+      const currentTime = Number(video.currentTime);
+      const target = getAdSeekTarget(duration, currentTime);
 
       try {
         attempted = setNativeMediaValue(nativePlaybackRate, video, speedRate) || attempted;
@@ -322,23 +357,21 @@
         attempted = true;
       } catch (err) {}
 
-      try {
-        if (typeof video.fastSeek === "function") {
-          video.fastSeek(target);
-        }
+      if (target !== null) try {
+        if (typeof video.fastSeek === "function") video.fastSeek(target);
         attempted = setNativeMediaValue(nativeCurrentTime, video, target) || attempted;
         video.currentTime = target;
         attempted = true;
       } catch (err) {
         try {
-          attempted = setNativeMediaValue(nativeCurrentTime, video, currentTime + 30) || attempted;
-          video.currentTime = currentTime + 30;
+          attempted = setNativeMediaValue(nativeCurrentTime, video, target) || attempted;
+          video.currentTime = target;
           attempted = true;
         } catch (innerErr) {}
       }
 
       try {
-        if (player && typeof player.seekTo === "function" && duration > 0) {
+        if (player && typeof player.seekTo === "function" && target !== null) {
           player.seekTo(target, true);
           attempted = true;
         }
@@ -378,20 +411,34 @@
     return attempted;
   }
 
+  function isAuthorizedBridgeMessage(data) {
+    return isBridgeMessage(data) && !!bridgeSessionToken && data.token === bridgeSessionToken;
+  }
+
   window.addEventListener("message", (event) => {
     if (event.source !== window) return;
     const data = event.data || {};
+    if (isBridgeMessage(data) && data.source === MAIN_SESSION_MESSAGE && typeof data.token === "string") {
+      bridgeSessionToken = data.token;
+      return;
+    }
+    if (!isAuthorizedBridgeMessage(data)) return;
+
     if (data.source === CODEC_SETTINGS_MESSAGE) {
       updateCodecSettings(data.settings || {});
       return;
     }
     if (data.source === MAIN_FORCE_SKIP_MESSAGE) {
       const result = forceSkipFromMainWorld(data.rate);
-      window.postMessage({ source: MAIN_FORCE_SKIP_RESULT, ...result }, "*");
+      window.postMessage({ source: MAIN_FORCE_SKIP_RESULT, token: bridgeSessionToken, ...result }, "*");
       return;
     }
     if (data.source === MAIN_SPEED_THROUGH_MESSAGE) {
       setSpeedThrough(normalizePlaybackRate(data.rate));
+      return;
+    }
+    if (data.source === MAIN_QUALITY_MESSAGE) {
+      setPlayerQuality(data.level);
     }
   });
 
@@ -406,7 +453,8 @@
     if (codecGlobalChecks >= 40) window.clearInterval(codecGlobalTimer);
   }, 250);
 
-  HTMLElement.prototype.addEventListener = function(type, listener, options) {
+  if (OVERRIDE_FEATURES.trustedSkipClickProxy) {
+    HTMLElement.prototype.addEventListener = function(type, listener, options) {
     let isSkipButton = false;
     try {
       const cls = typeof this.className === "string" 
@@ -441,9 +489,9 @@
       return originalAddEventListener.call(this, type, wrappedListener, options);
     }
     return originalAddEventListener.call(this, type, listener, options);
-  };
+    };
 
-  HTMLElement.prototype.removeEventListener = function(type, listener, options) {
+    HTMLElement.prototype.removeEventListener = function(type, listener, options) {
     if (!canTrackListener(listener)) {
       return originalRemoveEventListener.call(this, type, listener, options);
     }
@@ -454,7 +502,8 @@
       return originalRemoveEventListener.call(this, type, wrappedListener, options);
     }
     return originalRemoveEventListener.call(this, type, listener, options);
-  };
+    };
+  }
 })();
 
 export {};
