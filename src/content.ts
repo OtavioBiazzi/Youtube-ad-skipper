@@ -2059,7 +2059,6 @@ declare global {
     if (config.toolbarPip) actions.push({ action: "pip", title: "Picture-in-Picture", icon: "pip" });
     if (config.toolbarScreenshot) actions.push({ action: "screenshot", title: "Capturar frame", icon: "camera" });
     if (config.toolbarFilters) actions.push({ action: "filters", title: "Filtros de video", icon: "filters" });
-    if (config.toolbarTheater) actions.push({ action: "theater", title: "Modo teatro do YouTube", icon: "theater" });
     if (config.toolbarSettings) actions.push({ action: "settings", title: "Configuracoes", icon: "settings" });
     return actions;
   }

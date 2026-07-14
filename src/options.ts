@@ -142,7 +142,6 @@ const optToolbarSpeed = byId<HTMLInputElement>("opt-toolbar-speed");
 const optToolbarPopup = byId<HTMLInputElement>("opt-toolbar-popup");
 const optToolbarPip = byId<HTMLInputElement>("opt-toolbar-pip");
 const optToolbarScreenshot = byId<HTMLInputElement>("opt-toolbar-screenshot");
-const optToolbarTheater = byId<HTMLInputElement>("opt-toolbar-theater");
 const optToolbarSettings = byId<HTMLInputElement>("opt-toolbar-settings");
 const optToolbarVolumeBoost = document.querySelector<HTMLInputElement>('[data-setting="toolbarVolumeBoost"]');
 
@@ -269,7 +268,6 @@ chrome.storage.local.get(DEFAULT_VALUES, (s: any) => {
   optToolbarPopup.checked = s.toolbarPopup !== false;
   optToolbarPip.checked = s.toolbarPip !== false;
   optToolbarScreenshot.checked = s.toolbarScreenshot !== false;
-  optToolbarTheater.checked = s.toolbarTheater !== false;
   optToolbarSettings.checked = s.toolbarSettings !== false;
 
   if (!s.aggressiveSkip && s.instantSkip) {
@@ -631,7 +629,6 @@ optToolbarCenter.addEventListener("change", () => {
   [optToolbarPopup, "toolbarPopup"],
   [optToolbarPip, "toolbarPip"],
   [optToolbarScreenshot, "toolbarScreenshot"],
-  [optToolbarTheater, "toolbarTheater"],
   [optToolbarSettings, "toolbarSettings"],
 ].forEach(([input, key]) => {
   (input as HTMLInputElement).addEventListener("change", () => {
@@ -1124,7 +1121,6 @@ function renderToolbarControlLocks() {
   optToolbarPopup.disabled = disabled;
   optToolbarPip.disabled = disabled;
   optToolbarScreenshot.disabled = disabled;
-  optToolbarTheater.disabled = disabled;
   optToolbarSettings.disabled = disabled;
   if (optToolbarVolumeBoost) optToolbarVolumeBoost.disabled = disabled;
 }
@@ -1354,7 +1350,6 @@ chrome.storage.onChanged.addListener((changes) => {
   if (changes.toolbarPopup) optToolbarPopup.checked = changes.toolbarPopup.newValue !== false;
   if (changes.toolbarPip) optToolbarPip.checked = changes.toolbarPip.newValue !== false;
   if (changes.toolbarScreenshot) optToolbarScreenshot.checked = changes.toolbarScreenshot.newValue !== false;
-  if (changes.toolbarTheater) optToolbarTheater.checked = changes.toolbarTheater.newValue !== false;
   if (changes.toolbarSettings) optToolbarSettings.checked = changes.toolbarSettings.newValue !== false;
   plannedControls.forEach((control) => {
     const key = getPlannedKey(control);

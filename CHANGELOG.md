@@ -29,6 +29,7 @@ Todas as mudancas relevantes deste projeto serao registradas aqui.
 - Dependencias de build foram atualizadas para remover vulnerabilidades conhecidas no ambiente de desenvolvimento.
 - Reduzido risco de o player pausar sozinho por sinais antigos de outras abas.
 - Corrigido o layout Cinema + Ultrawide para evitar player pequeno, crop agressivo e overflow em telas largas.
+- Removido o atalho de Modo Teatro da barra rápida; o ajuste continua disponível pelas preferências de cinema e atalhos.
 - Restore de velocidade agora so roda quando existe velocidade pre-anuncio capturada.
 - Miniplayer recebeu ajustes de stacking/z-index para ficar acima da area de comentarios.
 - Listeners de video antigos agora sao removidos ao trocar o elemento de video.

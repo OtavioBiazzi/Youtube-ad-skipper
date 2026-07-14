@@ -433,7 +433,6 @@
   const optToolbarPopup = byId("opt-toolbar-popup");
   const optToolbarPip = byId("opt-toolbar-pip");
   const optToolbarScreenshot = byId("opt-toolbar-screenshot");
-  const optToolbarTheater = byId("opt-toolbar-theater");
   const optToolbarSettings = byId("opt-toolbar-settings");
   const optToolbarVolumeBoost = document.querySelector('[data-setting="toolbarVolumeBoost"]');
   let currentWhitelist = [];
@@ -541,7 +540,6 @@
     optToolbarPopup.checked = s.toolbarPopup !== false;
     optToolbarPip.checked = s.toolbarPip !== false;
     optToolbarScreenshot.checked = s.toolbarScreenshot !== false;
-    optToolbarTheater.checked = s.toolbarTheater !== false;
     optToolbarSettings.checked = s.toolbarSettings !== false;
     if (!s.aggressiveSkip && s.instantSkip) {
       chrome.storage.local.set({ instantSkip: false });
@@ -829,7 +827,6 @@
     [optToolbarPopup, "toolbarPopup"],
     [optToolbarPip, "toolbarPip"],
     [optToolbarScreenshot, "toolbarScreenshot"],
-    [optToolbarTheater, "toolbarTheater"],
     [optToolbarSettings, "toolbarSettings"]
   ].forEach(([input, key]) => {
     input.addEventListener("change", () => {
@@ -1258,7 +1255,6 @@
     optToolbarPopup.disabled = disabled;
     optToolbarPip.disabled = disabled;
     optToolbarScreenshot.disabled = disabled;
-    optToolbarTheater.disabled = disabled;
     optToolbarSettings.disabled = disabled;
     if (optToolbarVolumeBoost) optToolbarVolumeBoost.disabled = disabled;
   }
@@ -1467,7 +1463,6 @@
     if (changes.toolbarPopup) optToolbarPopup.checked = changes.toolbarPopup.newValue !== false;
     if (changes.toolbarPip) optToolbarPip.checked = changes.toolbarPip.newValue !== false;
     if (changes.toolbarScreenshot) optToolbarScreenshot.checked = changes.toolbarScreenshot.newValue !== false;
-    if (changes.toolbarTheater) optToolbarTheater.checked = changes.toolbarTheater.newValue !== false;
     if (changes.toolbarSettings) optToolbarSettings.checked = changes.toolbarSettings.newValue !== false;
     plannedControls.forEach((control) => {
       const key = getPlannedKey(control);
