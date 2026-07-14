@@ -248,6 +248,14 @@ h2 { font-size: 17px; letter-spacing: -0.025em; }
 .change-note { position: absolute; left: 13px; right: 13px; bottom: 52px; z-index: 5; padding: 5px 8px; border: 1px solid rgba(57, 217, 138, 0.25); border-radius: 8px; background: color-mix(in srgb, var(--panel) 94%, transparent); color: var(--ok); font-size: 10px; text-align: center; opacity: 0; pointer-events: none; transform: translateY(4px); transition: 160ms ease; }
 .change-note.is-visible { opacity: 1; transform: translateY(0); }
 
+.update-card { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 10px; border:1px solid var(--line); border-radius:11px; background:var(--panel-raised); }
+.update-card strong, .update-card span { display:block; }
+.update-card strong { font-size:11px; }
+.update-card span { margin-top:3px; color:var(--muted); font-size:9px; }
+.update-card button { flex:none; border:1px solid var(--line-strong); border-radius:8px; padding:6px 9px; background:var(--panel); color:var(--text); cursor:pointer; font-size:10px; }
+.update-card button:hover { border-color:var(--signal); color:var(--signal); }
+.update-card button:disabled { cursor:wait; opacity:.65; }
+
 .control-center-button {
   display: flex;
   width: 100%;

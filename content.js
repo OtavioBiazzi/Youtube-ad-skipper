@@ -2577,6 +2577,13 @@
         display: none !important;
       }
 
+      /* O layout nativo do Teatro pode transformar a barra em uma coluna lateral
+         gigante. Nesse modo, deixe os controles do próprio YouTube no comando. */
+      ytd-watch-flexy[theater] #${PLAYER_TOOLBAR_ID},
+      ytd-watch-flexy[full-bleed-player] #${PLAYER_TOOLBAR_ID} {
+        display: none !important;
+      }
+
       @media (max-width: 720px) {
         #${PLAYER_TOOLBAR_ID} {
           overflow-x: auto;
