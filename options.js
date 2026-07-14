@@ -1,7 +1,87 @@
 (function() {
   "use strict";
-  const DEFAULT = {
+  const SAFE_AD_SPEED_RATE = 3;
+  const DEFAULT_SPEED_THROUGH_RATE = SAFE_AD_SPEED_RATE;
+  const MIN_AD_SPEED_RATE = 1;
+  const MAX_AD_SPEED_RATE = 8;
+  const INSTANT_AD_SPEED_RATE = 16;
+  function normalizeSpeedRate(rate, fallback = DEFAULT_SPEED_THROUGH_RATE) {
+    const n = Number(rate);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.min(MAX_AD_SPEED_RATE, Math.max(MIN_AD_SPEED_RATE, n));
+  }
+  function normalizeSkipDelay(delay, fallback = 1) {
+    const n = Number(delay);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.min(30, Math.max(1, n));
+  }
+  function getSafeAdaptiveSpeed(delay) {
+    const d = normalizeSkipDelay(delay);
+    if (d <= 3) return SAFE_AD_SPEED_RATE;
+    if (d <= 6) return 2.5;
+    if (d <= 10) return 2;
+    if (d <= 20) return 1.5;
+    return 1.25;
+  }
+  function getRiskAdaptiveSpeed(delay) {
+    const d = normalizeSkipDelay(delay);
+    if (d <= 1) return 8;
+    if (d <= 2) return 6;
+    if (d <= 3) return 5;
+    if (d <= 5) return 4;
+    if (d <= 10) return 3;
+    if (d <= 20) return 2;
+    return 1.5;
+  }
+  function formatSpeed(value) {
+    const n = Number(value);
+    const safe = Number.isFinite(n) ? n : SAFE_AD_SPEED_RATE;
+    return safe.toFixed(safe % 1 === 0 ? 0 : 1) + "x";
+  }
+  const PLAYER_DEFAULTS_PROFILE_VERSION = 2;
+  const PLAYER_DEFAULTS_PROFILE = {
+    playerSpeedEnabled: true,
+    playerSpeedStep: 0.02,
+    playerSpeedWheel: true,
+    autoplayBlockBackground: true,
+    autoplayAllowPlaylists: true,
+    miniplayerEnabled: true,
+    miniplayerSize: "480x270",
+    miniplayerPosition: "top-left",
+    playerPopupSize: "640x360",
+    toolbarEnabled: true,
+    toolbarPosition: "below",
+    toolbarCenter: true,
+    toolbarLoop: true,
+    toolbarSpeed: true,
+    toolbarPopup: true,
+    toolbarPip: true,
+    toolbarScreenshot: true,
+    toolbarTheater: true,
+    toolbarSettings: true,
+    toolbarVolumeBoost: true,
+    toolbarFilters: true,
+    appearanceLayoutRowsEnabled: false,
+    appearanceSortNewestComments: false,
+    appearanceAutoApplyFilters: false,
+    shortcutEnabled: false,
+    cinemaUseYouTubeTheater: false,
+    ultrawideEnabled: false,
+    toolbarAlwaysVisible: true,
+    themeEngine: "youtube",
+    shortcutSkipAd: "Alt+Shift+S",
+    shortcutSpeedDown: "Alt+Shift+,",
+    shortcutSpeedUp: "Alt+Shift+.",
+    shortcutVolumeDown: "Alt+Shift+ArrowDown",
+    shortcutVolumeUp: "Alt+Shift+ArrowUp",
+    shortcutCinema: "Alt+Shift+C",
+    shortcutScreenshot: "Alt+Shift+P",
+    shortcutPopup: "Alt+Shift+O",
+    shortcutLoop: "Alt+Shift+L"
+  };
+  const DEFAULT_SETTINGS = {
     enabled: true,
+    adSkipperEnabled: true,
     skipDelay: 1,
     muteAds: true,
     showOverlay: true,
@@ -11,6 +91,7 @@
     totalAdsSkipped: 0,
     adsSkippedToday: 0,
     todayDate: null,
+    playerDefaultsProfileVersion: 0,
     whitelist: [],
     listMode: "whitelist",
     showToast: false,
@@ -19,16 +100,254 @@
     pipEnabled: false,
     adSpeedRate: 3,
     customSpeedEnabled: false,
-    adaptiveSpeedEnabled: false
+    adaptiveSpeedEnabled: false,
+    playerSpeedEnabled: true,
+    playerSpeedDefault: 1,
+    playerSpeedStep: 0.02,
+    playerSpeedWheel: true,
+    playerSpeedWheelRightButton: false,
+    playerVolumeEnabled: false,
+    playerVolumeDefault: 50,
+    playerVolumeStep: 5,
+    playerVolumeWheel: false,
+    playerVolumeWheelRightButton: false,
+    volumeBoostEnabled: false,
+    volumeBoostLevel: 2,
+    volumeBoostAuto: false,
+    playerWheelInvert: false,
+    autoplayBlockBackground: true,
+    autoplayBlockForeground: false,
+    autoplayAllowPlaylists: true,
+    pauseBackgroundTabs: false,
+    qualityEnabled: false,
+    qualityVideo: "hd720",
+    qualityPlaylist: "hd720",
+    qualityFullscreenEnabled: false,
+    qualityFullscreenVideo: "hd1080",
+    qualityFullscreenPlaylist: "hd1080",
+    qualityPopup: "medium",
+    qualityFullscreenPopup: "hd1080",
+    qualityRestoreOnExit: true,
+    appearanceConvertShorts: false,
+    appearanceHideShorts: false,
+    appearanceHideRelated: false,
+    appearanceHideChat: false,
+    appearanceHideComments: false,
+    appearanceHideEndcards: false,
+    appearanceLayoutRowsEnabled: false,
+    appearanceSortNewestComments: false,
+    appearanceAutoApplyFilters: false,
+    miniplayerEnabled: true,
+    miniplayerSize: "480x270",
+    miniplayerPosition: "top-left",
+    playerPopupSize: "640x360",
+    toolbarEnabled: true,
+    toolbarPosition: "below",
+    toolbarCenter: true,
+    toolbarLoop: true,
+    toolbarSpeed: true,
+    toolbarPopup: true,
+    toolbarPip: true,
+    toolbarScreenshot: true,
+    toolbarTheater: true,
+    toolbarSettings: true,
+    toolbarVolumeBoost: true,
+    toolbarFilters: true,
+    playerSpeedButtonsEnabled: true,
+    playerPopupEnabled: true,
+    shortcutSkipAd: "Alt+Shift+S",
+    shortcutSpeedDown: "Alt+Shift+,",
+    shortcutSpeedUp: "Alt+Shift+.",
+    shortcutVolumeDown: "Alt+Shift+ArrowDown",
+    shortcutVolumeUp: "Alt+Shift+ArrowUp",
+    shortcutCinema: "Alt+Shift+C",
+    shortcutScreenshot: "Alt+Shift+P",
+    shortcutPopup: "Alt+Shift+O",
+    shortcutLoop: "Alt+Shift+L",
+    autoplayDisableAll: false,
+    autoplayStopPreload: false,
+    autoplayIgnorePopup: true,
+    layoutVideosPerRow: 4,
+    layoutChannelVideosPerRow: 4,
+    layoutShortsPerRow: 8,
+    layoutChannelShortsPerRow: 5,
+    layoutPostsPerRow: 4,
+    appearanceAutoTheater: false,
+    appearanceAutoExpandPlayer: false,
+    appearanceUseViewportPlayer: false,
+    cinemaColor: "#000000",
+    cinemaOpacity: 85,
+    cinemaDefault: false,
+    cinemaAutoResize: false,
+    cinemaUseYouTubeTheater: false,
+    ultrawideEnabled: false,
+    ultrawideFit: "smart-crop",
+    toolbarInsidePlayer: false,
+    toolbarAlwaysVisible: true,
+    themeEngine: "youtube",
+    themeVariant: "red",
+    themeDeepDarkCustom: false,
+    themeCustomAccent: "#ff334b",
+    themeCustomBackground: "#0f0f0f",
+    themeCustomSurface: "#17191f",
+    themeCustomSurfaceRaised: "#20232b",
+    themeCustomText: "#f4f5f7",
+    themeCustomMuted: "#a9adb8",
+    themeCustomBorder: "#343741",
+    themeCustomCss: "body {\n  --yt-spec-base-background: #0f0f0f;\n}",
+    codecForceStandardFps: false,
+    codecForceAvc: false,
+    videoFiltersEnabled: false,
+    videoFilterBrightness: 100,
+    videoFilterContrast: 100,
+    videoFilterSaturate: 100,
+    videoFilterGrayscale: 0,
+    videoFilterSepia: 0
   };
-  const SAFE_AD_SPEED_RATE = 3;
-  const MIN_AD_SPEED_RATE = 1;
-  const MAX_AD_SPEED_RATE = 8;
-  const INSTANT_AD_SPEED_RATE = 16;
+  const SETTINGS_EXPORT_KEYS = Object.keys(DEFAULT_SETTINGS);
+  function normalizeSettings(raw = {}) {
+    const normalized = { ...DEFAULT_SETTINGS };
+    for (const key of SETTINGS_EXPORT_KEYS) {
+      if (!(key in raw)) continue;
+      const value = raw[key];
+      const fallback = normalized[key];
+      if (Array.isArray(fallback)) {
+        if (Array.isArray(value)) normalized[key] = value.filter((item) => typeof item === "string");
+        continue;
+      }
+      if (fallback === null) {
+        if (value === null || typeof value === "string") normalized[key] = value;
+        continue;
+      }
+      if (typeof fallback === "number") {
+        if (typeof value === "number" && Number.isFinite(value)) normalized[key] = value;
+        continue;
+      }
+      if (typeof value === typeof fallback) normalized[key] = value;
+    }
+    return normalized;
+  }
+  function migrateSettings(raw = {}) {
+    const settings = normalizeSettings(raw);
+    if ((Number(settings.playerDefaultsProfileVersion) || 0) < PLAYER_DEFAULTS_PROFILE_VERSION) {
+      Object.assign(settings, PLAYER_DEFAULTS_PROFILE, {
+        playerDefaultsProfileVersion: PLAYER_DEFAULTS_PROFILE_VERSION
+      });
+    }
+    return settings;
+  }
+  const SHORTCUT_MODIFIERS = ["Ctrl", "Alt", "Shift", "Meta"];
+  function isShortcutSettingKey(key) {
+    return /^shortcut[A-Z]/.test(key);
+  }
+  function normalizeShortcutToken(token) {
+    const raw = String(token || "");
+    if (raw === " ") return "Space";
+    const text = raw.trim();
+    if (!text) return "";
+    const lower = text.toLowerCase();
+    if (lower === "control" || lower === "ctrl") return "Ctrl";
+    if (lower === "option" || lower === "alt") return "Alt";
+    if (lower === "shift") return "Shift";
+    if (lower === "cmd" || lower === "command" || lower === "meta") return "Meta";
+    if (lower === "escape" || lower === "esc") return "Esc";
+    if (lower === "space" || lower === "spacebar") return "Space";
+    if (lower.length === 1) return lower.toUpperCase();
+    return text.charAt(0).toUpperCase() + text.slice(1);
+  }
+  function normalizeShortcutCombo(combo) {
+    const parts = String(combo || "").split("+").map(normalizeShortcutToken).filter(Boolean);
+    const modifiers = SHORTCUT_MODIFIERS.filter((modifier) => parts.includes(modifier));
+    const key = parts.find((part) => !SHORTCUT_MODIFIERS.includes(part)) || "";
+    return [...modifiers, key].filter(Boolean).join("+");
+  }
+  function eventToShortcutCombo(event) {
+    const key = normalizeShortcutToken(event.key);
+    if (!key || SHORTCUT_MODIFIERS.includes(key)) return "";
+    return [
+      event.ctrlKey ? "Ctrl" : "",
+      event.altKey ? "Alt" : "",
+      event.shiftKey ? "Shift" : "",
+      event.metaKey ? "Meta" : "",
+      key
+    ].filter(Boolean).join("+");
+  }
+  const QUALITY_ORDER = ["tiny", "small", "medium", "large", "hd720", "hd1080", "hd1440", "hd2160", "hd2880", "highres"];
+  const QUALITY_ALLOWED = ["auto", ...QUALITY_ORDER];
+  function normalizeQualityLevel(level, fallback = "hd720") {
+    const value = String(level || "");
+    return QUALITY_ALLOWED.includes(value) ? value : fallback;
+  }
+  const SETTINGS_PRESETS = {
+    safe: {
+      enabled: true,
+      adSkipperEnabled: true,
+      aggressiveSkip: false,
+      instantSkip: false,
+      skipDelay: 5,
+      muteAds: true,
+      showOverlay: true,
+      customSpeedEnabled: false,
+      adaptiveSpeedEnabled: false,
+      adSpeedRate: 3
+    },
+    balanced: {
+      enabled: true,
+      adSkipperEnabled: true,
+      aggressiveSkip: true,
+      instantSkip: false,
+      skipDelay: 1,
+      muteAds: true,
+      showOverlay: true,
+      customSpeedEnabled: false,
+      adaptiveSpeedEnabled: false,
+      adSpeedRate: 3
+    },
+    turbo: {
+      enabled: true,
+      adSkipperEnabled: true,
+      aggressiveSkip: true,
+      instantSkip: false,
+      skipDelay: 1,
+      muteAds: true,
+      showOverlay: true,
+      customSpeedEnabled: true,
+      adaptiveSpeedEnabled: true,
+      adSpeedRate: 6
+    },
+    focus: {
+      appearanceHideShorts: true,
+      appearanceHideRelated: true,
+      appearanceHideChat: true,
+      appearanceHideComments: true,
+      appearanceHideEndcards: true,
+      appearanceAutoTheater: true,
+      cinemaDefault: true,
+      themeEngine: "tube-shield",
+      themeVariant: "deep-dark"
+    }
+  };
+  function getSettingsPreset(id) {
+    if (!(id in SETTINGS_PRESETS)) return null;
+    return { ...SETTINGS_PRESETS[id] };
+  }
+  const THEME_PRESETS = {
+    graphite: { themeEngine: "tube-shield", themeVariant: "red" },
+    "deep-dark": { themeEngine: "deepdark", themeVariant: "deep-dark" },
+    slate: { themeEngine: "tube-shield", themeVariant: "blue" },
+    warm: { themeEngine: "tube-shield", themeVariant: "warm" }
+  };
+  function getThemePreset(id) {
+    if (!(id in THEME_PRESETS)) return null;
+    return { ...THEME_PRESETS[id] };
+  }
+  const DEFAULT = DEFAULT_SETTINGS;
+  const DEFAULT_VALUES = DEFAULT_SETTINGS;
   function byId(id) {
     return document.getElementById(id);
   }
   const optEnabled = byId("opt-enabled");
+  const optAdSkipperEnabled = byId("opt-ad-skipper-enabled");
   const optMute = byId("opt-mute");
   const optOverlay = byId("opt-overlay");
   const optAggressive = byId("opt-aggressive");
@@ -36,12 +355,20 @@
   const timingCard = byId("timing-card");
   const delayControl = byId("delay-control");
   const themeToggle = byId("theme-toggle");
+  const settingsSearch = byId("settings-search");
+  const settingsSearchClear = byId("settings-search-clear");
+  const searchEmpty = byId("search-empty");
+  const presetFeedback = byId("preset-feedback");
+  const presetButtons = Array.from(document.querySelectorAll("[data-preset]"));
+  const themePresetButtons = Array.from(document.querySelectorAll("[data-theme-preset]"));
   const delayValue = byId("opt-delay-value");
   const delayHint = byId("opt-delay-hint");
   const statTotal = byId("stat-total");
   const statToday = byId("stat-today");
   const statWarnings = byId("stat-warnings");
   const stealthBadge = byId("stealth-mode-badge");
+  const overviewStatusTitle = byId("overview-status-title");
+  const overviewStatusLabel = byId("overview-status-label");
   const warningBox = byId("warning-box");
   const warningText = byId("warning-text");
   const versionTag = byId("version-tag");
@@ -65,11 +392,102 @@
   const adSpeedValue = byId("opt-ad-speed-value");
   const adSpeedBetaHint = byId("ad-speed-beta-hint");
   const f5Banner = byId("f5-banner");
+  const plannedControls = Array.from(document.querySelectorAll("[data-setting]"));
+  const optPlayerSpeedEnabled = byId("opt-player-speed-enabled");
+  const optPlayerSpeedDefault = byId("opt-player-speed-default");
+  const optPlayerSpeedStep = byId("opt-player-speed-step");
+  const optPlayerSpeedWheel = byId("opt-player-speed-wheel");
+  const optPlayerSpeedRightButton = byId("opt-player-speed-right-button");
+  const optPlayerVolumeEnabled = byId("opt-player-volume-enabled");
+  const optPlayerVolumeDefault = byId("opt-player-volume-default");
+  const optPlayerVolumeStep = byId("opt-player-volume-step");
+  const optPlayerVolumeWheel = byId("opt-player-volume-wheel");
+  const optPlayerVolumeRightButton = byId("opt-player-volume-right-button");
+  const optPlayerWheelInvert = byId("opt-player-wheel-invert");
+  const optAutoplayBackground = byId("opt-autoplay-background");
+  const optAutoplayForeground = byId("opt-autoplay-foreground");
+  const optAutoplayAllowPlaylists = byId("opt-autoplay-allow-playlists");
+  const optPauseBackgroundTabs = byId("opt-pause-background-tabs");
+  const optQualityEnabled = byId("opt-quality-enabled");
+  const optQualityVideo = byId("opt-quality-video");
+  const optQualityPlaylist = byId("opt-quality-playlist");
+  const optQualityFullscreenEnabled = byId("opt-quality-fullscreen-enabled");
+  const optQualityFullscreenVideo = byId("opt-quality-fullscreen-video");
+  const optQualityFullscreenPlaylist = byId("opt-quality-fullscreen-playlist");
+  const optQualityRestore = byId("opt-quality-restore");
+  const optAppearanceConvertShorts = byId("opt-appearance-convert-shorts");
+  const optAppearanceHideShorts = byId("opt-appearance-hide-shorts");
+  const optAppearanceHideRelated = byId("opt-appearance-hide-related");
+  const optAppearanceHideChat = byId("opt-appearance-hide-chat");
+  const optAppearanceHideComments = byId("opt-appearance-hide-comments");
+  const optAppearanceHideEndcards = byId("opt-appearance-hide-endcards");
+  const optMiniplayerEnabled = byId("opt-miniplayer-enabled");
+  const optMiniplayerSize = byId("opt-miniplayer-size");
+  const optMiniplayerPosition = byId("opt-miniplayer-position");
+  const optPlayerPopupSize = byId("opt-player-popup-size");
+  const optToolbarEnabled = byId("opt-toolbar-enabled");
+  const optToolbarPosition = byId("opt-toolbar-position");
+  const optToolbarCenter = byId("opt-toolbar-center");
+  const optToolbarLoop = byId("opt-toolbar-loop");
+  const optToolbarSpeed = byId("opt-toolbar-speed");
+  const optToolbarPopup = byId("opt-toolbar-popup");
+  const optToolbarPip = byId("opt-toolbar-pip");
+  const optToolbarScreenshot = byId("opt-toolbar-screenshot");
+  const optToolbarSettings = byId("opt-toolbar-settings");
+  const optToolbarVolumeBoost = document.querySelector('[data-setting="toolbarVolumeBoost"]');
   let currentWhitelist = [];
   let initialState = null;
-  chrome.storage.local.get(DEFAULT, (s) => {
+  let presetFeedbackTimer = null;
+  const PRESET_LABELS = {
+    safe: "Perfil Seguro aplicado.",
+    balanced: "Perfil Equilibrado aplicado.",
+    turbo: "Perfil Turbo aplicado. Use o modo experimental com atenção.",
+    focus: "Perfil Foco aplicado."
+  };
+  function normalizeSearchText(value) {
+    return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+  }
+  function applySettingsSearch(value) {
+    const query = normalizeSearchText(value);
+    settingsSearch.parentElement?.classList.toggle("has-value", !!query);
+    let visibleSections = 0;
+    document.querySelectorAll(".panel-section").forEach((section) => {
+      const heading = section.querySelector(".section-heading");
+      const sectionMatches = !query || normalizeSearchText(heading?.textContent).includes(query);
+      const cards = Array.from(section.querySelectorAll("article.card, article.overview-card, .preset-panel"));
+      let visibleCards = 0;
+      cards.forEach((card) => {
+        const visible2 = sectionMatches || normalizeSearchText(card.textContent).includes(query);
+        card.classList.toggle("is-search-hidden", !visible2);
+        if (visible2) visibleCards += 1;
+      });
+      const visible = !query || sectionMatches || visibleCards > 0;
+      section.classList.toggle("is-search-hidden", !visible);
+      if (visible) visibleSections += 1;
+    });
+    searchEmpty.hidden = !query || visibleSections > 0;
+  }
+  function announcePreset(id, button) {
+    presetButtons.forEach((item) => item.classList.toggle("is-applied", item === button));
+    presetFeedback.textContent = PRESET_LABELS[id];
+    if (presetFeedbackTimer) window.clearTimeout(presetFeedbackTimer);
+    presetFeedbackTimer = window.setTimeout(() => {
+      presetFeedback.textContent = "";
+      button.classList.remove("is-applied");
+    }, 3500);
+  }
+  chrome.storage.local.get(DEFAULT_VALUES, (s) => {
+    const storedProfileVersion = Number(s.playerDefaultsProfileVersion) || 0;
+    s = migrateSettings(s);
+    if (storedProfileVersion < PLAYER_DEFAULTS_PROFILE_VERSION) {
+      chrome.storage.local.set({
+        ...PLAYER_DEFAULTS_PROFILE,
+        playerDefaultsProfileVersion: PLAYER_DEFAULTS_PROFILE_VERSION
+      });
+    }
     initialState = JSON.parse(JSON.stringify(s));
     optEnabled.checked = s.enabled;
+    optAdSkipperEnabled.checked = s.adSkipperEnabled !== false;
     optMute.checked = s.muteAds;
     optOverlay.checked = s.showOverlay;
     optAggressive.checked = s.aggressiveSkip;
@@ -82,6 +500,47 @@
     optCustomSpeed.checked = !!s.customSpeedEnabled;
     optAdaptiveSpeed.checked = !!s.adaptiveSpeedEnabled;
     optListMode.checked = s.listMode === "blacklist";
+    optPlayerSpeedEnabled.checked = !!s.playerSpeedEnabled;
+    optPlayerSpeedDefault.value = formatControlNumber(normalizePlayerSpeed(s.playerSpeedDefault, DEFAULT.playerSpeedDefault));
+    optPlayerSpeedStep.value = formatControlNumber(normalizePlayerSpeedStep(s.playerSpeedStep));
+    optPlayerSpeedWheel.checked = !!s.playerSpeedWheel;
+    optPlayerSpeedRightButton.checked = !!s.playerSpeedWheelRightButton;
+    optPlayerVolumeEnabled.checked = !!s.playerVolumeEnabled;
+    optPlayerVolumeDefault.value = String(normalizeVolumePercent(s.playerVolumeDefault));
+    optPlayerVolumeStep.value = String(normalizeVolumeStep(s.playerVolumeStep));
+    optPlayerVolumeWheel.checked = !!s.playerVolumeWheel;
+    optPlayerVolumeRightButton.checked = !!s.playerVolumeWheelRightButton;
+    optPlayerWheelInvert.checked = !!s.playerWheelInvert;
+    optAutoplayBackground.checked = !!s.autoplayBlockBackground;
+    optAutoplayForeground.checked = !!s.autoplayBlockForeground;
+    optAutoplayAllowPlaylists.checked = s.autoplayAllowPlaylists !== false;
+    optPauseBackgroundTabs.checked = !!s.pauseBackgroundTabs;
+    optQualityEnabled.checked = !!s.qualityEnabled;
+    optQualityVideo.value = normalizeQuality(s.qualityVideo);
+    optQualityPlaylist.value = normalizeQuality(s.qualityPlaylist);
+    optQualityFullscreenEnabled.checked = !!s.qualityFullscreenEnabled;
+    optQualityFullscreenVideo.value = normalizeQuality(s.qualityFullscreenVideo);
+    optQualityFullscreenPlaylist.value = normalizeQuality(s.qualityFullscreenPlaylist);
+    optQualityRestore.checked = s.qualityRestoreOnExit !== false;
+    optAppearanceConvertShorts.checked = !!s.appearanceConvertShorts;
+    optAppearanceHideShorts.checked = !!s.appearanceHideShorts;
+    optAppearanceHideRelated.checked = !!s.appearanceHideRelated;
+    optAppearanceHideChat.checked = !!s.appearanceHideChat;
+    optAppearanceHideComments.checked = !!s.appearanceHideComments;
+    optAppearanceHideEndcards.checked = !!s.appearanceHideEndcards;
+    optMiniplayerEnabled.checked = s.miniplayerEnabled !== false;
+    optMiniplayerSize.value = normalizeMiniplayerSize(s.miniplayerSize);
+    optMiniplayerPosition.value = normalizeMiniplayerPosition(s.miniplayerPosition);
+    optPlayerPopupSize.value = normalizePlayerPopupSize(s.playerPopupSize);
+    optToolbarEnabled.checked = s.toolbarEnabled !== false;
+    optToolbarPosition.value = normalizeToolbarPosition(s.toolbarPosition);
+    optToolbarCenter.checked = s.toolbarCenter !== false;
+    optToolbarLoop.checked = s.toolbarLoop !== false;
+    optToolbarSpeed.checked = s.toolbarSpeed !== false;
+    optToolbarPopup.checked = s.toolbarPopup !== false;
+    optToolbarPip.checked = s.toolbarPip !== false;
+    optToolbarScreenshot.checked = s.toolbarScreenshot !== false;
+    optToolbarSettings.checked = s.toolbarSettings !== false;
     if (!s.aggressiveSkip && s.instantSkip) {
       chrome.storage.local.set({ instantSkip: false });
     }
@@ -92,6 +551,13 @@
     renderStateIcons(s.enabled, s.aggressiveSkip);
     renderListMode(s.listMode || "whitelist");
     renderTimingControls();
+    renderPlayerControlLocks();
+    renderAutoplayControlLocks();
+    renderQualityControlLocks();
+    renderMiniplayerControlLocks();
+    renderToolbarControlLocks();
+    loadPlannedSettings();
+    bindPlannedSettingEvents();
     const now = /* @__PURE__ */ new Date();
     const today = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0");
     const todayCount = s.todayDate === today ? s.adsSkippedToday || 0 : 0;
@@ -103,7 +569,7 @@
   try {
     versionTag.textContent = "v" + chrome.runtime.getManifest().version;
   } catch (err) {
-    console.warn("[YouTube Ad Skipper] Failed to read manifest version:", err);
+    console.warn("[YouTube Extension] Failed to read manifest version:", err);
     versionTag.textContent = "v-";
   }
   optEnabled.addEventListener("change", () => {
@@ -111,11 +577,50 @@
     chrome.storage.local.set({ enabled: on });
     renderStatus(on);
   });
+  optAdSkipperEnabled.addEventListener("change", () => {
+    chrome.storage.local.set({ adSkipperEnabled: optAdSkipperEnabled.checked });
+  });
   themeToggle.addEventListener("click", () => {
     const isLight = document.body.classList.contains("theme-light");
     const theme = isLight ? "dark" : "light";
     chrome.storage.local.set({ theme });
     applyTheme(theme);
+  });
+  settingsSearch.addEventListener("input", () => applySettingsSearch(settingsSearch.value));
+  settingsSearchClear.addEventListener("click", () => {
+    settingsSearch.value = "";
+    applySettingsSearch("");
+    settingsSearch.focus();
+  });
+  document.addEventListener("keydown", (event) => {
+    const target = event.target;
+    const editing = target?.matches("input, textarea, select") || target?.isContentEditable;
+    if (event.key !== "/" || editing || event.ctrlKey || event.metaKey || event.altKey) return;
+    event.preventDefault();
+    settingsSearch.focus();
+  });
+  presetButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      const id = button.dataset.preset;
+      const preset = getSettingsPreset(id);
+      if (!preset) return;
+      button.disabled = true;
+      chrome.storage.local.set(preset, () => {
+        button.disabled = false;
+        announcePreset(id, button);
+      });
+    });
+  });
+  themePresetButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      const id = button.dataset.themePreset;
+      const preset = getThemePreset(id);
+      if (!preset) return;
+      chrome.storage.local.set(preset, () => {
+        themePresetButtons.forEach((item) => item.classList.toggle("is-applied", item === button));
+        window.setTimeout(() => button.classList.remove("is-applied"), 1800);
+      });
+    });
   });
   function applyTheme(theme) {
     if (theme === "light") {
@@ -177,9 +682,160 @@
     chrome.storage.local.set({ adSpeedRate: value });
     renderTimingControls();
   });
+  optPlayerSpeedEnabled.addEventListener("change", () => {
+    chrome.storage.local.set({ playerSpeedEnabled: optPlayerSpeedEnabled.checked });
+    renderPlayerControlLocks();
+  });
+  optPlayerSpeedDefault.addEventListener("input", () => {
+    const value = normalizePlayerSpeed(optPlayerSpeedDefault.value, DEFAULT.playerSpeedDefault);
+    chrome.storage.local.set({ playerSpeedDefault: value });
+  });
+  optPlayerSpeedDefault.addEventListener("change", () => {
+    optPlayerSpeedDefault.value = formatControlNumber(normalizePlayerSpeed(optPlayerSpeedDefault.value, DEFAULT.playerSpeedDefault));
+  });
+  optPlayerSpeedStep.addEventListener("input", () => {
+    const value = normalizePlayerSpeedStep(optPlayerSpeedStep.value);
+    chrome.storage.local.set({ playerSpeedStep: value });
+  });
+  optPlayerSpeedStep.addEventListener("change", () => {
+    optPlayerSpeedStep.value = formatControlNumber(normalizePlayerSpeedStep(optPlayerSpeedStep.value));
+  });
+  optPlayerSpeedWheel.addEventListener("change", () => {
+    chrome.storage.local.set({ playerSpeedWheel: optPlayerSpeedWheel.checked });
+    renderPlayerControlLocks();
+  });
+  optPlayerSpeedRightButton.addEventListener("change", () => {
+    chrome.storage.local.set({ playerSpeedWheelRightButton: optPlayerSpeedRightButton.checked });
+  });
+  optPlayerVolumeEnabled.addEventListener("change", () => {
+    chrome.storage.local.set({ playerVolumeEnabled: optPlayerVolumeEnabled.checked });
+    renderPlayerControlLocks();
+  });
+  optPlayerVolumeDefault.addEventListener("input", () => {
+    const value = normalizeVolumePercent(optPlayerVolumeDefault.value);
+    chrome.storage.local.set({ playerVolumeDefault: value });
+  });
+  optPlayerVolumeDefault.addEventListener("change", () => {
+    optPlayerVolumeDefault.value = String(normalizeVolumePercent(optPlayerVolumeDefault.value));
+  });
+  optPlayerVolumeStep.addEventListener("input", () => {
+    const value = normalizeVolumeStep(optPlayerVolumeStep.value);
+    chrome.storage.local.set({ playerVolumeStep: value });
+  });
+  optPlayerVolumeStep.addEventListener("change", () => {
+    optPlayerVolumeStep.value = String(normalizeVolumeStep(optPlayerVolumeStep.value));
+  });
+  optPlayerVolumeWheel.addEventListener("change", () => {
+    chrome.storage.local.set({ playerVolumeWheel: optPlayerVolumeWheel.checked });
+    renderPlayerControlLocks();
+  });
+  optPlayerVolumeRightButton.addEventListener("change", () => {
+    chrome.storage.local.set({ playerVolumeWheelRightButton: optPlayerVolumeRightButton.checked });
+  });
+  optPlayerWheelInvert.addEventListener("change", () => {
+    chrome.storage.local.set({ playerWheelInvert: optPlayerWheelInvert.checked });
+  });
+  optAutoplayBackground.addEventListener("change", () => {
+    chrome.storage.local.set({ autoplayBlockBackground: optAutoplayBackground.checked });
+    renderAutoplayControlLocks();
+  });
+  optAutoplayForeground.addEventListener("change", () => {
+    chrome.storage.local.set({ autoplayBlockForeground: optAutoplayForeground.checked });
+    renderAutoplayControlLocks();
+  });
+  optAutoplayAllowPlaylists.addEventListener("change", () => {
+    chrome.storage.local.set({ autoplayAllowPlaylists: optAutoplayAllowPlaylists.checked });
+  });
+  optPauseBackgroundTabs.addEventListener("change", () => {
+    chrome.storage.local.set({ pauseBackgroundTabs: optPauseBackgroundTabs.checked });
+  });
+  optQualityEnabled.addEventListener("change", () => {
+    chrome.storage.local.set({ qualityEnabled: optQualityEnabled.checked });
+    renderQualityControlLocks();
+  });
+  optQualityVideo.addEventListener("change", () => {
+    chrome.storage.local.set({ qualityVideo: normalizeQuality(optQualityVideo.value) });
+  });
+  optQualityPlaylist.addEventListener("change", () => {
+    chrome.storage.local.set({ qualityPlaylist: normalizeQuality(optQualityPlaylist.value) });
+  });
+  optQualityFullscreenEnabled.addEventListener("change", () => {
+    chrome.storage.local.set({ qualityFullscreenEnabled: optQualityFullscreenEnabled.checked });
+    renderQualityControlLocks();
+  });
+  optQualityFullscreenVideo.addEventListener("change", () => {
+    chrome.storage.local.set({ qualityFullscreenVideo: normalizeQuality(optQualityFullscreenVideo.value) });
+  });
+  optQualityFullscreenPlaylist.addEventListener("change", () => {
+    chrome.storage.local.set({ qualityFullscreenPlaylist: normalizeQuality(optQualityFullscreenPlaylist.value) });
+  });
+  optQualityRestore.addEventListener("change", () => {
+    chrome.storage.local.set({ qualityRestoreOnExit: optQualityRestore.checked });
+  });
+  optAppearanceConvertShorts.addEventListener("change", () => {
+    chrome.storage.local.set({ appearanceConvertShorts: optAppearanceConvertShorts.checked });
+  });
+  optAppearanceHideShorts.addEventListener("change", () => {
+    chrome.storage.local.set({ appearanceHideShorts: optAppearanceHideShorts.checked });
+  });
+  optAppearanceHideRelated.addEventListener("change", () => {
+    chrome.storage.local.set({ appearanceHideRelated: optAppearanceHideRelated.checked });
+  });
+  optAppearanceHideChat.addEventListener("change", () => {
+    chrome.storage.local.set({ appearanceHideChat: optAppearanceHideChat.checked });
+  });
+  optAppearanceHideComments.addEventListener("change", () => {
+    const updates = {
+      appearanceHideComments: optAppearanceHideComments.checked
+    };
+    if (optAppearanceHideComments.checked) {
+      updates.appearanceSortNewestComments = false;
+      const sortControl = document.querySelector('[data-setting="appearanceSortNewestComments"]');
+      if (sortControl) sortControl.checked = false;
+    }
+    chrome.storage.local.set(updates);
+  });
+  optAppearanceHideEndcards.addEventListener("change", () => {
+    chrome.storage.local.set({ appearanceHideEndcards: optAppearanceHideEndcards.checked });
+  });
+  optMiniplayerEnabled.addEventListener("change", () => {
+    chrome.storage.local.set({ miniplayerEnabled: optMiniplayerEnabled.checked });
+    renderMiniplayerControlLocks();
+  });
+  optMiniplayerSize.addEventListener("change", () => {
+    chrome.storage.local.set({ miniplayerSize: normalizeMiniplayerSize(optMiniplayerSize.value) });
+  });
+  optMiniplayerPosition.addEventListener("change", () => {
+    chrome.storage.local.set({ miniplayerPosition: normalizeMiniplayerPosition(optMiniplayerPosition.value) });
+  });
+  optPlayerPopupSize.addEventListener("change", () => {
+    chrome.storage.local.set({ playerPopupSize: normalizePlayerPopupSize(optPlayerPopupSize.value) });
+  });
+  optToolbarEnabled.addEventListener("change", () => {
+    chrome.storage.local.set({ toolbarEnabled: optToolbarEnabled.checked });
+    renderToolbarControlLocks();
+  });
+  optToolbarPosition.addEventListener("change", () => {
+    chrome.storage.local.set({ toolbarPosition: normalizeToolbarPosition(optToolbarPosition.value) });
+  });
+  optToolbarCenter.addEventListener("change", () => {
+    chrome.storage.local.set({ toolbarCenter: optToolbarCenter.checked });
+  });
+  [
+    [optToolbarLoop, "toolbarLoop"],
+    [optToolbarSpeed, "toolbarSpeed"],
+    [optToolbarPopup, "toolbarPopup"],
+    [optToolbarPip, "toolbarPip"],
+    [optToolbarScreenshot, "toolbarScreenshot"],
+    [optToolbarSettings, "toolbarSettings"]
+  ].forEach(([input, key]) => {
+    input.addEventListener("change", () => {
+      chrome.storage.local.set({ [key]: input.checked });
+    });
+  });
   btnReset.addEventListener("click", () => {
     if (confirm("Isso vai resetar todas as configurações e zerar o contador de anúncios e avisos. Continuar?")) {
-      chrome.storage.local.set(DEFAULT, () => {
+      chrome.storage.local.set(DEFAULT_VALUES, () => {
         location.reload();
       });
     }
@@ -238,6 +894,201 @@
       el.style.borderColor = orig;
     }, 600);
   }
+  function getPlannedKey(control) {
+    return control.dataset.setting || "";
+  }
+  function setPlannedControlValue(control, value) {
+    if (control instanceof HTMLInputElement && control.type === "checkbox") {
+      control.checked = value !== false;
+      return;
+    }
+    control.value = String(value ?? "");
+  }
+  function readPlannedControlValue(control) {
+    const key = getPlannedKey(control);
+    if (control instanceof HTMLInputElement && isShortcutSettingKey(key)) {
+      return normalizeShortcutCombo(control.value);
+    }
+    if (control instanceof HTMLInputElement && control.type === "checkbox") {
+      return control.checked;
+    }
+    if (control instanceof HTMLInputElement && control.type === "number") {
+      const value = Number(control.value);
+      return Number.isFinite(value) ? value : DEFAULT_VALUES[key] || 0;
+    }
+    return control.value;
+  }
+  function loadPlannedSettings() {
+    chrome.storage.local.get(DEFAULT_VALUES, (settings) => {
+      plannedControls.forEach((control) => {
+        const key = getPlannedKey(control);
+        if (!key) return;
+        setPlannedControlValue(control, settings[key] ?? DEFAULT_VALUES[key] ?? "");
+      });
+      updateCinemaPreview();
+    });
+  }
+  function persistPlannedControls() {
+    const values = {};
+    plannedControls.forEach((control) => {
+      const key = getPlannedKey(control);
+      if (!key) return;
+      values[key] = readPlannedControlValue(control);
+    });
+    chrome.storage.local.set(values);
+    return values;
+  }
+  function bindPlannedSettingEvents() {
+    plannedControls.forEach((control) => {
+      if (control.dataset.bound === "true") return;
+      control.dataset.bound = "true";
+      const key = getPlannedKey(control);
+      const persist = () => {
+        if (!key) return;
+        const value = readPlannedControlValue(control);
+        if (control instanceof HTMLInputElement && isShortcutSettingKey(key)) {
+          control.value = String(value);
+        }
+        chrome.storage.local.set({ [key]: value });
+        if (key.startsWith("cinema")) updateCinemaPreview();
+      };
+      if (control instanceof HTMLInputElement && isShortcutSettingKey(key)) {
+        control.placeholder = "Pressione as teclas";
+        control.addEventListener("keydown", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          if (event.key === "Escape") {
+            control.value = "";
+            chrome.storage.local.set({ [key]: "" });
+            flashBorder(control, "var(--orange)");
+            return;
+          }
+          if (event.key === "Backspace" || event.key === "Delete") {
+            const fallback = DEFAULT_VALUES[key] || "";
+            control.value = String(fallback);
+            chrome.storage.local.set({ [key]: fallback });
+            flashBorder(control, "var(--orange)");
+            return;
+          }
+          const combo = eventToShortcutCombo(event);
+          if (!combo) return;
+          control.value = combo;
+          chrome.storage.local.set({ [key]: combo });
+          flashBorder(control, "var(--accent)");
+        });
+      }
+      control.addEventListener("change", persist);
+      if (!(control instanceof HTMLInputElement) || control.type !== "checkbox") {
+        control.addEventListener("input", persist);
+      }
+    });
+    document.querySelectorAll("[data-setting-action]").forEach((button) => {
+      if (button.dataset.bound === "true") return;
+      button.dataset.bound = "true";
+      button.addEventListener("click", () => {
+        const action = button.dataset.settingAction || "";
+        if (action === "themeReset") {
+          const resetValues = {
+            themeEngine: DEFAULT_VALUES.themeEngine,
+            themeVariant: DEFAULT_VALUES.themeVariant,
+            themeDeepDarkCustom: DEFAULT_VALUES.themeDeepDarkCustom,
+            themeCustomAccent: DEFAULT_VALUES.themeCustomAccent,
+            themeCustomBackground: DEFAULT_VALUES.themeCustomBackground,
+            themeCustomSurface: DEFAULT_VALUES.themeCustomSurface,
+            themeCustomSurfaceRaised: DEFAULT_VALUES.themeCustomSurfaceRaised,
+            themeCustomText: DEFAULT_VALUES.themeCustomText,
+            themeCustomMuted: DEFAULT_VALUES.themeCustomMuted,
+            themeCustomBorder: DEFAULT_VALUES.themeCustomBorder,
+            themeCustomCss: DEFAULT_VALUES.themeCustomCss
+          };
+          chrome.storage.local.set(resetValues, loadPlannedSettings);
+        } else if (action === "themeSave") {
+          persistPlannedControls();
+          updateCinemaPreview();
+          flashBorder(button, "var(--green)");
+        } else if (action === "shortcutEditor") {
+          const firstShortcut = document.querySelector('[data-setting="shortcutSkipAd"]');
+          firstShortcut?.focus();
+          firstShortcut?.select();
+          flashBorder(button, "var(--accent)");
+        } else if (action === "shortcutToggle") {
+          optShortcut.checked = !optShortcut.checked;
+          chrome.storage.local.set({ shortcutEnabled: optShortcut.checked });
+          flashBorder(button, optShortcut.checked ? "var(--green)" : "var(--orange)");
+        } else if (action === "shortcutReset") {
+          const resetValues = Object.fromEntries(
+            Object.entries(DEFAULT_VALUES).filter(([key]) => isShortcutSettingKey(key))
+          );
+          chrome.storage.local.set(resetValues, loadPlannedSettings);
+          flashBorder(button, "var(--green)");
+        } else if (action === "backupExport") {
+          exportSettingsBackup(button);
+        } else if (action === "backupImport") {
+          importSettingsBackup(button);
+        } else {
+          flashBorder(button, "var(--accent)");
+        }
+      });
+    });
+  }
+  function getPlannedInput(key) {
+    return plannedControls.find((control) => getPlannedKey(control) === key) || null;
+  }
+  function updateCinemaPreview() {
+    const preview = document.querySelector(".cinema-preview");
+    if (!preview) return;
+    const color = String(getPlannedInput("cinemaColor")?.value || DEFAULT_VALUES.cinemaColor);
+    const opacity = Number(getPlannedInput("cinemaOpacity")?.value || DEFAULT_VALUES.cinemaOpacity);
+    const alpha = Math.min(1, Math.max(0, opacity / 100));
+    preview.style.setProperty("--cinema-preview-color", color);
+    preview.style.setProperty("--cinema-preview-alpha", String(alpha));
+  }
+  function exportSettingsBackup(button) {
+    chrome.storage.local.get(null, (settings) => {
+      const payload = {
+        app: "YouTube Extension",
+        version: chrome.runtime.getManifest().version,
+        exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
+        settings
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "youtube-extension-backup.json";
+      link.click();
+      URL.revokeObjectURL(url);
+      flashBorder(button, "var(--green)");
+    });
+  }
+  function importSettingsBackup(button) {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "application/json";
+    input.addEventListener("change", () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.addEventListener("load", () => {
+        try {
+          const parsed = JSON.parse(String(reader.result || "{}"));
+          const rawSettings = parsed.settings && typeof parsed.settings === "object" ? parsed.settings : parsed;
+          const allowedKeys = new Set(SETTINGS_EXPORT_KEYS);
+          const settings = Object.fromEntries(
+            Object.entries(rawSettings).filter(([key]) => allowedKeys.has(key))
+          );
+          chrome.storage.local.set(settings, () => {
+            flashBorder(button, "var(--green)");
+            location.reload();
+          });
+        } catch (err) {
+          flashBorder(button, "var(--red)");
+        }
+      });
+      reader.readAsText(file);
+    });
+    input.click();
+  }
   function renderDelay(v, aggressive, instant) {
     delayValue.textContent = String(instant ? 0 : v);
     if (!aggressive) {
@@ -266,6 +1117,8 @@
   }
   function renderStatus(enabled) {
     document.body.classList.toggle("extension-disabled", !enabled);
+    overviewStatusTitle.textContent = enabled ? "Extensão ativa" : "Extensão pausada";
+    overviewStatusLabel.textContent = enabled ? "Ativo" : "Pausado";
     renderStateIcons(enabled, optAggressive.checked);
   }
   function renderMode(aggressive) {
@@ -297,25 +1150,49 @@
     }
   }
   function normalizeAdSpeed(value) {
+    return normalizeSpeedRate(value);
+  }
+  function normalizePlayerSpeed(value, fallback = 1) {
     const n = Number(value);
-    if (!Number.isFinite(n)) return SAFE_AD_SPEED_RATE;
-    return Math.min(MAX_AD_SPEED_RATE, Math.max(MIN_AD_SPEED_RATE, n));
+    if (!Number.isFinite(n) || n <= 0) return fallback;
+    return Math.min(16, Math.max(0.25, n));
   }
-  function getSafeAdaptiveSpeed(delay) {
-    if (delay <= 3) return SAFE_AD_SPEED_RATE;
-    if (delay <= 6) return 2.5;
-    if (delay <= 10) return 2;
-    if (delay <= 20) return 1.5;
-    return 1.25;
+  function normalizePlayerSpeedStep(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n <= 0) return DEFAULT.playerSpeedStep;
+    return Math.min(2, Math.max(0.01, n));
   }
-  function getRiskAdaptiveSpeed(delay) {
-    if (delay <= 1) return 8;
-    if (delay <= 2) return 6;
-    if (delay <= 3) return 5;
-    if (delay <= 5) return 4;
-    if (delay <= 10) return 3;
-    if (delay <= 20) return 2;
-    return 1.5;
+  function normalizeVolumePercent(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return DEFAULT.playerVolumeDefault;
+    return Math.min(100, Math.max(0, Math.round(n)));
+  }
+  function normalizeVolumeStep(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n <= 0) return DEFAULT.playerVolumeStep;
+    return Math.min(25, Math.max(1, Math.round(n)));
+  }
+  function normalizeQuality(value) {
+    return normalizeQualityLevel(value, DEFAULT.qualityVideo);
+  }
+  function normalizeMiniplayerSize(value) {
+    const valid = ["360x203", "480x270", "640x360"];
+    return valid.includes(value) ? value : DEFAULT.miniplayerSize;
+  }
+  function normalizeMiniplayerPosition(value) {
+    const valid = ["top-left", "top-right", "bottom-left", "bottom-right"];
+    return valid.includes(value) ? value : DEFAULT.miniplayerPosition;
+  }
+  function normalizePlayerPopupSize(value) {
+    const valid = ["480x270", "640x360", "960x540"];
+    return valid.includes(value) ? value : DEFAULT.playerPopupSize;
+  }
+  function normalizeToolbarPosition(value) {
+    const valid = ["below", "above"];
+    return valid.includes(value) ? value : DEFAULT.toolbarPosition;
+  }
+  function formatControlNumber(value) {
+    return value.toFixed(2).replace(/\.?0+$/, "");
   }
   function getTimingState() {
     const aggressive = optAggressive.checked;
@@ -329,9 +1206,6 @@
       customSpeed,
       adaptiveSpeed
     };
-  }
-  function formatSpeed(value) {
-    return value.toFixed(value % 1 === 0 ? 0 : 1) + "x";
   }
   function renderTimingControls() {
     const delay = parseInt(optDelay.value, 10) || DEFAULT.skipDelay;
@@ -350,6 +1224,39 @@
     renderDelay(delay, state.aggressive, state.instant);
     renderSlider();
     renderAdSpeed(delay, speed, state);
+  }
+  function renderPlayerControlLocks() {
+    optPlayerSpeedDefault.disabled = !optPlayerSpeedEnabled.checked;
+    optPlayerSpeedRightButton.disabled = !optPlayerSpeedWheel.checked;
+    optPlayerVolumeDefault.disabled = !optPlayerVolumeEnabled.checked;
+    optPlayerVolumeRightButton.disabled = !optPlayerVolumeWheel.checked;
+  }
+  function renderAutoplayControlLocks() {
+    const blockingAutoplay = optAutoplayBackground.checked || optAutoplayForeground.checked;
+    optAutoplayAllowPlaylists.disabled = !blockingAutoplay;
+  }
+  function renderQualityControlLocks() {
+    optQualityVideo.disabled = !optQualityEnabled.checked;
+    optQualityPlaylist.disabled = !optQualityEnabled.checked;
+    optQualityFullscreenVideo.disabled = !optQualityFullscreenEnabled.checked;
+    optQualityFullscreenPlaylist.disabled = !optQualityFullscreenEnabled.checked;
+    optQualityRestore.disabled = !optQualityFullscreenEnabled.checked;
+  }
+  function renderMiniplayerControlLocks() {
+    optMiniplayerSize.disabled = !optMiniplayerEnabled.checked;
+    optMiniplayerPosition.disabled = !optMiniplayerEnabled.checked;
+  }
+  function renderToolbarControlLocks() {
+    const disabled = !optToolbarEnabled.checked;
+    optToolbarPosition.disabled = disabled;
+    optToolbarCenter.disabled = disabled;
+    optToolbarLoop.disabled = disabled;
+    optToolbarSpeed.disabled = disabled;
+    optToolbarPopup.disabled = disabled;
+    optToolbarPip.disabled = disabled;
+    optToolbarScreenshot.disabled = disabled;
+    optToolbarSettings.disabled = disabled;
+    if (optToolbarVolumeBoost) optToolbarVolumeBoost.disabled = disabled;
   }
   function renderAdSpeed(delay, manualSpeed, state = getTimingState()) {
     let speed = getSafeAdaptiveSpeed(delay);
@@ -404,37 +1311,39 @@
   }
   function checkRestartWarning() {
     if (!initialState) return;
-    chrome.storage.local.get(DEFAULT, (current) => {
-      const needsReload = ["enabled", "skipDelay", "muteAds", "showOverlay", "aggressiveSkip", "listMode", "instantSkip", "pipEnabled", "adSpeedRate", "customSpeedEnabled", "adaptiveSpeedEnabled"];
+    chrome.storage.local.get(DEFAULT_VALUES, (current) => {
+      const needsReload = [
+        "codecForceStandardFps",
+        "codecForceAvc"
+      ];
       let changed = false;
       for (const key of needsReload) {
-        if (current[key] !== initialState[key]) {
+        const initialValue = key in initialState ? initialState[key] : DEFAULT_VALUES[key];
+        if (current[key] !== initialValue) {
           changed = true;
           break;
         }
-      }
-      if (!changed && JSON.stringify(current.whitelist) !== JSON.stringify(initialState.whitelist)) {
-        changed = true;
       }
       const initialSpeed = normalizeAdSpeed(initialState.adSpeedRate);
       const currentSpeed = normalizeAdSpeed(current.adSpeedRate);
       const currentDelay = Number(current.skipDelay) || DEFAULT.skipDelay;
       const effectiveCurrentSpeed = current.customSpeedEnabled ? current.adaptiveSpeedEnabled ? getRiskAdaptiveSpeed(currentDelay) : currentSpeed : getSafeAdaptiveSpeed(currentDelay);
       const riskySpeedChange = current.instantSkip && current.aggressiveSkip && current.instantSkip !== initialState.instantSkip || effectiveCurrentSpeed > SAFE_AD_SPEED_RATE && (currentSpeed !== initialSpeed || current.customSpeedEnabled !== initialState.customSpeedEnabled || current.adaptiveSpeedEnabled !== initialState.adaptiveSpeedEnabled || current.skipDelay !== initialState.skipDelay);
-      renderRestartBanner(changed, riskySpeedChange);
+      renderRestartBanner(changed || riskySpeedChange, riskySpeedChange);
     });
   }
   function renderRestartBanner(visible, riskySpeedChange) {
     if (!f5Banner) return;
     f5Banner.style.display = visible ? "block" : "none";
     f5Banner.classList.toggle("f5-banner--danger", riskySpeedChange);
-    f5Banner.textContent = riskySpeedChange ? "Recarregue os vídeos do YouTube (F5) para aplicar. Aceleração acima de 3x pode aumentar o risco de identificação." : "Configurações alteradas! Recarregue os vídeos do YouTube (F5) para aplicar.";
+    f5Banner.textContent = riskySpeedChange ? "Alteracao aplicada ao vivo. Aceleracao acima de 3x pode aumentar o risco de identificacao pelo YouTube." : "Codecs e formatos podem exigir recarregar o video atual (F5) para pegar respostas ja carregadas.";
   }
   chrome.storage.onChanged.addListener((changes) => {
     if (changes.enabled) {
       optEnabled.checked = !!changes.enabled.newValue;
       renderStatus(!!changes.enabled.newValue);
     }
+    if (changes.adSkipperEnabled) optAdSkipperEnabled.checked = changes.adSkipperEnabled.newValue !== false;
     if (changes.muteAds) optMute.checked = !!changes.muteAds.newValue;
     if (changes.showOverlay) optOverlay.checked = !!changes.showOverlay.newValue;
     if (changes.skipDelay) {
@@ -476,6 +1385,92 @@
       optAdSpeed.value = String(value);
       renderTimingControls();
     }
+    if (changes.playerSpeedEnabled) {
+      optPlayerSpeedEnabled.checked = !!changes.playerSpeedEnabled.newValue;
+      renderPlayerControlLocks();
+    }
+    if (changes.playerSpeedDefault) {
+      optPlayerSpeedDefault.value = formatControlNumber(normalizePlayerSpeed(changes.playerSpeedDefault.newValue, DEFAULT.playerSpeedDefault));
+    }
+    if (changes.playerSpeedStep) {
+      optPlayerSpeedStep.value = formatControlNumber(normalizePlayerSpeedStep(changes.playerSpeedStep.newValue));
+    }
+    if (changes.playerSpeedWheel) {
+      optPlayerSpeedWheel.checked = !!changes.playerSpeedWheel.newValue;
+      renderPlayerControlLocks();
+    }
+    if (changes.playerSpeedWheelRightButton) optPlayerSpeedRightButton.checked = !!changes.playerSpeedWheelRightButton.newValue;
+    if (changes.playerVolumeEnabled) {
+      optPlayerVolumeEnabled.checked = !!changes.playerVolumeEnabled.newValue;
+      renderPlayerControlLocks();
+    }
+    if (changes.playerVolumeDefault) {
+      optPlayerVolumeDefault.value = String(normalizeVolumePercent(changes.playerVolumeDefault.newValue));
+    }
+    if (changes.playerVolumeStep) {
+      optPlayerVolumeStep.value = String(normalizeVolumeStep(changes.playerVolumeStep.newValue));
+    }
+    if (changes.playerVolumeWheel) {
+      optPlayerVolumeWheel.checked = !!changes.playerVolumeWheel.newValue;
+      renderPlayerControlLocks();
+    }
+    if (changes.playerVolumeWheelRightButton) optPlayerVolumeRightButton.checked = !!changes.playerVolumeWheelRightButton.newValue;
+    if (changes.playerWheelInvert) optPlayerWheelInvert.checked = !!changes.playerWheelInvert.newValue;
+    if (changes.autoplayBlockBackground) {
+      optAutoplayBackground.checked = !!changes.autoplayBlockBackground.newValue;
+      renderAutoplayControlLocks();
+    }
+    if (changes.autoplayBlockForeground) {
+      optAutoplayForeground.checked = !!changes.autoplayBlockForeground.newValue;
+      renderAutoplayControlLocks();
+    }
+    if (changes.autoplayAllowPlaylists) optAutoplayAllowPlaylists.checked = changes.autoplayAllowPlaylists.newValue !== false;
+    if (changes.pauseBackgroundTabs) optPauseBackgroundTabs.checked = !!changes.pauseBackgroundTabs.newValue;
+    if (changes.qualityEnabled) {
+      optQualityEnabled.checked = !!changes.qualityEnabled.newValue;
+      renderQualityControlLocks();
+    }
+    if (changes.qualityVideo) optQualityVideo.value = normalizeQuality(changes.qualityVideo.newValue);
+    if (changes.qualityPlaylist) optQualityPlaylist.value = normalizeQuality(changes.qualityPlaylist.newValue);
+    if (changes.qualityFullscreenEnabled) {
+      optQualityFullscreenEnabled.checked = !!changes.qualityFullscreenEnabled.newValue;
+      renderQualityControlLocks();
+    }
+    if (changes.qualityFullscreenVideo) optQualityFullscreenVideo.value = normalizeQuality(changes.qualityFullscreenVideo.newValue);
+    if (changes.qualityFullscreenPlaylist) optQualityFullscreenPlaylist.value = normalizeQuality(changes.qualityFullscreenPlaylist.newValue);
+    if (changes.qualityRestoreOnExit) optQualityRestore.checked = changes.qualityRestoreOnExit.newValue !== false;
+    if (changes.appearanceConvertShorts) optAppearanceConvertShorts.checked = !!changes.appearanceConvertShorts.newValue;
+    if (changes.appearanceHideShorts) optAppearanceHideShorts.checked = !!changes.appearanceHideShorts.newValue;
+    if (changes.appearanceHideRelated) optAppearanceHideRelated.checked = !!changes.appearanceHideRelated.newValue;
+    if (changes.appearanceHideChat) optAppearanceHideChat.checked = !!changes.appearanceHideChat.newValue;
+    if (changes.appearanceHideComments) optAppearanceHideComments.checked = !!changes.appearanceHideComments.newValue;
+    if (changes.appearanceHideEndcards) optAppearanceHideEndcards.checked = !!changes.appearanceHideEndcards.newValue;
+    if (changes.miniplayerEnabled) {
+      optMiniplayerEnabled.checked = changes.miniplayerEnabled.newValue !== false;
+      renderMiniplayerControlLocks();
+    }
+    if (changes.miniplayerSize) optMiniplayerSize.value = normalizeMiniplayerSize(changes.miniplayerSize.newValue);
+    if (changes.miniplayerPosition) optMiniplayerPosition.value = normalizeMiniplayerPosition(changes.miniplayerPosition.newValue);
+    if (changes.playerPopupSize) optPlayerPopupSize.value = normalizePlayerPopupSize(changes.playerPopupSize.newValue);
+    if (changes.toolbarEnabled) {
+      optToolbarEnabled.checked = changes.toolbarEnabled.newValue !== false;
+      renderToolbarControlLocks();
+    }
+    if (changes.toolbarPosition) optToolbarPosition.value = normalizeToolbarPosition(changes.toolbarPosition.newValue);
+    if (changes.toolbarCenter) optToolbarCenter.checked = changes.toolbarCenter.newValue !== false;
+    if (changes.toolbarLoop) optToolbarLoop.checked = changes.toolbarLoop.newValue !== false;
+    if (changes.toolbarSpeed) optToolbarSpeed.checked = changes.toolbarSpeed.newValue !== false;
+    if (changes.toolbarPopup) optToolbarPopup.checked = changes.toolbarPopup.newValue !== false;
+    if (changes.toolbarPip) optToolbarPip.checked = changes.toolbarPip.newValue !== false;
+    if (changes.toolbarScreenshot) optToolbarScreenshot.checked = changes.toolbarScreenshot.newValue !== false;
+    if (changes.toolbarSettings) optToolbarSettings.checked = changes.toolbarSettings.newValue !== false;
+    plannedControls.forEach((control) => {
+      const key = getPlannedKey(control);
+      if (!key || !changes[key] || document.activeElement === control) return;
+      const nextValue = changes[key].newValue ?? DEFAULT_VALUES[key] ?? "";
+      setPlannedControlValue(control, nextValue);
+    });
+    if (changes.cinemaColor || changes.cinemaOpacity) updateCinemaPreview();
     if (changes.totalAdsSkipped) {
       animateCounter(statTotal, Number(changes.totalAdsSkipped.newValue) || 0);
     }

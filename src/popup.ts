@@ -1,268 +1,180 @@
-// ══════════════════════════════════════════════════
-// YouTube Ad Skipper — Popup Logic v3 | Taste Skill
-// ══════════════════════════════════════════════════
-
-const DEFAULT_SETTINGS = {
-  enabled: true,
-  skipDelay: 1,
-  muteAds: true,
-  showOverlay: true,
-  aggressiveSkip: true,
-  warningCount: 0,
-  theme: 'dark',
-};
-
-// ── Elements ─────────────────────────────────────
+import { DEFAULT_SETTINGS, migrateSettings } from "./shared/settings";
 
 function byId<T extends HTMLElement>(id: string): T {
-  return document.getElementById(id) as T;
+  const element = document.getElementById(id);
+  if (!element) throw new Error(`Missing popup element: #${id}`);
+  return element as T;
 }
 
-function query<T extends Element>(selector: string): T {
-  return document.querySelector(selector) as T;
-}
-
-type PopupState = {
+type PopupSettings = {
   enabled: boolean;
+  adSkipperEnabled: boolean;
   skipDelay: number;
   muteAds: boolean;
   showOverlay: boolean;
   aggressiveSkip: boolean;
   theme?: string;
-};
-
-type PopupSettings = PopupState & {
+  totalAdsSkipped: number;
+  adsSkippedToday: number;
   warningCount: number;
 };
 
-const toggleEnabled    = byId<HTMLInputElement>("toggle-enabled");
-const toggleMute       = byId<HTMLInputElement>("toggle-mute");
-const toggleOverlay    = byId<HTMLInputElement>("toggle-overlay");
-const toggleAggressive = byId<HTMLInputElement>("toggle-aggressive");
-const skipDelaySlider  = byId<HTMLInputElement>("skip-delay");
-const delayDisplay     = byId<HTMLElement>("delay-display");
-const delayHint        = byId<HTMLElement>("delay-hint");
-const blockDelay       = byId<HTMLElement>("block-delay");
-const statusPip        = query<HTMLElement>(".status-pip");
-const statusLabel      = byId<HTMLElement>("status-text");
-const container        = query<HTMLElement>(".popup-container");
-const warningRow       = byId<HTMLElement>("warning-row");
-const warningText      = byId<HTMLElement>("warning-text");
-const versionTag       = byId<HTMLElement>("version-tag");
-const stateIcons       = Array.from(document.querySelectorAll<HTMLImageElement>("[data-state-icon]"));
-
-const notes = {
-  enabled: document.getElementById("note-enabled"),
-  skipDelay: document.getElementById("note-delay"),
-  muteAds: document.getElementById("note-mute"),
-  showOverlay: document.getElementById("note-overlay"),
-  aggressiveSkip: document.getElementById("note-aggressive")
+const elements = {
+  enabled: byId<HTMLInputElement>("toggle-enabled"),
+  skipper: byId<HTMLInputElement>("toggle-ad-skipper"),
+  aggressive: byId<HTMLInputElement>("toggle-aggressive"),
+  mute: byId<HTMLInputElement>("toggle-mute"),
+  overlay: byId<HTMLInputElement>("toggle-overlay"),
+  delay: byId<HTMLInputElement>("skip-delay"),
+  delayDisplay: byId<HTMLOutputElement>("delay-display"),
+  delayHint: byId<HTMLElement>("delay-hint"),
+  modeDescription: byId<HTMLElement>("mode-description"),
+  statusTitle: byId<HTMLElement>("extension-status-title"),
+  statusText: byId<HTMLElement>("status-text"),
+  statusPip: document.querySelector<HTMLElement>(".status-pip")!,
+  metricTotal: byId<HTMLElement>("metric-total"),
+  metricToday: byId<HTMLElement>("metric-today"),
+  metricWarnings: byId<HTMLElement>("metric-warnings"),
+  warningText: byId<HTMLElement>("warning-text"),
+  changeNote: byId<HTMLElement>("change-note"),
+  version: byId<HTMLElement>("version-tag"),
+  stateIcons: Array.from(document.querySelectorAll<HTMLImageElement>("[data-state-icon]")),
 };
 
-let initialState: Partial<PopupState> = {};
+let noteTimer: number | null = null;
 
-// ── Version ────────────────────────────────────────
-
-try {
-  const manifestVersion = chrome.runtime.getManifest().version;
-  if (versionTag) versionTag.textContent = `v${manifestVersion}`;
-} catch (err) {
-  console.warn("[YouTube Ad Skipper] Failed to read manifest version:", err);
-  if (versionTag) versionTag.textContent = "v-";
+function announceChange(message = "Configuração aplicada ao YouTube.") {
+  elements.changeNote.textContent = message;
+  elements.changeNote.classList.add("is-visible");
+  if (noteTimer) window.clearTimeout(noteTimer);
+  noteTimer = window.setTimeout(() => elements.changeNote.classList.remove("is-visible"), 1800);
 }
 
-// ── Load settings ────────────────────────────────
-
-chrome.storage.local.get(DEFAULT_SETTINGS, (s: PopupSettings) => {
-  toggleEnabled.checked    = s.enabled;
-  toggleMute.checked       = s.muteAds;
-  toggleOverlay.checked    = s.showOverlay;
-  toggleAggressive.checked = s.aggressiveSkip;
-  skipDelaySlider.value    = String(s.skipDelay);
-
-  initialState = {
-    enabled: s.enabled,
-    skipDelay: s.skipDelay,
-    muteAds: s.muteAds,
-    showOverlay: s.showOverlay,
-    aggressiveSkip: s.aggressiveSkip,
-    theme: s.theme
-  };
-
-  applyTheme(s.theme);
-  renderDelay(s.skipDelay);
-  renderStatus(s.enabled);
-  renderSliderTrack();
-  renderAggressiveState(s.aggressiveSkip);
-  renderWarnings(s.warningCount || 0);
-});
-
-// ── Events ───────────────────────────────────────
-
-toggleEnabled.addEventListener("change", () => {
-  const on = toggleEnabled.checked;
-  chrome.storage.local.set({ enabled: on });
-  renderStatus(on);
-  checkChanges();
-});
-
-toggleMute.addEventListener("change", () => {
-  chrome.storage.local.set({ muteAds: toggleMute.checked });
-  checkChanges();
-});
-
-toggleOverlay.addEventListener("change", () => {
-  chrome.storage.local.set({ showOverlay: toggleOverlay.checked });
-  checkChanges();
-});
-
-toggleAggressive.addEventListener("change", () => {
-  const on = toggleAggressive.checked;
-  const nextSettings: Record<string, unknown> = { aggressiveSkip: on };
-  if (!on) nextSettings.instantSkip = false;
-  chrome.storage.local.set(nextSettings);
-  renderAggressiveState(on);
-  checkChanges();
-});
-
-skipDelaySlider.addEventListener("input", () => {
-  const v = parseInt(skipDelaySlider.value, 10);
-  renderDelay(v);
-  renderSliderTrack();
-  chrome.storage.local.set({ skipDelay: v });
-  checkChanges();
-});
-
-function applyTheme(theme: string) {
-  if (theme === 'light') {
-    document.body.classList.add('theme-light');
-  } else {
-    document.body.classList.remove('theme-light');
-  }
-}
-
-// ── Render helpers ───────────────────────────────
-
-function checkChanges() {
-  if (!initialState || Object.keys(initialState).length === 0) return;
-
-  const current: PopupState = {
-    enabled: toggleEnabled.checked,
-    skipDelay: parseInt(skipDelaySlider.value, 10),
-    muteAds: toggleMute.checked,
-    showOverlay: toggleOverlay.checked,
-    aggressiveSkip: toggleAggressive.checked
-  };
-
-  for (const key of Object.keys(current) as Array<keyof PopupState>) {
-    if (notes[key]) {
-      notes[key].style.display = current[key] !== initialState[key] ? "block" : "none";
-    }
-  }
+function applyTheme(theme: string | undefined) {
+  document.body.classList.toggle("theme-light", theme === "light");
 }
 
 function renderDelay(seconds: number) {
-  delayDisplay.textContent = seconds + "s";
-
-  if (seconds <= 3) {
-    delayHint.textContent = "Espera ~" + seconds + "s e depois pula";
-    delayHint.style.color = "hsl(152, 55%, 42%)";
-  } else if (seconds <= 10) {
-    delayHint.textContent = "Espera ~" + seconds + "s e depois pula";
-    delayHint.style.color = "hsl(45, 75%, 52%)";
-  } else {
-    delayHint.textContent = "Espera ~" + seconds + "s e depois pula";
-    delayHint.style.color = "hsl(25, 80%, 55%)";
-  }
+  const value = Math.min(30, Math.max(1, Number(seconds) || 1));
+  elements.delay.value = String(value);
+  elements.delayDisplay.value = `${value}s`;
+  elements.delayHint.textContent = value <= 3 ? "Rápido" : value <= 10 ? "Equilibrado" : "Conservador";
+  const percentage = ((value - 1) / 29) * 100;
+  elements.delay.style.setProperty("--range-progress", `${percentage}%`);
 }
 
-function renderSliderTrack() {
-  const min = parseInt(skipDelaySlider.min, 10);
-  const max = parseInt(skipDelaySlider.max, 10);
-  const val = parseInt(skipDelaySlider.value, 10);
-  const pct = ((val - min) / (max - min)) * 100;
-  skipDelaySlider.style.background =
-    "linear-gradient(90deg, var(--accent) " + pct + "%, var(--border) " + pct + "%)";
+function renderStatus(enabled: boolean, skipperEnabled = elements.skipper.checked) {
+  const active = enabled && skipperEnabled;
+  elements.statusPip.classList.toggle("active", active);
+  elements.statusTitle.textContent = enabled ? "Extensão ativa" : "Extensão pausada";
+  elements.statusText.textContent = !enabled
+    ? "Extensão pausada"
+    : skipperEnabled
+      ? "Monitorando o YouTube"
+      : "Player ativo · skipper pausado";
+  document.body.classList.toggle("extension-disabled", !enabled);
+  const icon = !enabled ? "icon48_off.png" : elements.aggressive.checked ? "icon48.png" : "icon48_stealth.png";
+  elements.stateIcons.forEach((image) => { image.src = icon; });
 }
 
-function renderStatus(enabled: boolean) {
-  if (enabled) {
-    statusPip.classList.add("active");
-    statusLabel.textContent = "Ativo";
-    container.classList.remove("disabled");
-  } else {
-    statusPip.classList.remove("active");
-    statusLabel.textContent = "Desativado";
-    container.classList.add("disabled");
-  }
-  renderStateIcons(enabled, toggleAggressive.checked);
+function renderMode(aggressive: boolean) {
+  elements.modeDescription.textContent = aggressive
+    ? "Botão nativo primeiro, aceleração como fallback"
+    : "Aguarda apenas o botão nativo do YouTube";
+  renderStatus(elements.enabled.checked, elements.skipper.checked);
 }
 
-function renderAggressiveState(on: boolean) {
-  if (on) {
-    blockDelay.classList.remove("block--disabled");
-  } else {
-    blockDelay.classList.add("block--disabled");
-  }
-  renderStateIcons(toggleEnabled.checked, on);
+function renderStats(total: number, today: number, warnings: number) {
+  elements.metricTotal.textContent = String(Math.max(0, Number(total) || 0));
+  elements.metricToday.textContent = String(Math.max(0, Number(today) || 0));
+  elements.metricWarnings.textContent = String(Math.max(0, Number(warnings) || 0));
+  elements.warningText.textContent = warnings > 0
+    ? `${warnings} aviso${warnings === 1 ? "" : "s"} do YouTube tratado${warnings === 1 ? "" : "s"}.`
+    : "Nenhum aviso interceptado.";
 }
 
-function getStateIconPath(enabled: boolean, aggressive: boolean) {
-  if (!enabled) return "icon48_off.png";
-  return aggressive ? "icon48.png" : "icon48_stealth.png";
+try {
+  elements.version.textContent = `v${chrome.runtime.getManifest().version}`;
+} catch {
+  elements.version.textContent = "v-";
 }
 
-function renderStateIcons(enabled: boolean, aggressive: boolean) {
-  const path = getStateIconPath(enabled, aggressive);
-  stateIcons.forEach((icon) => {
-    icon.src = path;
-  });
-}
+chrome.storage.local.get(DEFAULT_SETTINGS, (settings: PopupSettings) => {
+  settings = migrateSettings(settings) as unknown as PopupSettings;
+  elements.enabled.checked = settings.enabled;
+  elements.skipper.checked = settings.adSkipperEnabled !== false;
+  elements.aggressive.checked = settings.aggressiveSkip;
+  elements.mute.checked = settings.muteAds;
+  elements.overlay.checked = settings.showOverlay;
+  applyTheme(settings.theme);
+  renderDelay(settings.skipDelay);
+  renderMode(settings.aggressiveSkip);
+  renderStatus(settings.enabled, settings.adSkipperEnabled !== false);
+  renderStats(settings.totalAdsSkipped, settings.adsSkippedToday, settings.warningCount);
+});
 
-function renderWarnings(count: number) {
-  if (count === 0) {
-    warningRow.classList.remove("warning-row--alert");
-    warningText.textContent = "Nenhum aviso do YouTube interceptado.";
-  } else {
-    warningRow.classList.add("warning-row--alert");
-    warningText.textContent = count + " aviso" + (count > 1 ? "s" : "") + " do YouTube interceptado" + (count > 1 ? "s" : "") + " e bloqueado" + (count > 1 ? "s" : "") + ".";
-  }
-}
+elements.enabled.addEventListener("change", () => {
+  chrome.storage.local.set({ enabled: elements.enabled.checked });
+  renderStatus(elements.enabled.checked);
+  announceChange(elements.enabled.checked ? "Extensão ativada." : "Extensão pausada.");
+});
 
-// ── Live sync ────────────────────────────────────
+elements.skipper.addEventListener("change", () => {
+  chrome.storage.local.set({ adSkipperEnabled: elements.skipper.checked });
+  renderStatus(elements.enabled.checked, elements.skipper.checked);
+  announceChange(elements.skipper.checked ? "Ad Skipper ativado." : "Ad Skipper pausado.");
+});
+
+elements.aggressive.addEventListener("change", () => {
+  const aggressiveSkip = elements.aggressive.checked;
+  const updates: Record<string, boolean> = aggressiveSkip
+    ? { aggressiveSkip }
+    : { aggressiveSkip, instantSkip: false };
+  chrome.storage.local.set(updates);
+  renderMode(aggressiveSkip);
+  announceChange(aggressiveSkip ? "Modo acelerado ativado." : "Modo seguro ativado.");
+});
+
+elements.mute.addEventListener("change", () => {
+  chrome.storage.local.set({ muteAds: elements.mute.checked });
+  announceChange();
+});
+
+elements.overlay.addEventListener("change", () => {
+  chrome.storage.local.set({ showOverlay: elements.overlay.checked });
+  announceChange();
+});
+
+elements.delay.addEventListener("input", () => {
+  const skipDelay = Number(elements.delay.value);
+  renderDelay(skipDelay);
+  chrome.storage.local.set({ skipDelay });
+});
+
+elements.delay.addEventListener("change", () => announceChange(`Tempo para pular: ${elements.delay.value}s.`));
 
 chrome.storage.onChanged.addListener((changes) => {
-  if (changes.enabled) {
-    toggleEnabled.checked = !!changes.enabled.newValue;
-    renderStatus(!!changes.enabled.newValue);
-  }
-  if (changes.muteAds) toggleMute.checked = !!changes.muteAds.newValue;
-  if (changes.showOverlay) toggleOverlay.checked = !!changes.showOverlay.newValue;
+  if (changes.enabled) elements.enabled.checked = !!changes.enabled.newValue;
+  if (changes.adSkipperEnabled) elements.skipper.checked = changes.adSkipperEnabled.newValue !== false;
   if (changes.aggressiveSkip) {
-    toggleAggressive.checked = !!changes.aggressiveSkip.newValue;
-    renderAggressiveState(!!changes.aggressiveSkip.newValue);
+    elements.aggressive.checked = !!changes.aggressiveSkip.newValue;
+    renderMode(elements.aggressive.checked);
   }
-  if (changes.skipDelay) {
-    const value = parseInt(String(changes.skipDelay.newValue), 10);
-    if (!isNaN(value)) {
-      skipDelaySlider.value = String(value);
-      renderDelay(value);
-      renderSliderTrack();
-    }
+  if (changes.muteAds) elements.mute.checked = !!changes.muteAds.newValue;
+  if (changes.showOverlay) elements.overlay.checked = !!changes.showOverlay.newValue;
+  if (changes.skipDelay) renderDelay(Number(changes.skipDelay.newValue));
+  if (changes.theme) applyTheme(String(changes.theme.newValue));
+  renderStatus(elements.enabled.checked, elements.skipper.checked);
+
+  if (changes.totalAdsSkipped || changes.adsSkippedToday || changes.warningCount) {
+    chrome.storage.local.get(DEFAULT_SETTINGS, (settings: PopupSettings) => {
+      renderStats(settings.totalAdsSkipped, settings.adsSkippedToday, settings.warningCount);
+    });
   }
-  if (changes.warningCount) {
-    renderWarnings(Number(changes.warningCount.newValue) || 0);
-  }
-  if (changes.theme) {
-    applyTheme(String(changes.theme.newValue));
-  }
-  checkChanges();
 });
 
-// ── Open settings page ──────────────────────────
-
-byId<HTMLButtonElement>("btn-open-settings").addEventListener("click", () => {
-  chrome.runtime.openOptionsPage();
-});
+for (const id of ["btn-open-settings", "btn-open-settings-main"]) {
+  byId<HTMLButtonElement>(id).addEventListener("click", () => chrome.runtime.openOptionsPage());
+}
 
 export {};

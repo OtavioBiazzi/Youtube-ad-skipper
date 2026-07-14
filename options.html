@@ -3,351 +3,552 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Ad Skipper — Configurações</title>
+  <title>YouTube Extension - Control Center</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="options.css">
 </head>
 <body>
-  <div class="page">
-
-    <!-- ═══ Header ═══ -->
-    <header class="header">
+  <div class="page page--control-center">
+    <header class="header app-header">
       <div class="header-left">
         <div class="header-mark">
           <img class="header-mark-img" data-state-icon src="icon48.png" alt="" aria-hidden="true">
         </div>
         <div>
-          <h1 class="header-title">Ad Skipper</h1>
-          <span class="header-sub">Painel de Configurações</span>
+          <h1 class="header-title">YouTube Extension</h1>
+          <span class="header-sub">Control Center</span>
         </div>
       </div>
       <div class="header-right">
-        <span class="header-version" id="version-tag">v3.3</span>
-        <button id="theme-toggle" class="theme-toggle" title="Alternar Tema">
-          <!-- Sun Icon -->
+        <div class="settings-search" role="search">
+          <label class="sr-only" for="settings-search">Buscar configurações</label>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+          <input id="settings-search" type="search" placeholder="Buscar configuração" autocomplete="off">
+          <button id="settings-search-clear" type="button" aria-label="Limpar busca" title="Limpar busca">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17"/></svg>
+          </button>
+        </div>
+        <span class="header-version" id="version-tag">v5.0.0</span>
+        <button id="theme-toggle" class="theme-toggle" title="Alternar tema" aria-label="Alternar tema claro ou escuro">
           <svg class="sun-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-          <!-- Moon Icon -->
           <svg class="moon-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
         </button>
       </div>
     </header>
 
-    <!-- ═══ Grid Layout ═══ -->
-    <div class="grid">
+    <nav class="module-nav" aria-label="Areas do Control Center">
+      <a href="#overview">Visao geral</a>
+      <a href="#skipper">Ad Skipper</a>
+      <a href="#player">Player</a>
+      <a href="#appearance">Aparencia</a>
+      <a href="#advanced">Avancado</a>
+      <a href="#about">Sobre</a>
+    </nav>
+    <p class="search-empty" id="search-empty" role="status" hidden>Nenhuma configuração encontrada. Tente outro termo.</p>
 
-      <!-- ── Card: Status Geral ── -->
-      <div class="card card--wide">
-        <div class="card-header">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-          <span>Status Geral</span>
+    <main class="control-center">
+      <section class="panel-section panel-section--hero" id="overview">
+        <div class="section-heading">
+          <span class="section-kicker">Visão geral</span>
+          <h2>Controle o YouTube do seu jeito.</h2>
+          <p>Comece com um perfil pronto ou ajuste skipper, player, aparência e ferramentas em detalhes.</p>
         </div>
-        <div class="card-body">
-          <div class="stat-row">
-            <div class="stat">
-              <span class="stat-value" id="stat-total">0</span>
-              <span class="stat-label">Anúncios Pulados</span>
-            </div>
-            <div class="stat">
-              <span class="stat-value" id="stat-today">0</span>
-              <span class="stat-label">Pulados Hoje</span>
-            </div>
-            <div class="stat">
-              <span class="stat-value" id="stat-warnings">0</span>
-              <span class="stat-label">Avisos Bloqueados</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- ── Card: Extensão ── -->
-      <div class="card">
-        <div class="card-header">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.32 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-          <span>Controle Principal</span>
-        </div>
-        <div class="card-body">
-          <div class="opt-row">
-            <div class="opt-info">
-              <span class="opt-title">Extensão Ativa</span>
-              <span class="opt-desc">Liga ou desliga toda a extensão</span>
+        <div class="overview-grid">
+          <article class="overview-card overview-card--status">
+            <div class="overview-title">
+              <img class="state-icon-img" data-state-icon src="icon48.png" alt="" aria-hidden="true">
+              <div>
+                <strong id="overview-status-title">Extensão ativa</strong>
+                <span><span class="status-dot"></span><span id="overview-status-label">Ativo</span></span>
+              </div>
             </div>
             <label class="switch">
               <input type="checkbox" id="opt-enabled" checked>
               <span class="switch-track"></span>
             </label>
-          </div>
-          <hr class="divider">
-          <div class="opt-row">
-            <div class="opt-info">
-              <span class="opt-title">Mutar Anúncios</span>
-              <span class="opt-desc">Silencia o áudio dos anúncios automaticamente</span>
-            </div>
-            <label class="switch">
-              <input type="checkbox" id="opt-mute" checked>
-              <span class="switch-track"></span>
-            </label>
-          </div>
-          <hr class="divider">
-          <div class="opt-row">
-            <div class="opt-info">
-              <span class="opt-title">Mostrar Overlay</span>
-              <span class="opt-desc">Exibe o countdown e o botão "Assistir Anúncio" no vídeo</span>
-            </div>
-            <label class="switch">
-              <input type="checkbox" id="opt-overlay" checked>
-              <span class="switch-track"></span>
-            </label>
-          </div>
+          </article>
+          <article class="overview-card">
+            <span class="stat-value" id="stat-total">0</span>
+            <span class="stat-label">Anuncios pulados</span>
+          </article>
+          <article class="overview-card">
+            <span class="stat-value" id="stat-today">0</span>
+            <span class="stat-label">Pulados hoje</span>
+          </article>
+          <article class="overview-card">
+            <span class="stat-value" id="stat-warnings">0</span>
+            <span class="stat-label">Avisos bloqueados</span>
+          </article>
         </div>
-      </div>
+        <div class="preset-panel" aria-labelledby="preset-title">
+          <div class="preset-intro">
+            <span class="section-kicker">Configuração rápida</span>
+            <strong id="preset-title">Perfis de uso</strong>
+            <span>Aplicam somente os ajustes relacionados ao perfil escolhido.</span>
+          </div>
+          <div class="preset-actions">
+            <button class="preset-button" type="button" data-preset="safe"><strong>Seguro</strong><span>Apenas botão nativo, espera de 5s</span></button>
+            <button class="preset-button is-recommended" type="button" data-preset="balanced"><strong>Equilibrado</strong><span>Botão nativo e fallback seguro em 3x</span></button>
+            <button class="preset-button" type="button" data-preset="turbo"><strong>Turbo</strong><span>Fallback adaptativo até 8x</span><small>Experimental</small></button>
+            <button class="preset-button" type="button" data-preset="focus"><strong>Foco</strong><span>Remove distrações e ativa cinema</span></button>
+          </div>
+          <p class="preset-feedback" id="preset-feedback" role="status" aria-live="polite"></p>
+        </div>
+      </section>
 
-      <!-- ── Card: Tempo para Pular ── -->
-      <div class="card card--timing" id="timing-card">
-        <div class="card-header">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-          <span>Tempo para Pular</span>
-        </div>
-        <div class="card-body">
-          <div class="delay-display">
-            <span class="delay-value" id="opt-delay-value">1</span>
-            <span class="delay-unit">segundos</span>
+      <section class="panel-section" id="skipper">
+        <div class="section-heading section-heading--row">
+          <div>
+            <span class="section-kicker">Modulo ativo</span>
+            <h2>Ad Skipper</h2>
+            <p>Configuracoes que ja fazem parte do sistema atual: pular anuncios, acelerar, mutar, overlay e filtros de canal.</p>
           </div>
-          <div class="range-wrap timing-control" id="delay-control">
-            <input type="range" id="opt-delay" min="1" max="30" value="1" step="1" class="range">
-            <div class="range-labels"><span>1s</span><span>15s</span><span>30s</span></div>
-          </div>
-          <div class="hint" id="opt-delay-hint">Espera ~1s e depois pula o anúncio.</div>
+          <span class="module-state module-state--live">Funcional</span>
         </div>
-      </div>
 
-      <!-- ── Card: Modo Avançado ── -->
-      <div class="card card--advanced">
-        <div class="card-header">
-          <img class="state-icon-img" data-state-icon src="icon48.png" alt="" aria-hidden="true">
-          <span>Acelerar e Pular</span>
-        </div>
-        <div class="card-body">
-          <div class="opt-row">
-            <div class="opt-info">
-              <span class="opt-title">Modo Agressivo</span>
-              <span class="opt-desc">Quando ativado, a extensão acelera o anúncio desde o início e tenta pular no tempo configurado, mesmo antes do botão aparecer.</span>
+        <div class="section-grid section-grid--split">
+          <article class="card">
+            <div class="card-header">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              <span>Controle principal</span>
             </div>
-            <label class="switch">
-              <input type="checkbox" id="opt-aggressive" checked>
-              <span class="switch-track"></span>
-            </label>
-          </div>
-          <div class="hint hint--warn" id="aggressive-hint">
-            <strong>⚡ Ativo:</strong> Usa aceleração contínua e tentativas de pulo no contexto da página.<br>
-            <strong>🛡️ Desativado:</strong> Aguarda o botão de pular aparecer naturalmente (~5s).
-          </div>
-        </div>
-      </div>
-
-      <!-- ── Card: Stealth ── -->
-      <div class="card">
-        <div class="card-header">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-          <span>Modo Stealth</span>
-          <span class="tag" id="stealth-mode-badge" style="background:var(--accent-dim); color:var(--accent); margin-right:8px; margin-left:auto;">AGRESSIVO</span>
-          <span class="tag tag--on" style="margin-left:0;">SEMPRE ON</span>
-        </div>
-        <div class="card-body">
-          <div class="process-list">
-            <div class="process">
-              <span class="process-pip pip--green"></span>
-              <span class="process-name">Bypass isTrusted</span>
-              <span class="process-status">Ativo</span>
-            </div>
-            <div class="process">
-              <span class="process-pip pip--green"></span>
-              <span class="process-name">Anti-Adblock CSS</span>
-              <span class="process-status">Ativo</span>
-            </div>
-            <div class="process">
-              <span class="process-pip pip--green"></span>
-              <span class="process-name">MutationObserver</span>
-              <span class="process-status">Ativo</span>
-            </div>
-            <div class="process">
-              <span class="process-pip pip--green"></span>
-              <span class="process-name">Polling Fallback</span>
-              <span class="process-status">500ms</span>
-            </div>
-            <div class="process">
-              <span class="process-pip pip--green"></span>
-              <span class="process-name">Mute Nativo</span>
-              <span class="process-status">Ativo</span>
-            </div>
-            <div class="process">
-              <span class="process-pip pip--green"></span>
-              <span class="process-name">Jitter Aleatório</span>
-              <span class="process-status">Ativo</span>
-            </div>
-            <div class="process">
-              <span class="process-pip pip--green"></span>
-              <span class="process-name">CSS Preemptivo</span>
-              <span class="process-status">Ativo</span>
-            </div>
-          </div>
-          <div class="warning-box" id="warning-box">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-            <span id="warning-text">Nenhum aviso do YouTube interceptado.</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- ── Card: Filtro de Canais ── -->
-      <div class="card card--filter">
-        <div class="card-header">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-          <span>Filtro de Canais</span>
-        </div>
-        <div class="card-body">
-          <div class="list-mode-toggle" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; padding-bottom:12px; border-bottom:1px solid var(--border);">
-            <div style="font-size:13px;">
-              <strong>Modo:</strong> <span id="list-mode-label" style="color:var(--accent);">Whitelist</span>
-            </div>
-            <label class="switch">
-              <input type="checkbox" id="opt-list-mode">
-              <span class="switch-track"></span>
-            </label>
-          </div>
-          <div class="hint" style="margin-top:0; margin-bottom:12px;">Selecione os canais pelos nomes ou usando o @link.</div>
-          <div class="whitelist-input-row">
-            <input type="text" id="whitelist-input" class="whitelist-input" placeholder="Nome ou @link do canal..." autocomplete="off">
-            <button id="whitelist-add" class="btn-add">Adicionar</button>
-          </div>
-          <div class="whitelist-list" id="whitelist-list"></div>
-          <div class="whitelist-empty" id="whitelist-empty">Nenhum canal na lista.</div>
-        </div>
-      </div>
-
-      <!-- ── Card: Sobre ── -->
-      <div class="card card--about">
-        <div class="card-header">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-          <span>Sobre</span>
-        </div>
-        <div class="card-body">
-          <p class="about-text">
-            <strong>YouTube Ad Skipper</strong> automatiza o clique no botão "Pular Anúncio" usando técnicas stealth.
-            Não é um ad-blocker — apenas automatiza o que você faria manualmente.
-          </p>
-          <div class="about-links">
-            <a href="https://github.com/OtavioBiazzi/Youtube-ad-skipper" target="_blank" rel="noopener noreferrer" class="about-link">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
-              GitHub
-            </a>
-            <a href="https://github.com/OtavioBiazzi/Youtube-ad-skipper/issues" target="_blank" rel="noopener noreferrer" class="about-link" style="color: var(--yellow);">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-              Reportar Bug
-            </a>
-            <button class="about-link btn-reset" id="btn-reset">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
-              Resetar Tudo
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- ── Card: Extras ── -->
-      <div class="card">
-        <div class="card-header">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
-          <span>Extras</span>
-          <span class="tag tag--experimental">BETA</span>
-        </div>
-        <div class="card-body">
-          <div class="opt-row">
-            <div class="opt-info">
-              <span class="opt-title">Notificação Toast</span>
-              <span class="opt-desc">Mostra uma notificação na tela quando pular.</span>
-            </div>
-            <label class="switch">
-              <input type="checkbox" id="opt-toast">
-              <span class="switch-track"></span>
-            </label>
-          </div>
-          <hr class="divider">
-          <div class="opt-row">
-            <div class="opt-info">
-              <span class="opt-title">Atalho de Teclado</span>
-              <span class="opt-desc">Pressione <kbd>Shift + S</kbd> para pular manualmente.</span>
-            </div>
-            <label class="switch">
-              <input type="checkbox" id="opt-shortcut">
-              <span class="switch-track"></span>
-            </label>
-          </div>
-          <hr class="divider">
-          <div class="opt-row">
-            <div class="opt-info">
-              <span class="opt-title">Pulo Instantâneo (0s)</span>
-              <span class="opt-desc">Recurso agressivo: só fica disponível com o modo agressivo ativo.</span>
-            </div>
-            <label class="switch">
-              <input type="checkbox" id="opt-instant">
-              <span class="switch-track"></span>
-            </label>
-          </div>
-          <hr class="divider">
-          <div class="opt-row">
-            <div class="opt-info">
-              <span class="opt-title">Velocidade Personalizada</span>
-              <span class="opt-desc">Ativa controles beta para trocar a aceleração automática segura.</span>
-            </div>
-            <span class="tag tag--safe" id="opt-ad-speed-value" style="margin-left:0;">auto 3x</span>
-            <label class="switch">
-              <input type="checkbox" id="opt-custom-speed">
-              <span class="switch-track"></span>
-            </label>
-          </div>
-          <div class="beta-speed-panel" id="ad-speed-control">
-            <hr class="divider">
-            <div class="opt-row">
-              <div class="opt-info">
-                <span class="opt-title">Adaptar aos Segundos</span>
-                <span class="opt-desc">Calcula a velocidade pelo tempo escolhido. Em 1s pode usar até 8x.</span>
-              </div>
-              <label class="switch">
-                <input type="checkbox" id="opt-adaptive-speed">
-                <span class="switch-track"></span>
-              </label>
-            </div>
-            <div class="manual-speed-control" id="manual-speed-control">
-              <div class="range-wrap" style="margin-top:14px;">
-                <input type="range" id="opt-ad-speed" min="1" max="8" value="3" step="0.5" class="range">
-                <div class="range-labels speed-range-labels">
-                  <span class="speed-label-min">1x</span>
-                  <span class="speed-label-safe">3x seguro</span>
-                  <span class="speed-label-max">8x risco</span>
+            <div class="card-body control-stack">
+              <div class="opt-row">
+                <div class="opt-info">
+                  <span class="opt-title">Modulo Ad Skipper</span>
+                  <span class="opt-desc">Desliga apenas o pulo/aceleracao de anuncios, sem desativar o resto da extensao.</span>
                 </div>
+                <label class="switch"><input type="checkbox" id="opt-ad-skipper-enabled" checked><span class="switch-track"></span></label>
+              </div>
+              <div class="opt-row">
+                <div class="opt-info">
+                  <span class="opt-title">Mutar anuncios</span>
+                  <span class="opt-desc">Silencia o audio enquanto o anuncio esta ativo.</span>
+                </div>
+                <label class="switch"><input type="checkbox" id="opt-mute" checked><span class="switch-track"></span></label>
+              </div>
+              <div class="opt-row">
+                <div class="opt-info">
+                  <span class="opt-title">Mostrar overlay</span>
+                  <span class="opt-desc">Exibe contagem e opcao de assistir o anuncio.</span>
+                </div>
+                <label class="switch"><input type="checkbox" id="opt-overlay" checked><span class="switch-track"></span></label>
               </div>
             </div>
-            <div class="hint hint--warn" id="ad-speed-beta-hint">Acima de 3x pode aumentar o risco de identificação.</div>
-          </div>
-          <hr class="divider">
-          <div class="opt-row">
-            <div class="opt-info">
-              <span class="opt-title">Player Flutuante (PiP)</span>
-              <span class="opt-desc">Adiciona um botão para fixar o vídeo na tela enquanto navega ou joga. Compatível com Enhance for YouTube.</span>
+          </article>
+
+          <article class="card card--timing" id="timing-card">
+            <div class="card-header">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              <span>Tempo para pular</span>
             </div>
-            <label class="switch">
-              <input type="checkbox" id="opt-pip">
-              <span class="switch-track"></span>
-            </label>
+            <div class="card-body">
+              <div class="delay-display">
+                <span class="delay-value" id="opt-delay-value">1</span>
+                <span class="delay-unit">segundos</span>
+              </div>
+              <div class="range-wrap timing-control" id="delay-control">
+                <input type="range" id="opt-delay" min="1" max="30" value="1" step="1" class="range" aria-label="Tempo para pular o anúncio">
+                <div class="range-labels"><span>1s</span><span>15s</span><span>30s</span></div>
+              </div>
+              <div class="hint" id="opt-delay-hint">Espera ~1s e depois pula o anuncio.</div>
+            </div>
+          </article>
+        </div>
+
+        <div class="section-grid section-grid--split">
+          <article class="card card--advanced">
+            <div class="card-header">
+              <img class="state-icon-img" data-state-icon src="icon48.png" alt="" aria-hidden="true">
+              <span>Aceleracao e pulo</span>
+              <span class="tag" id="stealth-mode-badge" style="background:var(--accent-dim); color:var(--accent); margin-left:auto;">AGRESSIVO</span>
+            </div>
+            <div class="card-body control-stack">
+              <div class="opt-row">
+                <div class="opt-info">
+                  <span class="opt-title">Modo agressivo</span>
+                  <span class="opt-desc">Acelera anuncios desde o inicio e tenta pular no tempo escolhido.</span>
+                </div>
+                <label class="switch"><input type="checkbox" id="opt-aggressive" checked><span class="switch-track"></span></label>
+              </div>
+              <div class="opt-row">
+                <div class="opt-info">
+                  <span class="opt-title">Pulo instantaneo</span>
+                  <span class="opt-desc">Recurso agressivo: so fica disponivel com o modo agressivo ativo.</span>
+                </div>
+                <label class="switch"><input type="checkbox" id="opt-instant"><span class="switch-track"></span></label>
+              </div>
+              <div class="opt-row">
+                <div class="opt-info">
+                  <span class="opt-title">Velocidade personalizada</span>
+                  <span class="opt-desc">Troca a aceleracao automatica segura por controles beta.</span>
+                </div>
+                <span class="tag tag--safe" id="opt-ad-speed-value">auto 3x</span>
+                <label class="switch"><input type="checkbox" id="opt-custom-speed"><span class="switch-track"></span></label>
+              </div>
+              <div class="beta-speed-panel" id="ad-speed-control">
+                <div class="opt-row">
+                  <div class="opt-info">
+                    <span class="opt-title">Adaptar aos segundos</span>
+                    <span class="opt-desc">Calcula a velocidade pelo tempo escolhido. Em 1s pode usar ate 8x.</span>
+                  </div>
+                  <label class="switch"><input type="checkbox" id="opt-adaptive-speed"><span class="switch-track"></span></label>
+                </div>
+                <div class="manual-speed-control" id="manual-speed-control">
+                  <div class="range-wrap">
+                    <input type="range" id="opt-ad-speed" min="1" max="8" value="3" step="0.5" class="range" aria-label="Velocidade manual dos anúncios">
+                    <div class="range-labels speed-range-labels">
+                      <span class="speed-label-min">1x</span>
+                      <span class="speed-label-safe">3x seguro</span>
+                      <span class="speed-label-max">8x risco</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="hint hint--warn" id="ad-speed-beta-hint">Acima de 3x pode aumentar o risco de identificacao.</div>
+              </div>
+            </div>
+          </article>
+
+          <article class="card">
+            <div class="card-header">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              <span>Protecao e status</span>
+              <span class="tag tag--on" style="margin-left:auto;">SEMPRE ON</span>
+            </div>
+            <div class="card-body">
+              <div class="process-list">
+                <div class="process"><span class="process-pip pip--green"></span><span class="process-name">Bypass isTrusted</span><span class="process-status">Ativo</span></div>
+                <div class="process"><span class="process-pip pip--green"></span><span class="process-name">Anti-Adblock CSS</span><span class="process-status">Ativo</span></div>
+                <div class="process"><span class="process-pip pip--green"></span><span class="process-name">MutationObserver</span><span class="process-status">Ativo</span></div>
+                <div class="process"><span class="process-pip pip--green"></span><span class="process-name">Polling fallback</span><span class="process-status">500ms</span></div>
+              </div>
+              <div class="warning-box" id="warning-box">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                <span id="warning-text">Nenhum aviso do YouTube interceptado.</span>
+              </div>
+            </div>
+          </article>
+        </div>
+
+        <div class="section-grid section-grid--split">
+          <article class="card card--filter">
+            <div class="card-header">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+              <span>Filtro de canais</span>
+            </div>
+            <div class="card-body">
+              <div class="list-mode-toggle control-line">
+                <strong>Modo: <span id="list-mode-label" style="color:var(--accent);">Whitelist</span></strong>
+                <label class="switch"><input type="checkbox" id="opt-list-mode"><span class="switch-track"></span></label>
+              </div>
+              <div class="hint">Selecione canais pelo nome ou usando o @link.</div>
+              <div class="whitelist-input-row">
+                <input type="text" id="whitelist-input" class="whitelist-input" placeholder="Nome ou @link do canal..." autocomplete="off" aria-label="Canal para adicionar ao filtro">
+                <button id="whitelist-add" class="btn-add">Adicionar</button>
+              </div>
+              <div class="whitelist-list" id="whitelist-list"></div>
+              <div class="whitelist-empty" id="whitelist-empty">Nenhum canal na lista.</div>
+            </div>
+          </article>
+
+          <article class="card">
+            <div class="card-header">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+              <span>Extras do skipper</span>
+              <span class="tag tag--experimental">BETA</span>
+            </div>
+            <div class="card-body control-stack">
+              <div class="opt-row"><div class="opt-info"><span class="opt-title">Notificacao toast</span><span class="opt-desc">Mostra uma notificacao na tela quando pular.</span></div><label class="switch"><input type="checkbox" id="opt-toast"><span class="switch-track"></span></label></div>
+              <div class="opt-row"><div class="opt-info"><span class="opt-title">Atalhos do teclado</span><span class="opt-desc">Configure todos os atalhos na area Mouse e atalhos.</span></div><label class="switch"><input type="checkbox" id="opt-shortcut"><span class="switch-track"></span></label></div>
+              <div class="opt-row"><div class="opt-info"><span class="opt-title">Player flutuante (PiP)</span><span class="opt-desc">Adiciona um botao para fixar o video na tela.</span></div><label class="switch"><input type="checkbox" id="opt-pip"><span class="switch-track"></span></label></div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel-section" id="player">
+        <div class="section-heading section-heading--row">
+          <div>
+            <span class="section-kicker">Módulo funcional</span>
+            <h2>Player, áudio e reprodução</h2>
+            <p>Velocidade, autoplay, qualidade, miniplayer e barra do player com opções experimentais claramente identificadas.</p>
+          </div>
+          <span class="module-state module-state--live">Funcional</span>
+        </div>
+        <div class="section-grid section-grid--three">
+          <article class="card card--module">
+            <div class="card-header"><span>Velocidade de reproducao</span><span class="tag tag--safe">ATIVO</span></div>
+            <div class="card-body control-stack">
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Aplicar velocidade padrao</span><span class="opt-desc">Define a velocidade ao abrir um video novo.</span></div><label class="switch"><input type="checkbox" id="opt-player-speed-enabled" checked><span class="switch-track"></span></label></div>
+              <label class="field-row"><span>Velocidade padrao</span><input class="control-input" id="opt-player-speed-default" type="number" value="1" min="0.25" max="16" step="0.05"></label>
+              <label class="field-row"><span>Variacao por roda</span><input class="control-input" id="opt-player-speed-step" type="number" value="0.02" min="0.01" max="2" step="0.01"></label>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Roda do mouse + Ctrl</span><span class="opt-desc">Passe o mouse no player e use Ctrl + roda.</span></div><label class="switch"><input type="checkbox" id="opt-player-speed-wheel" checked><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Exigir botao direito pressionado</span></div><label class="switch"><input type="checkbox" id="opt-player-speed-right-button"><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Mostrar botoes - e +</span><span class="opt-desc">Mantem os atalhos de velocidade preparados na barra do player.</span></div><label class="switch"><input type="checkbox" data-setting="playerSpeedButtonsEnabled" checked><span class="switch-track"></span></label></div>
+            </div>
+          </article>
+          <article class="card card--module">
+            <div class="card-header"><span>Volume</span><span class="tag tag--safe">ATIVO</span></div>
+            <div class="card-body control-stack">
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Aplicar volume padrao</span><span class="opt-desc">Ajusta o volume ao abrir um video novo.</span></div><label class="switch"><input type="checkbox" id="opt-player-volume-enabled"><span class="switch-track"></span></label></div>
+              <label class="field-row"><span>Volume padrao</span><input class="control-input" id="opt-player-volume-default" type="number" value="50" min="0" max="100" step="1"></label>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Amplificador de volume</span><span class="opt-desc">Usa Web Audio para passar de 100% quando necessario.</span></div><label class="switch"><input type="checkbox" data-setting="volumeBoostEnabled"><span class="switch-track"></span></label></div>
+              <label class="field-row"><span>Nivel do amplificador</span><input class="control-input" data-setting="volumeBoostLevel" type="number" value="2" min="1" max="6" step="0.25"></label>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Ampliar automaticamente</span><span class="opt-desc">Aplica o boost automaticamente em videos baixos.</span></div><label class="switch"><input type="checkbox" data-setting="volumeBoostAuto"><span class="switch-track"></span></label></div>
+              <label class="field-row"><span>Variacao por roda</span><input class="control-input" id="opt-player-volume-step" type="number" value="5" min="1" max="25" step="1"></label>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Volume pela roda</span><span class="opt-desc">Use a roda com o cursor em cima do player.</span></div><label class="switch"><input type="checkbox" id="opt-player-volume-wheel"><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Exigir botao direito pressionado</span></div><label class="switch"><input type="checkbox" id="opt-player-volume-right-button"><span class="switch-track"></span></label></div>
+            </div>
+          </article>
+          <article class="card card--module">
+            <div class="card-header"><span>Mouse e atalhos</span><span class="tag tag--on">FUNCIONAL</span></div>
+            <div class="card-body control-stack">
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Inverter direcao da roda</span><span class="opt-desc">Troca subir/descer nos controles de volume e velocidade.</span></div><label class="switch"><input type="checkbox" id="opt-player-wheel-invert"><span class="switch-track"></span></label></div>
+              <button class="outline-action" type="button" data-setting-action="shortcutEditor">Configurar atalhos do teclado</button>
+              <div class="inline-actions">
+                <button class="outline-action" type="button" data-setting-action="shortcutToggle">Ativar/desativar atalhos</button>
+                <button class="outline-action" type="button" data-setting-action="shortcutReset">Restaurar padrao</button>
+              </div>
+              <div class="module-note">Clique em um campo e pressione a combinacao desejada. Esc remove o atalho; Backspace restaura o padrao.</div>
+              <div class="keymap-grid">
+                <label><span>Pular anuncio</span><input class="control-input" data-setting="shortcutSkipAd" type="text" value="Alt+Shift+S"></label>
+                <label><span>Velocidade -</span><input class="control-input" data-setting="shortcutSpeedDown" type="text" value="Alt+Shift+,"></label>
+                <label><span>Velocidade +</span><input class="control-input" data-setting="shortcutSpeedUp" type="text" value="Alt+Shift+."></label>
+                <label><span>Volume -</span><input class="control-input" data-setting="shortcutVolumeDown" type="text" value="Alt+Shift+ArrowDown"></label>
+                <label><span>Volume +</span><input class="control-input" data-setting="shortcutVolumeUp" type="text" value="Alt+Shift+ArrowUp"></label>
+                <label><span>Cinema</span><input class="control-input" data-setting="shortcutCinema" type="text" value="Alt+Shift+C"></label>
+                <label><span>Screenshot</span><input class="control-input" data-setting="shortcutScreenshot" type="text" value="Alt+Shift+P"></label>
+                <label><span>Pop-up</span><input class="control-input" data-setting="shortcutPopup" type="text" value="Alt+Shift+O"></label>
+                <label><span>Loop</span><input class="control-input" data-setting="shortcutLoop" type="text" value="Alt+Shift+L"></label>
+              </div>
+            </div>
+          </article>
+        </div>
+
+        <div class="section-grid section-grid--split">
+          <article class="card card--module">
+            <div class="card-header"><span>Autoplay e abas</span><span class="tag tag--safe">ATIVO</span></div>
+            <div class="card-body control-stack">
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Bloquear autoplay em abas de fundo</span><span class="opt-desc">Pausa videos que comecam sozinhos enquanto a aba esta oculta.</span></div><label class="switch"><input type="checkbox" id="opt-autoplay-background" checked><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Desativar reproducao automatica</span><span class="opt-desc">Config geral para pausar videos iniciados pelo YouTube.</span></div><label class="switch"><input type="checkbox" data-setting="autoplayDisableAll"><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Bloquear autoplay na aba atual</span><span class="opt-desc">Pausa reproducoes sem clique ou tecla recente.</span></div><label class="switch"><input type="checkbox" id="opt-autoplay-foreground"><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Permitir em playlists</span><span class="opt-desc">Nao interrompe sequencias quando existe uma playlist ativa.</span></div><label class="switch"><input type="checkbox" id="opt-autoplay-allow-playlists" checked><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Parar pre-carregamento</span><span class="opt-desc">Experimental: tenta impedir carregamento antes de uma acao do usuario.</span></div><label class="switch"><input type="checkbox" data-setting="autoplayStopPreload"><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Pausar abas de fundo</span><span class="opt-desc">Ao tocar um video nesta aba, pausa YouTube em abas ocultas.</span></div><label class="switch"><input type="checkbox" id="opt-pause-background-tabs"><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Ignorar player em pop-up</span><span class="opt-desc">Nao aplica bloqueios de autoplay em janelas pop-up.</span></div><label class="switch"><input type="checkbox" data-setting="autoplayIgnorePopup" checked><span class="switch-track"></span></label></div>
+            </div>
+          </article>
+          <article class="card card--module">
+            <div class="card-header"><span>Qualidade de reproducao</span><span class="tag tag--safe">ATIVO</span></div>
+            <div class="card-body control-stack">
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Selecionar automaticamente</span><span class="opt-desc">Escolhe a qualidade ao abrir um video novo.</span></div><label class="switch"><input type="checkbox" id="opt-quality-enabled"><span class="switch-track"></span></label></div>
+              <label class="field-row"><span>Videos</span><select class="control-input" id="opt-quality-video"><option value="auto">Auto</option><option value="medium">360p</option><option value="large">480p</option><option value="hd720" selected>720p HD</option><option value="hd1080">1080p HD</option><option value="hd1440">1440p</option><option value="hd2160">2160p 4K</option><option value="highres">Maxima</option></select></label>
+              <label class="field-row"><span>Playlists</span><select class="control-input" id="opt-quality-playlist"><option value="auto">Auto</option><option value="medium">360p</option><option value="large">480p</option><option value="hd720" selected>720p HD</option><option value="hd1080">1080p HD</option><option value="hd1440">1440p</option><option value="hd2160">2160p 4K</option><option value="highres">Maxima</option></select></label>
+              <label class="field-row"><span>Pop-up e incorporados</span><select class="control-input" data-setting="qualityPopup"><option value="auto">Auto</option><option value="medium" selected>360p</option><option value="large">480p</option><option value="hd720">720p HD</option><option value="hd1080">1080p HD</option><option value="highres">Maxima</option></select></label>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Qualidade para tela cheia</span><span class="opt-desc">Usa outro alvo quando o player entra em tela cheia.</span></div><label class="switch"><input type="checkbox" id="opt-quality-fullscreen-enabled"><span class="switch-track"></span></label></div>
+              <label class="field-row"><span>Videos em tela cheia</span><select class="control-input" id="opt-quality-fullscreen-video"><option value="auto">Auto</option><option value="medium">360p</option><option value="large">480p</option><option value="hd720">720p HD</option><option value="hd1080" selected>1080p HD</option><option value="hd1440">1440p</option><option value="hd2160">2160p 4K</option><option value="highres">Maxima</option></select></label>
+              <label class="field-row"><span>Playlists em tela cheia</span><select class="control-input" id="opt-quality-fullscreen-playlist"><option value="auto">Auto</option><option value="medium">360p</option><option value="large">480p</option><option value="hd720">720p HD</option><option value="hd1080" selected>1080p HD</option><option value="hd1440">1440p</option><option value="hd2160">2160p 4K</option><option value="highres">Maxima</option></select></label>
+              <label class="field-row"><span>Pop-up/incorporados tela cheia</span><select class="control-input" data-setting="qualityFullscreenPopup"><option value="auto">Auto</option><option value="medium">360p</option><option value="large">480p</option><option value="hd720">720p HD</option><option value="hd1080" selected>1080p HD</option><option value="highres">Maxima</option></select></label>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Restaurar ao sair da tela cheia</span></div><label class="switch"><input type="checkbox" id="opt-quality-restore"><span class="switch-track"></span></label></div>
+            </div>
+          </article>
+          <article class="card card--module">
+            <div class="card-header"><span>Pop-up, PiP e Miniplayer</span><span class="tag tag--safe">ATIVO</span></div>
+            <div class="card-body control-stack">
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Miniplayer ao rolar</span><span class="opt-desc">Quando voce desce para comentarios, o player fica flutuante.</span></div><label class="switch"><input type="checkbox" id="opt-miniplayer-enabled" checked><span class="switch-track"></span></label></div>
+              <label class="field-row"><span>Tamanho do miniplayer</span><select class="control-input" id="opt-miniplayer-size"><option value="360x203">360x203</option><option value="480x270" selected>480x270</option><option value="640x360">640x360</option></select></label>
+              <label class="field-row"><span>Posicao</span><select class="control-input" id="opt-miniplayer-position"><option value="top-left">Canto superior esquerdo</option><option value="top-right">Canto superior direito</option><option value="bottom-left">Canto inferior esquerdo</option><option value="bottom-right">Canto inferior direito</option></select></label>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Player em pop-up funcional</span><span class="opt-desc">Abre o video em janela separada pela barra do player.</span></div><label class="switch"><input type="checkbox" data-setting="playerPopupEnabled" checked><span class="switch-track"></span></label></div>
+              <label class="field-row"><span>Tamanho do player em pop-up</span><select class="control-input" id="opt-player-popup-size"><option value="480x270">480x270</option><option value="640x360" selected>640x360</option><option value="960x540">960x540</option></select></label>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel-section" id="appearance">
+        <div class="section-heading section-heading--row">
+          <div>
+            <span class="section-kicker">Personalização visual</span>
+            <h2>Aparência, tema, cinema e ultrawide</h2>
+            <p>Temas prontos, filtros visuais e modos de exibição para reduzir distrações no YouTube.</p>
+          </div>
+          <span class="module-state module-state--live">Funcional</span>
+        </div>
+        <div class="section-grid section-grid--split">
+          <article class="card card--module">
+            <div class="card-header"><span>Aparencia do YouTube</span><span class="tag tag--safe">ATIVO</span></div>
+            <div class="card-body control-stack">
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Converter Shorts</span><span class="opt-desc">Abre links /shorts no player normal do YouTube.</span></div><label class="switch"><input type="checkbox" id="opt-appearance-convert-shorts"><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Ocultar Shorts</span><span class="opt-desc">Remove prateleiras e cards de Shorts da navegacao.</span></div><label class="switch"><input type="checkbox" id="opt-appearance-hide-shorts"><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Ocultar videos relacionados</span><span class="opt-desc">Limpa a coluna lateral da pagina de exibicao.</span></div><label class="switch"><input type="checkbox" id="opt-appearance-hide-related"><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Ocultar chat</span><span class="opt-desc">Remove chat ao vivo e replay de chat.</span></div><label class="switch"><input type="checkbox" id="opt-appearance-hide-chat"><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Ocultar comentarios</span><span class="opt-desc">Esconde o bloco de comentarios abaixo do video.</span></div><label class="switch"><input type="checkbox" id="opt-appearance-hide-comments"><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Ocultar cards finais</span><span class="opt-desc">Remove cards, telas finais e teasers sobre o player.</span></div><label class="switch"><input type="checkbox" id="opt-appearance-hide-endcards"><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Ordenar comentários recentes</span><span class="opt-desc">Tenta abrir os comentários com os mais recentes primeiro.</span></div><label class="switch"><input type="checkbox" data-setting="appearanceSortNewestComments"><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Aplicar filtros automaticamente</span><span class="opt-desc">Mantem seus filtros de video em todos os videos seguintes.</span></div><label class="switch"><input type="checkbox" data-setting="appearanceAutoApplyFilters"><span class="switch-track"></span></label></div>
+            </div>
+          </article>
+          <article class="card card--module">
+            <div class="card-header"><span>Tema e CSS customizado</span><span class="tag tag--on">FUNCIONAL</span></div>
+            <div class="card-body control-stack">
+              <label class="field-row"><span>Motor de tema</span><select class="control-input" data-setting="themeEngine"><option value="youtube" selected>YouTube oficial</option><option value="tube-shield">YouTube Extension</option><option value="enhancer">Enhancer style</option><option value="deepdark">YouTube-DeepDark</option><option value="custom">Personalizado</option></select></label>
+              <label class="field-row"><span>Variante</span><select class="control-input" data-setting="themeVariant"><option value="red" selected>Graphite Red</option><option value="deep-dark">Deep Dark</option><option value="gray">Neutral Gray</option><option value="blue">Slate Blue</option><option value="warm">Warm Cinema</option></select></label>
+              <div class="theme-preset-grid" aria-label="Temas prontos">
+                <button class="theme-preset-button" type="button" data-theme-preset="graphite"><span class="theme-chip"></span><strong>Graphite Red</strong></button>
+                <button class="theme-preset-button" type="button" data-theme-preset="deep-dark"><span class="theme-chip"></span><strong>Deep Dark</strong></button>
+                <button class="theme-preset-button" type="button" data-theme-preset="slate"><span class="theme-chip"></span><strong>Slate Blue</strong></button>
+                <button class="theme-preset-button" type="button" data-theme-preset="warm"><span class="theme-chip"></span><strong>Warm Cinema</strong></button>
+              </div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">YouTube-DeepDark personalizado</span><span class="opt-desc">Salva as cores para a variante personalizada.</span></div><label class="switch"><input type="checkbox" data-setting="themeDeepDarkCustom"><span class="switch-track"></span></label></div>
+              <div class="color-grid">
+                <label><span>Accent</span><input class="control-input" data-setting="themeCustomAccent" type="color" value="#ff334b"></label>
+                <label><span>Fundo</span><input class="control-input" data-setting="themeCustomBackground" type="color" value="#0f0f0f"></label>
+                <label><span>Superficie</span><input class="control-input" data-setting="themeCustomSurface" type="color" value="#17191f"></label>
+                <label><span>Elevado</span><input class="control-input" data-setting="themeCustomSurfaceRaised" type="color" value="#20232b"></label>
+                <label><span>Texto</span><input class="control-input" data-setting="themeCustomText" type="color" value="#f4f5f7"></label>
+                <label><span>Secundario</span><input class="control-input" data-setting="themeCustomMuted" type="color" value="#a9adb8"></label>
+                <label><span>Borda</span><input class="control-input" data-setting="themeCustomBorder" type="color" value="#343741"></label>
+              </div>
+              <textarea class="control-input code-textarea" data-setting="themeCustomCss" rows="5" aria-label="CSS personalizado do tema">body {
+  --yt-spec-base-background: #0f0f0f;
+}</textarea>
+              <div class="action-row">
+                <button class="outline-action" type="button" data-setting-action="themeSave">Salvar tema/CSS</button>
+                <button class="outline-action" type="button" data-setting-action="themeReset">Redefinir tema</button>
+              </div>
+            </div>
+          </article>
+        </div>
+        <article class="card card--module">
+          <div class="card-header"><span>Layout por fileira</span><span class="tag tag--on">FUNCIONAL</span></div>
+          <div class="card-body">
+            <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Ativar layout por fileira</span><span class="opt-desc">Altera grades do YouTube apenas quando ligado.</span></div><label class="switch"><input type="checkbox" data-setting="appearanceLayoutRowsEnabled"><span class="switch-track"></span></label></div>
+            <div class="appearance-grid">
+              <label class="field-row"><span>Videos por fileira</span><input class="control-input" data-setting="layoutVideosPerRow" type="number" value="4" min="1" max="8" step="1"></label>
+              <label class="field-row"><span>Videos por fileira no canal</span><input class="control-input" data-setting="layoutChannelVideosPerRow" type="number" value="4" min="1" max="8" step="1"></label>
+              <label class="field-row"><span>Shorts por fileira</span><input class="control-input" data-setting="layoutShortsPerRow" type="number" value="8" min="1" max="12" step="1"></label>
+              <label class="field-row"><span>Shorts por fileira no canal</span><input class="control-input" data-setting="layoutChannelShortsPerRow" type="number" value="5" min="1" max="12" step="1"></label>
+              <label class="field-row"><span>Postagens por fileira</span><input class="control-input" data-setting="layoutPostsPerRow" type="number" value="4" min="1" max="8" step="1"></label>
+              <label><input type="checkbox" data-setting="appearanceAutoTheater"><span>Ativar Modo Teatro automaticamente</span></label>
+              <label><input type="checkbox" data-setting="appearanceAutoExpandPlayer"><span>Expandir player automaticamente</span></label>
+              <label><input type="checkbox" data-setting="appearanceUseViewportPlayer"><span>Usar todo o viewport disponivel</span></label>
+            </div>
+          </div>
+        </article>
+        <article class="card card--module">
+          <div class="card-header"><span>Modo cinema e ultrawide</span><span class="tag tag--on">FUNCIONAL</span></div>
+          <div class="card-body cinema-layout">
+            <div class="control-stack">
+              <label class="field-row"><span>Cor de fundo</span><input class="control-input" data-setting="cinemaColor" type="color" value="#000000"></label>
+              <label class="field-row"><span>Opacidade</span><input class="control-input" data-setting="cinemaOpacity" type="number" value="85" min="0" max="100" step="1"></label>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Usar cinema por padrao</span></div><label class="switch"><input type="checkbox" data-setting="cinemaDefault"><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Expandir/diminuir automaticamente</span><span class="opt-desc">Sincroniza o player ao ligar ou desligar o cinema.</span></div><label class="switch"><input type="checkbox" data-setting="cinemaAutoResize"><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Integrar com Modo Teatro</span><span class="opt-desc">Usa o modo teatro nativo como base quando possivel.</span></div><label class="switch"><input type="checkbox" data-setting="cinemaUseYouTubeTheater"><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Modo ultrawide 21:9 / 32:9</span></div><label class="switch"><input type="checkbox" data-setting="ultrawideEnabled"><span class="switch-track"></span></label></div>
+              <label class="field-row"><span>Ajuste de encaixe</span><select class="control-input" data-setting="ultrawideFit"><option value="smart-crop" selected>Crop inteligente</option><option value="contain">Contain</option><option value="stretch">Stretch</option></select></label>
+            </div>
+            <div class="cinema-preview-shell">
+              <div class="preview-label"><strong>Previa</strong><span>video player</span></div>
+              <div class="cinema-preview"><div class="preview-player"><span></span></div><div class="preview-side"></div></div>
+            </div>
+          </div>
+        </article>
+        <article class="card card--module">
+          <div class="card-header"><span>Filtros de video</span><span class="tag tag--safe">NOVO</span></div>
+          <div class="card-body control-stack">
+            <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Ativar filtros</span><span class="opt-desc">Aplica os ajustes abaixo no video atual.</span></div><label class="switch"><input type="checkbox" data-setting="videoFiltersEnabled"><span class="switch-track"></span></label></div>
+            <div class="appearance-grid">
+              <label class="field-row"><span>Brilho</span><input class="control-input" data-setting="videoFilterBrightness" type="number" value="100" min="0" max="200" step="5"></label>
+              <label class="field-row"><span>Contraste</span><input class="control-input" data-setting="videoFilterContrast" type="number" value="100" min="0" max="200" step="5"></label>
+              <label class="field-row"><span>Saturacao</span><input class="control-input" data-setting="videoFilterSaturate" type="number" value="100" min="0" max="250" step="5"></label>
+              <label class="field-row"><span>Cinza</span><input class="control-input" data-setting="videoFilterGrayscale" type="number" value="0" min="0" max="100" step="5"></label>
+              <label class="field-row"><span>Sepia</span><input class="control-input" data-setting="videoFilterSepia" type="number" value="0" min="0" max="100" step="5"></label>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section class="panel-section" id="advanced">
+        <div class="section-heading section-heading--row">
+          <div>
+            <span class="section-kicker">Ferramentas</span>
+            <h2>Controles, backup, codecs e scripts</h2>
+            <p>Area para as funcoes mais sensiveis ou tecnicas ficarem separadas do uso diario.</p>
+          </div>
+          <span class="module-state">Funcional</span>
+        </div>
+        <div class="section-grid section-grid--split">
+          <article class="card card--module">
+            <div class="card-header"><span>Barra de controles do player</span><span class="tag tag--safe">ATIVO</span></div>
+            <div class="card-body control-stack">
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Exibir em uma barra</span><span class="opt-desc">Adiciona atalhos abaixo do player do YouTube.</span></div><label class="switch"><input type="checkbox" id="opt-toolbar-enabled" checked><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Exibir dentro do player</span><span class="opt-desc">Coloca os controles sobre o video quando houver espaco.</span></div><label class="switch"><input type="checkbox" data-setting="toolbarInsidePlayer"><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Manter controles visiveis</span><span class="opt-desc">Mantem os controles sem precisar clicar ou passar o cursor no icone de mais opcoes.</span></div><label class="switch"><input type="checkbox" data-setting="toolbarAlwaysVisible" checked><span class="switch-track"></span></label></div>
+              <label class="field-row"><span>Posicao da barra</span><select class="control-input" id="opt-toolbar-position"><option value="below" selected>Abaixo do video</option><option value="above">Acima do video</option></select></label>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Centralizar ao expandir ou tela cheia</span></div><label class="switch"><input type="checkbox" id="opt-toolbar-center" checked><span class="switch-track"></span></label></div>
+              <div class="toolbar-grid">
+                <label><input type="checkbox" id="opt-toolbar-loop" checked><span>Loop</span></label>
+                <label><input type="checkbox" data-setting="toolbarVolumeBoost" checked><span>Volume boost</span></label>
+                <label><input type="checkbox" id="opt-toolbar-speed" checked><span>Velocidade</span></label>
+                <label><input type="checkbox" id="opt-toolbar-popup" checked><span>Pop-up</span></label>
+                <label><input type="checkbox" id="opt-toolbar-pip" checked><span>PiP</span></label>
+                <label><input type="checkbox" id="opt-toolbar-screenshot" checked><span>Screenshot</span></label>
+                <label><input type="checkbox" data-setting="toolbarFilters" checked><span>Filtros</span></label>
+                <label><input type="checkbox" id="opt-toolbar-settings" checked><span>Configuracoes</span></label>
+              </div>
+            </div>
+          </article>
+          <article class="card card--module">
+            <div class="card-header"><span>Codecs e formatos</span><span class="tag tag--on">FUNCIONAL</span></div>
+            <div class="card-body control-stack">
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Forcar FPS padrao 24/25/30</span><span class="opt-desc">Filtra formatos acima de 30 FPS quando o player recebe as opcoes.</span></div><label class="switch"><input type="checkbox" data-setting="codecForceStandardFps"><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Forcar MP4 + AVC (H.264)</span><span class="opt-desc">Filtra WebM/VP9/AV1 quando houver MP4 AVC disponivel.</span></div><label class="switch"><input type="checkbox" data-setting="codecForceAvc"><span class="switch-track"></span></label></div>
+              <div class="module-note">Recarregue o video depois de mudar codecs para o YouTube pedir uma nova lista de formatos.</div>
+            </div>
+          </article>
+        </div>
+        <div class="section-grid section-grid--split">
+          <article class="card card--module">
+            <div class="card-header"><span>Backup</span><span class="tag tag--on">FUNCIONAL</span></div>
+            <div class="card-body action-row">
+              <button class="outline-action" type="button" data-setting-action="backupExport">Exportar</button>
+              <button class="outline-action" type="button" data-setting-action="backupImport">Importar</button>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel-section" id="about">
+        <div class="section-heading section-heading--row">
+          <div>
+            <span class="section-kicker">Projeto</span>
+            <h2>Sobre o YouTube Extension</h2>
+            <p>A versão 5.0 reúne skipper, controles de player, aparência e ferramentas avançadas em um único painel.</p>
           </div>
         </div>
-      </div>
-
-    </div><!-- /grid -->
-  </div><!-- /page -->
+        <div class="about-links about-links--wide">
+          <a href="https://github.com/OtavioBiazzi/Youtube-ad-skipper" target="_blank" rel="noopener noreferrer" class="about-link">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 22v-3.9a3.4 3.4 0 0 0-.9-2.6c3-.3 6.1-1.5 6.1-6.7a5.2 5.2 0 0 0-1.4-3.6 4.8 4.8 0 0 0-.1-3.5s-1.1-.3-3.7 1.4a12.8 12.8 0 0 0-6.8 0C5.6.4 4.5.8 4.5.8a4.8 4.8 0 0 0-.1 3.5A5.2 5.2 0 0 0 3 7.9c0 5.2 3.1 6.4 6.1 6.7a3 3 0 0 0-.9 1.9c-.8.4-2.9 1-4.1-1.2 0 0-.7-1.4-2.2-1.5 0 0-1.4 0-.1.9 0 0 .9.4 1.6 2 0 0 .8 2.4 4.7 1.6V22"/></svg>
+            GitHub
+          </a>
+          <a href="https://github.com/OtavioBiazzi/Youtube-ad-skipper/issues" target="_blank" rel="noopener noreferrer" class="about-link about-link--warning">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 2h8l4 4v10l-6 6h-4l-6-6V6z"/><path d="M12 8v5"/><path d="M12 17h.01"/></svg>
+            Reportar bug
+          </a>
+          <a href="https://github.com/OtavioBiazzi/Youtube-ad-skipper/issues" target="_blank" rel="noopener noreferrer" class="about-link">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a8 8 0 0 0-8 8v4a3 3 0 0 0 3 3h1v-6H6v-1a6 6 0 1 1 12 0v1h-2v6h1a3 3 0 0 0 3-3v-4a8 8 0 0 0-8-8z"/><path d="M9 21h6"/></svg>
+            Suporte
+          </a>
+          <button class="about-link btn-reset" id="btn-reset">Resetar tudo</button>
+        </div>
+      </section>
+    </main>
+  </div>
 
   <div id="f5-banner" class="f5-banner" style="display:none;">
-    Configurações alteradas! Recarregue os vídeos do YouTube (F5) para aplicar.
+    Configuracoes alteradas. Recarregue os videos do YouTube (F5) para aplicar.
   </div>
 
   <script src="options.js"></script>

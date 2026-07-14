@@ -1,15 +1,17 @@
-# ⚡ YouTube Ad Skipper
+# YouTube Extension
 
-Uma extensão de navegador que **pula automaticamente os anúncios do YouTube**.
+Uma extensão experimental de navegador para reunir **skipper inteligente, controles de player, aparência e recursos avançados do YouTube** em um único painel.
 
-> **Isso NÃO é um ad blocker** — a extensão apenas automatiza o processo de clicar no botão "Pular anúncio" do YouTube.
+> A base atual ainda preserva o skipper: ela automatiza o processo de clicar no botão "Pular anúncio" do YouTube e prepara a evolução para um control center completo.
 
 <br>
 
 <div align="center">
-  <a href="https://github.com/OtavioBiazzi/Youtube-ad-skipper/archive/refs/heads/main.zip">
-    <img src="https://img.shields.io/badge/Baixar_Extens%C3%A3o_(.ZIP)-000000?style=for-the-badge&logo=github&logoColor=white" alt="Baixar Extensão" />
+  <a href="https://github.com/OtavioBiazzi/Youtube-ad-skipper/releases/download/v5.0.0/youtube-extension-v5.0.0.zip">
+    <img src="https://img.shields.io/badge/Baixar_Vers%C3%A3o_5.0.0_(.ZIP)-000000?style=for-the-badge&logo=github&logoColor=white" alt="Baixar YouTube Extension 5.0.0" />
   </a>
+  <br><br>
+  <a href="https://github.com/OtavioBiazzi/Youtube-ad-skipper/releases">Ver todas as versões</a>
 </div>
 
 <br>
@@ -41,16 +43,19 @@ Quando um anúncio aparece no YouTube:
 
 ### Chrome / Opera GX / Edge / Brave
 
-1. **[Clique aqui para baixar o .ZIP](https://github.com/OtavioBiazzi/Youtube-ad-skipper/archive/refs/heads/main.zip)** da extensão.
-2. **Extraia (descompacte)** o arquivo `.zip` baixado em uma pasta no seu computador.
+1. **[Baixe o pacote pronto da versão 5.0.0](https://github.com/OtavioBiazzi/Youtube-ad-skipper/releases/download/v5.0.0/youtube-extension-v5.0.0.zip)**.
+2. **Extraia (descompacte)** o arquivo `youtube-extension-v5.0.0.zip` em uma pasta permanente no seu computador.
 3. Abra o seu navegador e vá para a página de extensões:
    - Chrome: `chrome://extensions/`
    - Opera GX: `opera://extensions/`
    - Edge: `edge://extensions/`
+   - Brave: `brave://extensions/`
 4. Ative a opção **"Modo do desenvolvedor"** (geralmente no canto superior direito).
 5. Clique no botão **"Carregar sem compactação"** (ou *"Load unpacked"*).
-6. Selecione a **pasta que você extraiu** no passo 2. Se você gerou um build local, também pode selecionar a pasta `dist/`.
+6. Selecione a **pasta extraída que contém o arquivo `manifest.json`**.
 7. Pronto! A extensão já está instalada e ativa. ⚡
+
+> Não escolha o arquivo `.zip` diretamente: o navegador precisa da pasta descompactada. Para atualizar, baixe a versão nova, substitua a pasta e clique em **Recarregar** na página de extensões.
 
 ## ⚙️ Configurações
 
@@ -87,11 +92,13 @@ O projeto usa **TypeScript + Vite** para gerar os scripts finais da extensão.
 ```bash
 npm install
 npm run verify
+npm run package
 ```
 
 - `npm run check` valida os arquivos em `src/` com TypeScript.
 - `npm run build` gera os scripts finais na raiz e monta a extensão limpa em `dist/`.
 - `npm run verify` roda a checagem TypeScript, build e valida os arquivos referenciados pelo `manifest.json`.
+- `npm run package` gera o ZIP de release em `release/` usando os arquivos de `dist/`.
 
 ### Como funciona tecnicamente
 
@@ -108,6 +115,8 @@ Inspirado no projeto open-source [yt-ad-autoskipper](https://github.com/squgeim/
 ## 📄 Licença
 
 Este projeto é de uso pessoal e educacional. Use por sua própria conta e risco.
+
+Consulte tambem [LICENSE](LICENSE) e [PRIVACY.md](PRIVACY.md).
 
 ---
 

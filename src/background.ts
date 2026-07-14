@@ -1,3 +1,5 @@
+import { DEFAULT_SETTINGS } from "./shared/settings";
+
 const ICONS = {
   active: {
     "16": "icon16.png",
@@ -21,24 +23,50 @@ function updateIcon(settings) {
   
   if (settings.enabled === false) {
     state = "disabled";
-  } else if (settings.aggressiveSkip === false) {
+  } else if (settings.adSkipperEnabled === false || settings.aggressiveSkip === false) {
     state = "passive";
   }
   
   chrome.action.setIcon({ path: ICONS[state] });
 }
 
+const ICON_DEFAULTS = {
+  enabled: DEFAULT_SETTINGS.enabled,
+  adSkipperEnabled: DEFAULT_SETTINGS.adSkipperEnabled,
+  aggressiveSkip: DEFAULT_SETTINGS.aggressiveSkip,
+};
+
 // Initial set
-chrome.storage.local.get({ enabled: true, aggressiveSkip: true }, (s) => {
+chrome.storage.local.get(ICON_DEFAULTS, (s) => {
   updateIcon(s);
 });
 
 // Watch for changes
 chrome.storage.onChanged.addListener((changes) => {
-  if (changes.enabled || changes.aggressiveSkip) {
-    chrome.storage.local.get({ enabled: true, aggressiveSkip: true }, (s) => {
+  if (changes.enabled || changes.adSkipperEnabled || changes.aggressiveSkip) {
+    chrome.storage.local.get(ICON_DEFAULTS, (s) => {
       updateIcon(s);
     });
+  }
+});
+
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type === "youtube-extension:open-options") {
+    chrome.runtime.openOptionsPage(() => {
+      if (!chrome.runtime.lastError) {
+        sendResponse({ ok: true });
+        return;
+      }
+
+      try {
+        chrome.tabs?.create?.({ url: chrome.runtime.getURL("options.html") }, () => {
+          sendResponse({ ok: !chrome.runtime.lastError });
+        });
+      } catch (err) {
+        sendResponse({ ok: false });
+      }
+    });
+    return true;
   }
 });
 
