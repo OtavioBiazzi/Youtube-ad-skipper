@@ -277,6 +277,7 @@ declare global {
             config.ultrawideEnabled = !!s.ultrawideEnabled;
             config.ultrawideFit = normalizeUltrawideFit(s.ultrawideFit);
             config.toolbarInsidePlayer = !!s.toolbarInsidePlayer;
+            config.toolbarAttachToActions = !!s.toolbarAttachToActions;
             config.toolbarAlwaysVisible = !!s.toolbarAlwaysVisible;
             config.themeEngine = normalizeThemeEngine(s.themeEngine);
             config.themeVariant = normalizeThemeVariant(s.themeVariant);
@@ -590,6 +591,10 @@ declare global {
       }
       if (changes.toolbarInsidePlayer) {
         config.toolbarInsidePlayer = !!changes.toolbarInsidePlayer.newValue;
+        schedulePlayerToolbarUpdate();
+      }
+      if (changes.toolbarAttachToActions) {
+        config.toolbarAttachToActions = !!changes.toolbarAttachToActions.newValue;
         schedulePlayerToolbarUpdate();
       }
       if (changes.toolbarAlwaysVisible) {
@@ -1058,6 +1063,128 @@ declare global {
     }
     applyVideoFilters();
     showPlayerFeedback("filters", enabled ? "Filtros on" : "Filtros off", config.appearanceAutoApplyFilters ? "Aplicacao automatica" : "Somente neste video");
+  }
+
+  const VIDEO_FILTER_POPOVER_ID = "tube-shield-video-filter-popover";
+  const VIDEO_FILTER_POPOVER_STYLE_ID = "tube-shield-video-filter-popover-style";
+
+  function removeVideoFilterPopover() {
+    document.getElementById(VIDEO_FILTER_POPOVER_ID)?.remove();
+  }
+
+  function ensureVideoFilterPopoverStyle() {
+    if (document.getElementById(VIDEO_FILTER_POPOVER_STYLE_ID)) return;
+    const style = document.createElement("style");
+    style.id = VIDEO_FILTER_POPOVER_STYLE_ID;
+    style.textContent = `
+      #${VIDEO_FILTER_POPOVER_ID} {
+        position: fixed !important;
+        z-index: 2147483600 !important;
+        width: min(280px, calc(100vw - 28px)) !important;
+        padding: 14px !important;
+        border: 1px solid rgba(255,255,255,.16) !important;
+        border-radius: 14px !important;
+        background: rgba(18,18,20,.96) !important;
+        color: #fff !important;
+        box-shadow: 0 18px 60px rgba(0,0,0,.5) !important;
+        backdrop-filter: blur(16px) !important;
+        font: 12px/1.2 system-ui, sans-serif !important;
+      }
+      #${VIDEO_FILTER_POPOVER_ID} .yse-filter-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; }
+      #${VIDEO_FILTER_POPOVER_ID} .yse-filter-title { font-weight:750; font-size:13px; }
+      #${VIDEO_FILTER_POPOVER_ID} .yse-filter-close { border:0; background:transparent; color:rgba(255,255,255,.7); cursor:pointer; font-size:18px; line-height:1; }
+      #${VIDEO_FILTER_POPOVER_ID} .yse-filter-row { display:grid; grid-template-columns:86px 1fr 38px; gap:8px; align-items:center; margin:9px 0; }
+      #${VIDEO_FILTER_POPOVER_ID} .yse-filter-row input[type=range] { width:100%; accent-color:#ff334b; }
+      #${VIDEO_FILTER_POPOVER_ID} .yse-filter-value { text-align:right; color:rgba(255,255,255,.68); font-variant-numeric:tabular-nums; }
+      #${VIDEO_FILTER_POPOVER_ID} .yse-filter-actions { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-top:12px; padding-top:10px; border-top:1px solid rgba(255,255,255,.1); }
+      #${VIDEO_FILTER_POPOVER_ID} .yse-filter-reset { border:1px solid rgba(255,255,255,.18); border-radius:8px; background:rgba(255,255,255,.08); color:#fff; padding:6px 9px; cursor:pointer; }
+    `;
+    (document.head || document.documentElement).appendChild(style);
+  }
+
+  function updateVideoFilterPopoverPosition() {
+    const popover = document.getElementById(VIDEO_FILTER_POPOVER_ID);
+    const player: any = getYouTubePlayer();
+    const video = getActiveVideo();
+    const rect = player?.getBoundingClientRect?.();
+    if (!popover || !video || !rect || rect.width <= 0 || rect.height <= 0 || !isWatchPage()) {
+      if (popover) removeVideoFilterPopover();
+      return;
+    }
+    const top = Math.max(10, rect.top + 14);
+    const left = Math.max(10, rect.right - popover.offsetWidth - 14);
+    popover.style.top = `${Math.min(top, window.innerHeight - popover.offsetHeight - 10)}px`;
+    popover.style.left = `${Math.min(left, window.innerWidth - popover.offsetWidth - 10)}px`;
+  }
+
+  function syncVideoFilterPopover() {
+    updateVideoFilterPopoverPosition();
+    const popover = document.getElementById(VIDEO_FILTER_POPOVER_ID);
+    if (!popover) return;
+    const toggle = popover.querySelector<HTMLInputElement>("[data-filter-toggle]");
+    if (toggle) toggle.checked = shouldUseVideoFilters();
+    popover.querySelectorAll<HTMLInputElement>("[data-filter-key]").forEach((input) => {
+      const key = input.dataset.filterKey as keyof typeof config;
+      const value = Number(config[key]);
+      if (Number.isFinite(value)) {
+        input.value = String(value);
+        const label = input.parentElement?.querySelector<HTMLElement>(".yse-filter-value");
+        if (label) label.textContent = `${value}%`;
+      }
+    });
+  }
+
+  function toggleVideoFilterPopover() {
+    const player: any = getYouTubePlayer();
+    const video = getActiveVideo();
+    const rect = player?.getBoundingClientRect?.();
+    if (!video || !rect || rect.width <= 0 || rect.height <= 0 || !isWatchPage()) {
+      removeVideoFilterPopover();
+      return;
+    }
+    const existing = document.getElementById(VIDEO_FILTER_POPOVER_ID);
+    if (existing) {
+      existing.remove();
+      return;
+    }
+    ensureVideoFilterPopoverStyle();
+    const popover = document.createElement("section");
+    popover.id = VIDEO_FILTER_POPOVER_ID;
+    popover.setAttribute("role", "dialog");
+    popover.setAttribute("aria-label", "Filtros do video");
+    const rows = [
+      ["videoFilterBrightness", "Brilho", 50, 150],
+      ["videoFilterContrast", "Contraste", 50, 150],
+      ["videoFilterSaturate", "Saturacao", 0, 200],
+      ["videoFilterGrayscale", "Cinza", 0, 100],
+      ["videoFilterSepia", "Sepia", 0, 100],
+    ];
+    popover.innerHTML = `<div class="yse-filter-head"><span class="yse-filter-title">Filtros do video</span><button class="yse-filter-close" type="button" aria-label="Fechar filtros">Ã—</button></div><label><input type="checkbox" data-filter-toggle> Ativar filtros</label>${rows.map(([key, label, min, max]) => `<label class="yse-filter-row"><span>${label}</span><input type="range" data-filter-key="${key}" min="${min}" max="${max}" value="${Number(config[key])}"><span class="yse-filter-value">${Number(config[key])}%</span></label>`).join("")}<div class="yse-filter-actions"><span>Somente neste video</span><button type="button" class="yse-filter-reset">Restaurar</button></div>`;
+    document.body.appendChild(popover);
+    popover.querySelector<HTMLButtonElement>(".yse-filter-close")?.addEventListener("click", removeVideoFilterPopover);
+    popover.querySelector<HTMLInputElement>("[data-filter-toggle]")?.addEventListener("change", (event) => {
+      setVideoFiltersEnabled((event.target as HTMLInputElement).checked);
+      syncVideoFilterPopover();
+    });
+    popover.querySelectorAll<HTMLInputElement>("[data-filter-key]").forEach((input) => {
+      input.addEventListener("input", () => {
+        const key = input.dataset.filterKey as keyof typeof config;
+        const value = Number(input.value);
+        (config as any)[key] = value;
+        try { chrome.storage.local.set({ [key]: value }); } catch (err) {}
+        applyVideoFilters();
+        const label = input.parentElement?.querySelector<HTMLElement>(".yse-filter-value");
+        if (label) label.textContent = `${value}%`;
+      });
+    });
+    popover.querySelector<HTMLButtonElement>(".yse-filter-reset")?.addEventListener("click", () => {
+      const defaults = { videoFilterBrightness: 100, videoFilterContrast: 100, videoFilterSaturate: 100, videoFilterGrayscale: 0, videoFilterSepia: 0 };
+      Object.assign(config, defaults);
+      try { chrome.storage.local.set(defaults); } catch (err) {}
+      applyVideoFilters();
+      syncVideoFilterPopover();
+    });
+    syncVideoFilterPopover();
   }
 
   function resetQualityState() {
@@ -1933,6 +2060,12 @@ declare global {
         contain: none !important;
       }
 
+      html.${MINIPLAYER_ACTIVE_CLASS} ytd-watch-flexy #player-container-outer {
+        height: 0 !important;
+        min-height: 0 !important;
+        margin-bottom: 0 !important;
+      }
+
       html.${MINIPLAYER_ACTIVE_CLASS} #movie_player.html5-video-player {
         position: fixed !important;
         ${getMiniplayerPositionCss()}
@@ -2014,6 +2147,7 @@ declare global {
 
     ensureMiniplayerStyle();
     root.classList.toggle(MINIPLAYER_ACTIVE_CLASS, active);
+    syncVideoFilterPopover();
   }
 
   function scheduleMiniplayerUpdate() {
@@ -2029,6 +2163,14 @@ declare global {
   let playerToolbarSignature = "";
 
   function getPlayerToolbarAnchor() {
+    if (config.toolbarAttachToActions) {
+      return document.querySelector("#top-level-buttons-computed, ytd-watch-metadata #actions, #actions")
+        || getPlayerToolbarAnchorDefault();
+    }
+    return getPlayerToolbarAnchorDefault();
+  }
+
+  function getPlayerToolbarAnchorDefault() {
     const watchFlexy = document.querySelector("ytd-watch-flexy");
     const theater = !!watchFlexy?.hasAttribute("theater");
     if (theater) {
@@ -2260,6 +2402,7 @@ declare global {
       config.playerSpeedButtonsEnabled,
       config.playerPopupEnabled,
       config.toolbarInsidePlayer,
+      config.toolbarAttachToActions,
       config.toolbarAlwaysVisible,
       normalizePlayerPopupSize(config.playerPopupSize),
       location.pathname,
@@ -2542,7 +2685,7 @@ declare global {
     }
 
     if (action === "filters") {
-      setVideoFiltersEnabled(!shouldUseVideoFilters());
+      toggleVideoFilterPopover();
       return;
     }
 
@@ -3830,10 +3973,15 @@ declare global {
     if (!document.hidden) markUserPlaybackIntent("tab-visible");
     enforceAutoplayGuards();
     scheduleAdWatchdogTick();
+    scheduleMiniplayerUpdate();
+    syncVideoFilterPopover();
   });
 
   window.addEventListener("scroll", scheduleMiniplayerUpdate, { passive: true });
   window.addEventListener("resize", scheduleMiniplayerUpdate);
+  document.addEventListener("fullscreenchange", scheduleMiniplayerUpdate, true);
+  document.addEventListener("yt-navigate-finish", scheduleMiniplayerUpdate, true);
+  window.addEventListener("popstate", scheduleMiniplayerUpdate);
 
   const PIP_BTN_ID = 'ytp-pip-float-btn';
   const PIP_STYLE_ID = 'ytp-pip-style';

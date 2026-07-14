@@ -183,6 +183,7 @@
     ultrawideEnabled: false,
     ultrawideFit: "smart-crop",
     toolbarInsidePlayer: false,
+    toolbarAttachToActions: false,
     toolbarAlwaysVisible: true,
     themeEngine: "youtube",
     themeVariant: "red",
