@@ -111,10 +111,8 @@ export const DEFAULT_SETTINGS = {
   appearanceAutoApplyFilters: false,
   miniplayerEnabled: true,
   miniplayerSize: "480x270" as MiniplayerSize,
-  miniplayerCustomSize: "480x270",
   miniplayerPosition: "top-left" as MiniplayerPosition,
   playerPopupSize: "640x360" as PlayerPopupSize,
-  playerPopupEmbeds: false,
   toolbarEnabled: true,
   toolbarPosition: "below" as ToolbarPosition,
   toolbarCenter: true,
@@ -127,8 +125,6 @@ export const DEFAULT_SETTINGS = {
   toolbarSettings: true,
   toolbarVolumeBoost: true,
   toolbarFilters: true,
-  playerSpeedReplaceMenu: true,
-  playerSpeedMenuList: "0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4",
   playerSpeedButtonsEnabled: true,
   playerPopupEnabled: true,
   shortcutSkipAd: "Alt+Shift+S",
@@ -148,7 +144,6 @@ export const DEFAULT_SETTINGS = {
   layoutShortsPerRow: 8,
   layoutChannelShortsPerRow: 5,
   layoutPostsPerRow: 4,
-  appearanceKeepBlackBars: false,
   appearanceAutoTheater: false,
   appearanceAutoExpandPlayer: false,
   appearanceUseViewportPlayer: false,
@@ -180,7 +175,6 @@ export const DEFAULT_SETTINGS = {
   videoFilterSaturate: 100,
   videoFilterGrayscale: 0,
   videoFilterSepia: 0,
-  language: "pt-BR",
 };
 
 export type ExtensionSettings = typeof DEFAULT_SETTINGS;

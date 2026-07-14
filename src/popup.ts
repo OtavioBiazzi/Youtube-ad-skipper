@@ -29,6 +29,7 @@ const elements = {
   delayDisplay: byId<HTMLOutputElement>("delay-display"),
   delayHint: byId<HTMLElement>("delay-hint"),
   modeDescription: byId<HTMLElement>("mode-description"),
+  statusTitle: byId<HTMLElement>("extension-status-title"),
   statusText: byId<HTMLElement>("status-text"),
   statusPip: document.querySelector<HTMLElement>(".status-pip")!,
   metricTotal: byId<HTMLElement>("metric-total"),
@@ -65,6 +66,7 @@ function renderDelay(seconds: number) {
 function renderStatus(enabled: boolean, skipperEnabled = elements.skipper.checked) {
   const active = enabled && skipperEnabled;
   elements.statusPip.classList.toggle("active", active);
+  elements.statusTitle.textContent = enabled ? "Extensão ativa" : "Extensão pausada";
   elements.statusText.textContent = !enabled
     ? "Extensão pausada"
     : skipperEnabled

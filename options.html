@@ -22,8 +22,16 @@
         </div>
       </div>
       <div class="header-right">
+        <div class="settings-search" role="search">
+          <label class="sr-only" for="settings-search">Buscar configurações</label>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+          <input id="settings-search" type="search" placeholder="Buscar configuração" autocomplete="off">
+          <button id="settings-search-clear" type="button" aria-label="Limpar busca" title="Limpar busca">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17"/></svg>
+          </button>
+        </div>
         <span class="header-version" id="version-tag">v5.0.0</span>
-        <button id="theme-toggle" class="theme-toggle" title="Alternar Tema">
+        <button id="theme-toggle" class="theme-toggle" title="Alternar tema" aria-label="Alternar tema claro ou escuro">
           <svg class="sun-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
           <svg class="moon-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
         </button>
@@ -38,21 +46,22 @@
       <a href="#advanced">Avancado</a>
       <a href="#about">Sobre</a>
     </nav>
+    <p class="search-empty" id="search-empty" role="status" hidden>Nenhuma configuração encontrada. Tente outro termo.</p>
 
     <main class="control-center">
       <section class="panel-section panel-section--hero" id="overview">
         <div class="section-heading">
-          <span class="section-kicker">Visao geral</span>
-          <h2>Uma extensao para controlar o YouTube inteiro.</h2>
-          <p>O skipper segue funcionando, e esta branch prepara a estrutura para velocidade, volume, qualidade, tema, cinema, ultrawide e outros modulos entrarem por etapas.</p>
+          <span class="section-kicker">Visão geral</span>
+          <h2>Controle o YouTube do seu jeito.</h2>
+          <p>Comece com um perfil pronto ou ajuste skipper, player, aparência e ferramentas em detalhes.</p>
         </div>
         <div class="overview-grid">
           <article class="overview-card overview-card--status">
             <div class="overview-title">
               <img class="state-icon-img" data-state-icon src="icon48.png" alt="" aria-hidden="true">
               <div>
-                <strong>Extensao Ativa</strong>
-                <span><span class="status-dot"></span>Ativo</span>
+                <strong id="overview-status-title">Extensão ativa</strong>
+                <span><span class="status-dot"></span><span id="overview-status-label">Ativo</span></span>
               </div>
             </div>
             <label class="switch">
@@ -72,6 +81,20 @@
             <span class="stat-value" id="stat-warnings">0</span>
             <span class="stat-label">Avisos bloqueados</span>
           </article>
+        </div>
+        <div class="preset-panel" aria-labelledby="preset-title">
+          <div class="preset-intro">
+            <span class="section-kicker">Configuração rápida</span>
+            <strong id="preset-title">Perfis de uso</strong>
+            <span>Aplicam somente os ajustes relacionados ao perfil escolhido.</span>
+          </div>
+          <div class="preset-actions">
+            <button class="preset-button" type="button" data-preset="safe"><strong>Seguro</strong><span>Apenas botão nativo, espera de 5s</span></button>
+            <button class="preset-button is-recommended" type="button" data-preset="balanced"><strong>Equilibrado</strong><span>Botão nativo e fallback seguro em 3x</span></button>
+            <button class="preset-button" type="button" data-preset="turbo"><strong>Turbo</strong><span>Fallback adaptativo até 8x</span><small>Experimental</small></button>
+            <button class="preset-button" type="button" data-preset="focus"><strong>Foco</strong><span>Remove distrações e ativa cinema</span></button>
+          </div>
+          <p class="preset-feedback" id="preset-feedback" role="status" aria-live="polite"></p>
         </div>
       </section>
 
@@ -127,7 +150,7 @@
                 <span class="delay-unit">segundos</span>
               </div>
               <div class="range-wrap timing-control" id="delay-control">
-                <input type="range" id="opt-delay" min="1" max="30" value="1" step="1" class="range">
+                <input type="range" id="opt-delay" min="1" max="30" value="1" step="1" class="range" aria-label="Tempo para pular o anúncio">
                 <div class="range-labels"><span>1s</span><span>15s</span><span>30s</span></div>
               </div>
               <div class="hint" id="opt-delay-hint">Espera ~1s e depois pula o anuncio.</div>
@@ -175,7 +198,7 @@
                 </div>
                 <div class="manual-speed-control" id="manual-speed-control">
                   <div class="range-wrap">
-                    <input type="range" id="opt-ad-speed" min="1" max="8" value="3" step="0.5" class="range">
+                    <input type="range" id="opt-ad-speed" min="1" max="8" value="3" step="0.5" class="range" aria-label="Velocidade manual dos anúncios">
                     <div class="range-labels speed-range-labels">
                       <span class="speed-label-min">1x</span>
                       <span class="speed-label-safe">3x seguro</span>
@@ -222,7 +245,7 @@
               </div>
               <div class="hint">Selecione canais pelo nome ou usando o @link.</div>
               <div class="whitelist-input-row">
-                <input type="text" id="whitelist-input" class="whitelist-input" placeholder="Nome ou @link do canal..." autocomplete="off">
+                <input type="text" id="whitelist-input" class="whitelist-input" placeholder="Nome ou @link do canal..." autocomplete="off" aria-label="Canal para adicionar ao filtro">
                 <button id="whitelist-add" class="btn-add">Adicionar</button>
               </div>
               <div class="whitelist-list" id="whitelist-list"></div>
@@ -248,11 +271,11 @@
       <section class="panel-section" id="player">
         <div class="section-heading section-heading--row">
           <div>
-            <span class="section-kicker">Modulo em expansao</span>
-            <h2>Player, audio e reproducao</h2>
-            <p>Velocidade, autoplay, qualidade, miniplayer e barra do player ja estao ativos; codecs e pre-carregamento entram nas proximas etapas.</p>
+            <span class="section-kicker">Módulo funcional</span>
+            <h2>Player, áudio e reprodução</h2>
+            <p>Velocidade, autoplay, qualidade, miniplayer e barra do player com opções experimentais claramente identificadas.</p>
           </div>
-          <span class="module-state">Em etapas</span>
+          <span class="module-state module-state--live">Funcional</span>
         </div>
         <div class="section-grid section-grid--three">
           <article class="card card--module">
@@ -260,8 +283,6 @@
             <div class="card-body control-stack">
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Aplicar velocidade padrao</span><span class="opt-desc">Define a velocidade ao abrir um video novo.</span></div><label class="switch"><input type="checkbox" id="opt-player-speed-enabled" checked><span class="switch-track"></span></label></div>
               <label class="field-row"><span>Velocidade padrao</span><input class="control-input" id="opt-player-speed-default" type="number" value="1" min="0.25" max="16" step="0.05"></label>
-              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Substituir velocidades do YouTube</span><span class="opt-desc">Prepara o menu do player para usar a lista personalizada.</span></div><label class="switch"><input type="checkbox" data-setting="playerSpeedReplaceMenu" checked><span class="switch-track"></span></label></div>
-              <label class="field-row"><span>Lista personalizada</span><input class="control-input" data-setting="playerSpeedMenuList" type="text" value="0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4"></label>
               <label class="field-row"><span>Variacao por roda</span><input class="control-input" id="opt-player-speed-step" type="number" value="0.02" min="0.01" max="2" step="0.01"></label>
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Roda do mouse + Ctrl</span><span class="opt-desc">Passe o mouse no player e use Ctrl + roda.</span></div><label class="switch"><input type="checkbox" id="opt-player-speed-wheel" checked><span class="switch-track"></span></label></div>
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Exigir botao direito pressionado</span></div><label class="switch"><input type="checkbox" id="opt-player-speed-right-button"><span class="switch-track"></span></label></div>
@@ -338,11 +359,9 @@
             <div class="card-body control-stack">
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Miniplayer ao rolar</span><span class="opt-desc">Quando voce desce para comentarios, o player fica flutuante.</span></div><label class="switch"><input type="checkbox" id="opt-miniplayer-enabled" checked><span class="switch-track"></span></label></div>
               <label class="field-row"><span>Tamanho do miniplayer</span><select class="control-input" id="opt-miniplayer-size"><option value="360x203">360x203</option><option value="480x270" selected>480x270</option><option value="640x360">640x360</option></select></label>
-              <label class="field-row"><span>Tamanho customizado</span><input class="control-input" data-setting="miniplayerCustomSize" type="text" value="480x270"></label>
               <label class="field-row"><span>Posicao</span><select class="control-input" id="opt-miniplayer-position"><option value="top-left">Canto superior esquerdo</option><option value="top-right">Canto superior direito</option><option value="bottom-left">Canto inferior esquerdo</option><option value="bottom-right">Canto inferior direito</option></select></label>
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Player em pop-up funcional</span><span class="opt-desc">Abre o video em janela separada pela barra do player.</span></div><label class="switch"><input type="checkbox" data-setting="playerPopupEnabled" checked><span class="switch-track"></span></label></div>
               <label class="field-row"><span>Tamanho do player em pop-up</span><select class="control-input" id="opt-player-popup-size"><option value="480x270">480x270</option><option value="640x360" selected>640x360</option><option value="960x540">960x540</option></select></label>
-              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Suporte a videos incorporados</span><span class="opt-desc">Prepara regras para embeds e players externos.</span></div><label class="switch"><input type="checkbox" data-setting="playerPopupEmbeds"><span class="switch-track"></span></label></div>
             </div>
           </article>
         </div>
@@ -351,11 +370,11 @@
       <section class="panel-section" id="appearance">
         <div class="section-heading section-heading--row">
           <div>
-            <span class="section-kicker">Visual em etapas</span>
-            <h2>Aparencia, tema, cinema e ultrawide</h2>
-            <p>Filtros visuais ja podem limpar Shorts, chat, comentarios, relacionados e cards finais.</p>
+            <span class="section-kicker">Personalização visual</span>
+            <h2>Aparência, tema, cinema e ultrawide</h2>
+            <p>Temas prontos, filtros visuais e modos de exibição para reduzir distrações no YouTube.</p>
           </div>
-          <span class="module-state">Em etapas</span>
+          <span class="module-state module-state--live">Funcional</span>
         </div>
         <div class="section-grid section-grid--split">
           <article class="card card--module">
@@ -367,7 +386,7 @@
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Ocultar chat</span><span class="opt-desc">Remove chat ao vivo e replay de chat.</span></div><label class="switch"><input type="checkbox" id="opt-appearance-hide-chat"><span class="switch-track"></span></label></div>
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Ocultar comentarios</span><span class="opt-desc">Esconde o bloco de comentarios abaixo do video.</span></div><label class="switch"><input type="checkbox" id="opt-appearance-hide-comments"><span class="switch-track"></span></label></div>
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Ocultar cards finais</span><span class="opt-desc">Remove cards, telas finais e teasers sobre o player.</span></div><label class="switch"><input type="checkbox" id="opt-appearance-hide-endcards"><span class="switch-track"></span></label></div>
-              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Ordenar comentarios recentes</span><span class="opt-desc">Planejado para abrir comentarios em ordem de recentes.</span></div><label class="switch"><input type="checkbox" data-setting="appearanceSortNewestComments"><span class="switch-track"></span></label></div>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Ordenar comentários recentes</span><span class="opt-desc">Tenta abrir os comentários com os mais recentes primeiro.</span></div><label class="switch"><input type="checkbox" data-setting="appearanceSortNewestComments"><span class="switch-track"></span></label></div>
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Aplicar filtros automaticamente</span><span class="opt-desc">Mantem seus filtros de video em todos os videos seguintes.</span></div><label class="switch"><input type="checkbox" data-setting="appearanceAutoApplyFilters"><span class="switch-track"></span></label></div>
             </div>
           </article>
@@ -375,8 +394,13 @@
             <div class="card-header"><span>Tema e CSS customizado</span><span class="tag tag--on">FUNCIONAL</span></div>
             <div class="card-body control-stack">
               <label class="field-row"><span>Motor de tema</span><select class="control-input" data-setting="themeEngine"><option value="youtube" selected>YouTube oficial</option><option value="tube-shield">YouTube Extension</option><option value="enhancer">Enhancer style</option><option value="deepdark">YouTube-DeepDark</option><option value="custom">Personalizado</option></select></label>
-              <label class="field-row"><span>Variante</span><select class="control-input" data-setting="themeVariant"><option value="red" selected>Red</option><option value="deep-dark">Deep Dark</option><option value="gray">Gray</option><option value="blue">Blue</option></select></label>
-              <div class="theme-swatches" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
+              <label class="field-row"><span>Variante</span><select class="control-input" data-setting="themeVariant"><option value="red" selected>Graphite Red</option><option value="deep-dark">Deep Dark</option><option value="gray">Neutral Gray</option><option value="blue">Slate Blue</option><option value="warm">Warm Cinema</option></select></label>
+              <div class="theme-preset-grid" aria-label="Temas prontos">
+                <button class="theme-preset-button" type="button" data-theme-preset="graphite"><span class="theme-chip"></span><strong>Graphite Red</strong></button>
+                <button class="theme-preset-button" type="button" data-theme-preset="deep-dark"><span class="theme-chip"></span><strong>Deep Dark</strong></button>
+                <button class="theme-preset-button" type="button" data-theme-preset="slate"><span class="theme-chip"></span><strong>Slate Blue</strong></button>
+                <button class="theme-preset-button" type="button" data-theme-preset="warm"><span class="theme-chip"></span><strong>Warm Cinema</strong></button>
+              </div>
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">YouTube-DeepDark personalizado</span><span class="opt-desc">Salva as cores para a variante personalizada.</span></div><label class="switch"><input type="checkbox" data-setting="themeDeepDarkCustom"><span class="switch-track"></span></label></div>
               <div class="color-grid">
                 <label><span>Accent</span><input class="control-input" data-setting="themeCustomAccent" type="color" value="#ff334b"></label>
@@ -387,7 +411,7 @@
                 <label><span>Secundario</span><input class="control-input" data-setting="themeCustomMuted" type="color" value="#a9adb8"></label>
                 <label><span>Borda</span><input class="control-input" data-setting="themeCustomBorder" type="color" value="#343741"></label>
               </div>
-              <textarea class="control-input code-textarea" data-setting="themeCustomCss" rows="5">body {
+              <textarea class="control-input code-textarea" data-setting="themeCustomCss" rows="5" aria-label="CSS personalizado do tema">body {
   --yt-spec-base-background: #0f0f0f;
 }</textarea>
               <div class="action-row">
@@ -407,7 +431,6 @@
               <label class="field-row"><span>Shorts por fileira</span><input class="control-input" data-setting="layoutShortsPerRow" type="number" value="8" min="1" max="12" step="1"></label>
               <label class="field-row"><span>Shorts por fileira no canal</span><input class="control-input" data-setting="layoutChannelShortsPerRow" type="number" value="5" min="1" max="12" step="1"></label>
               <label class="field-row"><span>Postagens por fileira</span><input class="control-input" data-setting="layoutPostsPerRow" type="number" value="4" min="1" max="8" step="1"></label>
-              <label><input type="checkbox" data-setting="appearanceKeepBlackBars"><span>Nao alterar barras pretas verticais</span></label>
               <label><input type="checkbox" data-setting="appearanceAutoTheater"><span>Ativar Modo Teatro automaticamente</span></label>
               <label><input type="checkbox" data-setting="appearanceAutoExpandPlayer"><span>Expandir player automaticamente</span></label>
               <label><input type="checkbox" data-setting="appearanceUseViewportPlayer"><span>Usar todo o viewport disponivel</span></label>
@@ -503,7 +526,7 @@
           <div>
             <span class="section-kicker">Projeto</span>
             <h2>Sobre o YouTube Extension</h2>
-            <p>A branch experimental mantem o skipper funcional e prepara a extensao para substituir varias ferramentas do YouTube aos poucos.</p>
+            <p>A versão 5.0 reúne skipper, controles de player, aparência e ferramentas avançadas em um único painel.</p>
           </div>
         </div>
         <div class="about-links about-links--wide">
@@ -519,10 +542,6 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a8 8 0 0 0-8 8v4a3 3 0 0 0 3 3h1v-6H6v-1a6 6 0 1 1 12 0v1h-2v6h1a3 3 0 0 0 3-3v-4a8 8 0 0 0-8-8z"/><path d="M9 21h6"/></svg>
             Suporte
           </a>
-          <label class="about-link about-link--select">
-            Idioma
-            <select class="control-input" data-setting="language"><option value="pt-BR" selected>Português (Brasil)</option><option value="en">English</option></select>
-          </label>
           <button class="about-link btn-reset" id="btn-reset">Resetar tudo</button>
         </div>
       </section>

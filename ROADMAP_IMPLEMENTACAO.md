@@ -401,7 +401,7 @@ Objetivo: deixar a extensao mais clara para usuario final.
 Tarefas:
 
 - [ ] Separar recursos estaveis de experimentais na UI.
-- [ ] Criar preset seguro, equilibrado e agressivo.
+- [x] Criar preset seguro, equilibrado e agressivo.
 - [ ] Melhorar mensagens de "precisa recarregar".
 - [ ] Adicionar painel de diagnostico.
 - [ ] Melhorar acessibilidade de popup/options.

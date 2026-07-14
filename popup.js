@@ -101,10 +101,8 @@
     appearanceAutoApplyFilters: false,
     miniplayerEnabled: true,
     miniplayerSize: "480x270",
-    miniplayerCustomSize: "480x270",
     miniplayerPosition: "top-left",
     playerPopupSize: "640x360",
-    playerPopupEmbeds: false,
     toolbarEnabled: true,
     toolbarPosition: "below",
     toolbarCenter: true,
@@ -117,8 +115,6 @@
     toolbarSettings: true,
     toolbarVolumeBoost: true,
     toolbarFilters: true,
-    playerSpeedReplaceMenu: true,
-    playerSpeedMenuList: "0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4",
     playerSpeedButtonsEnabled: true,
     playerPopupEnabled: true,
     shortcutSkipAd: "Alt+Shift+S",
@@ -138,7 +134,6 @@
     layoutShortsPerRow: 8,
     layoutChannelShortsPerRow: 5,
     layoutPostsPerRow: 4,
-    appearanceKeepBlackBars: false,
     appearanceAutoTheater: false,
     appearanceAutoExpandPlayer: false,
     appearanceUseViewportPlayer: false,
@@ -169,8 +164,7 @@
     videoFilterContrast: 100,
     videoFilterSaturate: 100,
     videoFilterGrayscale: 0,
-    videoFilterSepia: 0,
-    language: "pt-BR"
+    videoFilterSepia: 0
   };
   const SETTINGS_EXPORT_KEYS = Object.keys(DEFAULT_SETTINGS);
   function normalizeSettings(raw = {}) {
@@ -219,6 +213,7 @@
     delayDisplay: byId("delay-display"),
     delayHint: byId("delay-hint"),
     modeDescription: byId("mode-description"),
+    statusTitle: byId("extension-status-title"),
     statusText: byId("status-text"),
     statusPip: document.querySelector(".status-pip"),
     metricTotal: byId("metric-total"),
@@ -250,6 +245,7 @@
   function renderStatus(enabled, skipperEnabled = elements.skipper.checked) {
     const active = enabled && skipperEnabled;
     elements.statusPip.classList.toggle("active", active);
+    elements.statusTitle.textContent = enabled ? "Extensão ativa" : "Extensão pausada";
     elements.statusText.textContent = !enabled ? "Extensão pausada" : skipperEnabled ? "Monitorando o YouTube" : "Player ativo · skipper pausado";
     document.body.classList.toggle("extension-disabled", !enabled);
     const icon = !enabled ? "icon48_off.png" : elements.aggressive.checked ? "icon48.png" : "icon48_stealth.png";

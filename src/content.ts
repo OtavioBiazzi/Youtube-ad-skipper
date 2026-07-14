@@ -10,6 +10,7 @@ import {
   chooseAdSkipAction,
   getAdSeekTarget,
 } from "./shared/adStrategy";
+import { looksLikeAdblockWarningText } from "./shared/adblockWarning";
 import {
   clickElement,
   clickSkipAdBtn,
@@ -294,7 +295,6 @@ declare global {
             config.videoFilterSaturate = normalizePercent(s.videoFilterSaturate, 100);
             config.videoFilterGrayscale = normalizePercent(s.videoFilterGrayscale, 0);
             config.videoFilterSepia = normalizePercent(s.videoFilterSepia, 0);
-            config.language = normalizeLanguage(s.language);
             config.codecForceStandardFps = !!s.codecForceStandardFps;
             config.codecForceAvc = !!s.codecForceAvc;
             adState.warningCount = s.warningCount || 0;
@@ -630,7 +630,6 @@ declare global {
         videoFiltersChanged = true;
       });
       if (videoFiltersChanged) applyVideoFilters();
-      if (changes.language) config.language = normalizeLanguage(changes.language.newValue);
       if (changes.codecForceStandardFps) {
         config.codecForceStandardFps = !!changes.codecForceStandardFps.newValue;
         syncCodecSettingsToMainWorld();
@@ -769,12 +768,7 @@ declare global {
 
   function normalizeThemeVariant(value) {
     const text = String(value || "");
-    return ["red", "deep-dark", "gray", "blue"].includes(text) ? text : "red";
-  }
-
-  function normalizeLanguage(value) {
-    const text = String(value || "");
-    return ["pt-BR", "en"].includes(text) ? text : "pt-BR";
+    return ["red", "deep-dark", "gray", "blue", "warm"].includes(text) ? text : "red";
   }
 
   function isEditableTarget(target) {
@@ -1262,6 +1256,15 @@ declare global {
         muted: "#aab4c3",
         border: "#313b4f",
       },
+      warm: {
+        accent: "#c38452",
+        background: "#15120f",
+        surface: "#201b17",
+        surfaceRaised: "#2b241f",
+        text: "#f4eee8",
+        muted: "#b6a89d",
+        border: "#41372f",
+      },
     };
 
     if (engine === "custom") {
@@ -1497,6 +1500,13 @@ declare global {
       const fit = normalizeUltrawideFit(config.ultrawideFit);
       const objectFit = fit === "stretch" ? "fill" : fit === "contain" ? "contain" : "cover";
       blocks.push(`
+        ytd-watch-flexy #movie_player {
+          width: 100% !important;
+          max-width: none !important;
+          aspect-ratio: 16 / 9 !important;
+          overflow: hidden !important;
+        }
+
         ytd-watch-flexy #movie_player .html5-video-container,
         ytd-watch-flexy #movie_player video.html5-main-video,
         ytd-watch-flexy #movie_player video {
@@ -1728,6 +1738,25 @@ declare global {
       html.${CINEMA_CLASS} ytd-watch-flexy #player-full-bleed-container {
         background: ${color} !important;
         box-shadow: 0 0 0 100vmax rgba(0, 0, 0, ${Math.min(0.85, opacity).toFixed(2)}) !important;
+      }
+
+      /* Cinema owns the available width; keep a stable 16:9 stage so ultrawide
+         screens do not collapse the player into YouTube's regular max-width. */
+      html.${CINEMA_CLASS} ytd-watch-flexy #player-container-outer,
+      html.${CINEMA_CLASS} ytd-watch-flexy #player-theater-container,
+      html.${CINEMA_CLASS} ytd-watch-flexy #player-full-bleed-container {
+        width: 100% !important;
+        max-width: none !important;
+        margin-inline: auto !important;
+      }
+
+      html.${CINEMA_CLASS} ytd-watch-flexy #movie_player {
+        width: min(100vw, calc((100vh - 72px) * 16 / 9)) !important;
+        max-width: 100% !important;
+        height: auto !important;
+        aspect-ratio: 16 / 9 !important;
+        margin-inline: auto !important;
+        overflow: hidden !important;
       }
     `;
   }
@@ -3138,8 +3167,7 @@ declare global {
       ytd-enforcement-message-view-model,
       tp-yt-paper-dialog:has(ytd-enforcement-message-view-model),
       tp-yt-paper-dialog.ytd-enforcement-message-view-model,
-      ytd-popup-container tp-yt-paper-dialog:has(#enforcement-message-view-model),
-      iron-overlay-backdrop {
+      ytd-popup-container tp-yt-paper-dialog:has(#enforcement-message-view-model) {
         display: none !important;
         visibility: hidden !important;
         opacity: 0 !important;
@@ -3180,14 +3208,28 @@ declare global {
   }
 
   // ── Camada 2: MutationObserver (instantâneo) ──────────
+  function removeOrphanedAdblockBackdrops() {
+    window.setTimeout(() => {
+      const hasOpenDialog = Array.from(document.querySelectorAll("tp-yt-paper-dialog")).some((dialog: HTMLElement) => {
+        if (!dialog.isConnected || dialog.getAttribute("aria-hidden") === "true") return false;
+        return dialog.hasAttribute("opened") || dialog.offsetParent !== null;
+      });
+      if (hasOpenDialog) return;
+
+      document.querySelectorAll(
+        "iron-overlay-backdrop.opened, iron-overlay-backdrop[opened], tp-yt-paper-dialog-backdrop.opened, tp-yt-paper-dialog-backdrop[opened]"
+      ).forEach((backdrop) => backdrop.remove());
+      if (document.body) document.body.style.overflow = "";
+      document.documentElement.style.overflow = "";
+    }, 0);
+  }
+
   function nukeAdblockElement(el) {
     if (!isAdSkipperActive() || !el) return;
-    const shouldCount = el.isConnected !== false;
-    el.remove();
-    const backdrops = document.querySelectorAll('iron-overlay-backdrop, tp-yt-paper-dialog-backdrop');
-    backdrops.forEach(b => b.remove());
-    if (document.body) document.body.style.overflow = '';
-    document.documentElement.style.overflow = '';
+    const target = el.closest?.("tp-yt-paper-dialog") || el;
+    const shouldCount = target.isConnected !== false;
+    target.remove();
+    removeOrphanedAdblockBackdrops();
 
     // Incrementar contador de avisos e salvar
     if (!shouldCount) return;
@@ -3209,9 +3251,7 @@ declare global {
     if (node.tagName === 'TP-YT-PAPER-DIALOG') {
       const inner = node.querySelector('ytd-enforcement-message-view-model');
       if (inner) { nukeAdblockElement(node); return; }
-      const text = (node.textContent || '').toLowerCase();
-      if (text.includes('bloqueador') || text.includes('ad blocker') ||
-          text.includes('proibidos') || text.includes('not allowed')) {
+      if (looksLikeAdblockWarningText(node.textContent)) {
         nukeAdblockElement(node);
         return;
       }
@@ -3265,18 +3305,19 @@ declare global {
     const dialogs = document.querySelectorAll('tp-yt-paper-dialog');
     for (const dialog of dialogs) {
       if (dialog.offsetParent === null && dialog.style.display === 'none') continue;
-      const text = (dialog.textContent || '').toLowerCase();
-      if (text.includes('bloqueador') || text.includes('ad blocker') ||
-          text.includes('proibidos') || text.includes('not allowed') ||
-          text.includes('adblock')) {
+      if (looksLikeAdblockWarningText(dialog.textContent)) {
         nukeAdblockElement(dialog);
         return true;
       }
     }
-    const mealbar = document.querySelector('ytd-mealbar-promo-renderer #dismiss-button');
-    if (mealbar && mealbar.offsetParent !== null) {
-      mealbar.click();
-      return true;
+    const mealbars = document.querySelectorAll('ytd-mealbar-promo-renderer');
+    for (const mealbar of mealbars) {
+      if (!looksLikeAdblockWarningText(mealbar.textContent)) continue;
+      const dismiss = mealbar.querySelector<HTMLElement>('#dismiss-button');
+      if (dismiss && dismiss.offsetParent !== null) {
+        dismiss.click();
+        return true;
+      }
     }
     return false;
   }

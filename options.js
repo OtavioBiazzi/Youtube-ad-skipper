@@ -139,10 +139,8 @@
     appearanceAutoApplyFilters: false,
     miniplayerEnabled: true,
     miniplayerSize: "480x270",
-    miniplayerCustomSize: "480x270",
     miniplayerPosition: "top-left",
     playerPopupSize: "640x360",
-    playerPopupEmbeds: false,
     toolbarEnabled: true,
     toolbarPosition: "below",
     toolbarCenter: true,
@@ -155,8 +153,6 @@
     toolbarSettings: true,
     toolbarVolumeBoost: true,
     toolbarFilters: true,
-    playerSpeedReplaceMenu: true,
-    playerSpeedMenuList: "0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4",
     playerSpeedButtonsEnabled: true,
     playerPopupEnabled: true,
     shortcutSkipAd: "Alt+Shift+S",
@@ -176,7 +172,6 @@
     layoutShortsPerRow: 8,
     layoutChannelShortsPerRow: 5,
     layoutPostsPerRow: 4,
-    appearanceKeepBlackBars: false,
     appearanceAutoTheater: false,
     appearanceAutoExpandPlayer: false,
     appearanceUseViewportPlayer: false,
@@ -207,8 +202,7 @@
     videoFilterContrast: 100,
     videoFilterSaturate: 100,
     videoFilterGrayscale: 0,
-    videoFilterSepia: 0,
-    language: "pt-BR"
+    videoFilterSepia: 0
   };
   const SETTINGS_EXPORT_KEYS = Object.keys(DEFAULT_SETTINGS);
   function normalizeSettings(raw = {}) {
@@ -284,6 +278,69 @@
     const value = String(level || "");
     return QUALITY_ALLOWED.includes(value) ? value : fallback;
   }
+  const SETTINGS_PRESETS = {
+    safe: {
+      enabled: true,
+      adSkipperEnabled: true,
+      aggressiveSkip: false,
+      instantSkip: false,
+      skipDelay: 5,
+      muteAds: true,
+      showOverlay: true,
+      customSpeedEnabled: false,
+      adaptiveSpeedEnabled: false,
+      adSpeedRate: 3
+    },
+    balanced: {
+      enabled: true,
+      adSkipperEnabled: true,
+      aggressiveSkip: true,
+      instantSkip: false,
+      skipDelay: 1,
+      muteAds: true,
+      showOverlay: true,
+      customSpeedEnabled: false,
+      adaptiveSpeedEnabled: false,
+      adSpeedRate: 3
+    },
+    turbo: {
+      enabled: true,
+      adSkipperEnabled: true,
+      aggressiveSkip: true,
+      instantSkip: false,
+      skipDelay: 1,
+      muteAds: true,
+      showOverlay: true,
+      customSpeedEnabled: true,
+      adaptiveSpeedEnabled: true,
+      adSpeedRate: 6
+    },
+    focus: {
+      appearanceHideShorts: true,
+      appearanceHideRelated: true,
+      appearanceHideChat: true,
+      appearanceHideComments: true,
+      appearanceHideEndcards: true,
+      appearanceAutoTheater: true,
+      cinemaDefault: true,
+      themeEngine: "tube-shield",
+      themeVariant: "deep-dark"
+    }
+  };
+  function getSettingsPreset(id) {
+    if (!(id in SETTINGS_PRESETS)) return null;
+    return { ...SETTINGS_PRESETS[id] };
+  }
+  const THEME_PRESETS = {
+    graphite: { themeEngine: "tube-shield", themeVariant: "red" },
+    "deep-dark": { themeEngine: "deepdark", themeVariant: "deep-dark" },
+    slate: { themeEngine: "tube-shield", themeVariant: "blue" },
+    warm: { themeEngine: "tube-shield", themeVariant: "warm" }
+  };
+  function getThemePreset(id) {
+    if (!(id in THEME_PRESETS)) return null;
+    return { ...THEME_PRESETS[id] };
+  }
   const DEFAULT = DEFAULT_SETTINGS;
   const DEFAULT_VALUES = DEFAULT_SETTINGS;
   function byId(id) {
@@ -298,12 +355,20 @@
   const timingCard = byId("timing-card");
   const delayControl = byId("delay-control");
   const themeToggle = byId("theme-toggle");
+  const settingsSearch = byId("settings-search");
+  const settingsSearchClear = byId("settings-search-clear");
+  const searchEmpty = byId("search-empty");
+  const presetFeedback = byId("preset-feedback");
+  const presetButtons = Array.from(document.querySelectorAll("[data-preset]"));
+  const themePresetButtons = Array.from(document.querySelectorAll("[data-theme-preset]"));
   const delayValue = byId("opt-delay-value");
   const delayHint = byId("opt-delay-hint");
   const statTotal = byId("stat-total");
   const statToday = byId("stat-today");
   const statWarnings = byId("stat-warnings");
   const stealthBadge = byId("stealth-mode-badge");
+  const overviewStatusTitle = byId("overview-status-title");
+  const overviewStatusLabel = byId("overview-status-label");
   const warningBox = byId("warning-box");
   const warningText = byId("warning-text");
   const versionTag = byId("version-tag");
@@ -373,6 +438,45 @@
   const optToolbarVolumeBoost = document.querySelector('[data-setting="toolbarVolumeBoost"]');
   let currentWhitelist = [];
   let initialState = null;
+  let presetFeedbackTimer = null;
+  const PRESET_LABELS = {
+    safe: "Perfil Seguro aplicado.",
+    balanced: "Perfil Equilibrado aplicado.",
+    turbo: "Perfil Turbo aplicado. Use o modo experimental com atenção.",
+    focus: "Perfil Foco aplicado."
+  };
+  function normalizeSearchText(value) {
+    return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+  }
+  function applySettingsSearch(value) {
+    const query = normalizeSearchText(value);
+    settingsSearch.parentElement?.classList.toggle("has-value", !!query);
+    let visibleSections = 0;
+    document.querySelectorAll(".panel-section").forEach((section) => {
+      const heading = section.querySelector(".section-heading");
+      const sectionMatches = !query || normalizeSearchText(heading?.textContent).includes(query);
+      const cards = Array.from(section.querySelectorAll("article.card, article.overview-card, .preset-panel"));
+      let visibleCards = 0;
+      cards.forEach((card) => {
+        const visible2 = sectionMatches || normalizeSearchText(card.textContent).includes(query);
+        card.classList.toggle("is-search-hidden", !visible2);
+        if (visible2) visibleCards += 1;
+      });
+      const visible = !query || sectionMatches || visibleCards > 0;
+      section.classList.toggle("is-search-hidden", !visible);
+      if (visible) visibleSections += 1;
+    });
+    searchEmpty.hidden = !query || visibleSections > 0;
+  }
+  function announcePreset(id, button) {
+    presetButtons.forEach((item) => item.classList.toggle("is-applied", item === button));
+    presetFeedback.textContent = PRESET_LABELS[id];
+    if (presetFeedbackTimer) window.clearTimeout(presetFeedbackTimer);
+    presetFeedbackTimer = window.setTimeout(() => {
+      presetFeedback.textContent = "";
+      button.classList.remove("is-applied");
+    }, 3500);
+  }
   chrome.storage.local.get(DEFAULT_VALUES, (s) => {
     const storedProfileVersion = Number(s.playerDefaultsProfileVersion) || 0;
     s = migrateSettings(s);
@@ -483,6 +587,42 @@
     const theme = isLight ? "dark" : "light";
     chrome.storage.local.set({ theme });
     applyTheme(theme);
+  });
+  settingsSearch.addEventListener("input", () => applySettingsSearch(settingsSearch.value));
+  settingsSearchClear.addEventListener("click", () => {
+    settingsSearch.value = "";
+    applySettingsSearch("");
+    settingsSearch.focus();
+  });
+  document.addEventListener("keydown", (event) => {
+    const target = event.target;
+    const editing = target?.matches("input, textarea, select") || target?.isContentEditable;
+    if (event.key !== "/" || editing || event.ctrlKey || event.metaKey || event.altKey) return;
+    event.preventDefault();
+    settingsSearch.focus();
+  });
+  presetButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      const id = button.dataset.preset;
+      const preset = getSettingsPreset(id);
+      if (!preset) return;
+      button.disabled = true;
+      chrome.storage.local.set(preset, () => {
+        button.disabled = false;
+        announcePreset(id, button);
+      });
+    });
+  });
+  themePresetButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      const id = button.dataset.themePreset;
+      const preset = getThemePreset(id);
+      if (!preset) return;
+      chrome.storage.local.set(preset, () => {
+        themePresetButtons.forEach((item) => item.classList.toggle("is-applied", item === button));
+        window.setTimeout(() => button.classList.remove("is-applied"), 1800);
+      });
+    });
   });
   function applyTheme(theme) {
     if (theme === "light") {
@@ -980,6 +1120,8 @@
   }
   function renderStatus(enabled) {
     document.body.classList.toggle("extension-disabled", !enabled);
+    overviewStatusTitle.textContent = enabled ? "Extensão ativa" : "Extensão pausada";
+    overviewStatusLabel.textContent = enabled ? "Ativo" : "Pausado";
     renderStateIcons(enabled, optAggressive.checked);
   }
   function renderMode(aggressive) {

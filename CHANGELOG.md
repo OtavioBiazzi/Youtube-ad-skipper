@@ -6,6 +6,10 @@ Todas as mudancas relevantes deste projeto serao registradas aqui.
 
 ### Adicionado
 
+- Busca instantanea no Control Center, com atalho `/` e estado sem resultados.
+- Perfis Seguro, Equilibrado, Turbo e Foco para aplicar grupos coerentes de configuracoes.
+- Temas de um clique Graphite Red, Deep Dark, Slate Blue e Warm Cinema.
+- Deteccao testavel de avisos de adblock em portugues e ingles.
 - Plano completo de analise e implementacao em `PLANO_DE_IMPLEMENTACAO.md`.
 - Roadmap executavel em `ROADMAP_IMPLEMENTACAO.md`.
 - Schema compartilhado inicial de configuracoes em `src/shared/settings.ts`.
@@ -20,7 +24,11 @@ Todas as mudancas relevantes deste projeto serao registradas aqui.
 
 ### Corrigido
 
+- Anti-adblock agora remove apenas avisos relacionados a bloqueadores e preserva dialogs, backdrops e promocoes normais do YouTube.
+- Titulos de status do popup e da visao geral agora acompanham corretamente o estado pausado.
+- Dependencias de build foram atualizadas para remover vulnerabilidades conhecidas no ambiente de desenvolvimento.
 - Reduzido risco de o player pausar sozinho por sinais antigos de outras abas.
+- Corrigido o layout Cinema + Ultrawide para evitar player pequeno, crop agressivo e overflow em telas largas.
 - Restore de velocidade agora so roda quando existe velocidade pre-anuncio capturada.
 - Miniplayer recebeu ajustes de stacking/z-index para ficar acima da area de comentarios.
 - Listeners de video antigos agora sao removidos ao trocar o elemento de video.
@@ -39,4 +47,5 @@ Todas as mudancas relevantes deste projeto serao registradas aqui.
 
 ### Removido
 
+- Controles que apenas salvavam valores sem comportamento no runtime: menu customizado de velocidades, tamanho customizado do miniplayer, popup em embeds, preservacao de barras pretas e seletor de idioma incompleto.
 - Execucao de script personalizado por `new Function`, incompativel com o hardening esperado de Manifest V3.

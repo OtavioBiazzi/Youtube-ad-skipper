@@ -31,6 +31,12 @@ import {
   normalizeShortcutCombo,
 } from "./shared/shortcuts";
 import { normalizeQualityLevel } from "./shared/quality";
+import {
+  getSettingsPreset,
+  getThemePreset,
+  type SettingsPresetId,
+  type ThemePresetId,
+} from "./shared/presets";
 
 type OptionsSettings = ExtensionSettings;
 
@@ -53,12 +59,20 @@ const optDelay      = byId<HTMLInputElement>("opt-delay");
 const timingCard    = byId<HTMLElement>("timing-card");
 const delayControl  = byId<HTMLElement>("delay-control");
 const themeToggle   = byId<HTMLButtonElement>("theme-toggle");
+const settingsSearch = byId<HTMLInputElement>("settings-search");
+const settingsSearchClear = byId<HTMLButtonElement>("settings-search-clear");
+const searchEmpty = byId<HTMLElement>("search-empty");
+const presetFeedback = byId<HTMLElement>("preset-feedback");
+const presetButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-preset]"));
+const themePresetButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-theme-preset]"));
 const delayValue    = byId<HTMLElement>("opt-delay-value");
 const delayHint     = byId<HTMLElement>("opt-delay-hint");
 const statTotal     = byId<HTMLElement>("stat-total");
 const statToday     = byId<HTMLElement>("stat-today");
 const statWarnings  = byId<HTMLElement>("stat-warnings");
 const stealthBadge  = byId<HTMLElement>("stealth-mode-badge");
+const overviewStatusTitle = byId<HTMLElement>("overview-status-title");
+const overviewStatusLabel = byId<HTMLElement>("overview-status-label");
 
 const warningBox    = byId<HTMLElement>("warning-box");
 const warningText   = byId<HTMLElement>("warning-text");
@@ -134,6 +148,57 @@ const optToolbarVolumeBoost = document.querySelector<HTMLInputElement>('[data-se
 
 let currentWhitelist: string[] = [];
 let initialState: OptionsSettings | null = null;
+let presetFeedbackTimer: number | null = null;
+
+const PRESET_LABELS: Record<SettingsPresetId, string> = {
+  safe: "Perfil Seguro aplicado.",
+  balanced: "Perfil Equilibrado aplicado.",
+  turbo: "Perfil Turbo aplicado. Use o modo experimental com atenção.",
+  focus: "Perfil Foco aplicado.",
+};
+
+function normalizeSearchText(value: unknown) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function applySettingsSearch(value: string) {
+  const query = normalizeSearchText(value);
+  settingsSearch.parentElement?.classList.toggle("has-value", !!query);
+  let visibleSections = 0;
+
+  document.querySelectorAll<HTMLElement>(".panel-section").forEach((section) => {
+    const heading = section.querySelector<HTMLElement>(".section-heading");
+    const sectionMatches = !query || normalizeSearchText(heading?.textContent).includes(query);
+    const cards = Array.from(section.querySelectorAll<HTMLElement>("article.card, article.overview-card, .preset-panel"));
+    let visibleCards = 0;
+
+    cards.forEach((card) => {
+      const visible = sectionMatches || normalizeSearchText(card.textContent).includes(query);
+      card.classList.toggle("is-search-hidden", !visible);
+      if (visible) visibleCards += 1;
+    });
+
+    const visible = !query || sectionMatches || visibleCards > 0;
+    section.classList.toggle("is-search-hidden", !visible);
+    if (visible) visibleSections += 1;
+  });
+
+  searchEmpty.hidden = !query || visibleSections > 0;
+}
+
+function announcePreset(id: SettingsPresetId, button: HTMLButtonElement) {
+  presetButtons.forEach((item) => item.classList.toggle("is-applied", item === button));
+  presetFeedback.textContent = PRESET_LABELS[id];
+  if (presetFeedbackTimer) window.clearTimeout(presetFeedbackTimer);
+  presetFeedbackTimer = window.setTimeout(() => {
+    presetFeedback.textContent = "";
+    button.classList.remove("is-applied");
+  }, 3500);
+}
 
 // ── Load ─────────────────────────────────────────
 
@@ -264,6 +329,49 @@ themeToggle.addEventListener("click", () => {
   const theme = isLight ? 'dark' : 'light';
   chrome.storage.local.set({ theme });
   applyTheme(theme);
+});
+
+settingsSearch.addEventListener("input", () => applySettingsSearch(settingsSearch.value));
+
+settingsSearchClear.addEventListener("click", () => {
+  settingsSearch.value = "";
+  applySettingsSearch("");
+  settingsSearch.focus();
+});
+
+document.addEventListener("keydown", (event) => {
+  const target = event.target as HTMLElement | null;
+  const editing = target?.matches("input, textarea, select") || target?.isContentEditable;
+  if (event.key !== "/" || editing || event.ctrlKey || event.metaKey || event.altKey) return;
+  event.preventDefault();
+  settingsSearch.focus();
+});
+
+presetButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    const id = button.dataset.preset as SettingsPresetId;
+    const preset = getSettingsPreset(id);
+    if (!preset) return;
+
+    button.disabled = true;
+    chrome.storage.local.set(preset, () => {
+      button.disabled = false;
+      announcePreset(id, button);
+    });
+  });
+});
+
+themePresetButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    const id = button.dataset.themePreset as ThemePresetId;
+    const preset = getThemePreset(id);
+    if (!preset) return;
+
+    chrome.storage.local.set(preset, () => {
+      themePresetButtons.forEach((item) => item.classList.toggle("is-applied", item === button));
+      window.setTimeout(() => button.classList.remove("is-applied"), 1800);
+    });
+  });
 });
 
 function applyTheme(theme: string) {
@@ -854,6 +962,8 @@ function renderSlider() {
 
 function renderStatus(enabled: boolean) {
   document.body.classList.toggle("extension-disabled", !enabled);
+  overviewStatusTitle.textContent = enabled ? "Extensão ativa" : "Extensão pausada";
+  overviewStatusLabel.textContent = enabled ? "Ativo" : "Pausado";
   renderStateIcons(enabled, optAggressive.checked);
 }
 
