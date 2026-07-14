@@ -3708,15 +3708,11 @@ declare global {
 
       const video = document.querySelector("video");
 
-      // Detectar novo anúncio em sequência (posição do vídeo voltou ao início)
+      // Reposicionamentos do vídeo não confirmam um novo anúncio.
       if (video) {
         const ct = video.currentTime;
         if (adState.lastVideoTime > 2 && ct < adState.lastVideoTime - 2) {
-          // Contar o anúncio anterior como pulado
-          if (incrementAdCounter()) showToastNotification();
-          // Resetar para o novo anúncio
           adState.startTime = Date.now();
-          adState.alreadyCounted = false;
           adState.lastVideoTime = ct;
           scheduleSkip();
           if (config.showOverlay) createOverlay();

@@ -2,6 +2,8 @@
 
 > Versao atual: **v5.0.0** (pacote revisado e atualizado em 14/07/2026).
 
+> O contador de anuncios evita duplicar o mesmo anuncio quando o YouTube faz rebuffer, troca de stream ou reposiciona o video.
+
 Uma extensão experimental de navegador para reunir **skipper inteligente, controles de player, aparência e recursos avançados do YouTube** em um único painel.
 
 > A base atual ainda preserva o skipper: ela automatiza o processo de clicar no botão "Pular anúncio" do YouTube e prepara a evolução para um control center completo.

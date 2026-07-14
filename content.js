@@ -3740,9 +3740,7 @@
         if (video) {
           const ct = video.currentTime;
           if (adState.lastVideoTime > 2 && ct < adState.lastVideoTime - 2) {
-            if (incrementAdCounter()) showToastNotification();
             adState.startTime = Date.now();
-            adState.alreadyCounted = false;
             adState.lastVideoTime = ct;
             scheduleSkip();
             if (config.showOverlay) createOverlay();
