@@ -278,7 +278,13 @@ declare global {
             config.cinemaUseYouTubeTheater = s.cinemaUseYouTubeTheater !== false;
             config.ultrawideEnabled = !!s.ultrawideEnabled;
             config.ultrawideFit = normalizeUltrawideFit(s.ultrawideFit);
-            config.toolbarInsidePlayer = !!s.toolbarInsidePlayer;
+            // O modo legado sobrepunha os controles ao video e quebrava em
+            // diferentes proporcoes/resolucoes. Migre instalacoes antigas e
+            // mantenha a barra apenas em areas externas seguras.
+            config.toolbarInsidePlayer = false;
+            if (s.toolbarInsidePlayer) {
+              chrome.storage.local.set({ toolbarInsidePlayer: false });
+            }
             config.toolbarAttachToActions = !!s.toolbarAttachToActions;
             config.toolbarAlwaysVisible = !!s.toolbarAlwaysVisible;
             config.themeEngine = normalizeThemeEngine(s.themeEngine);
@@ -595,7 +601,10 @@ declare global {
         applyAppearanceFilters();
       }
       if (changes.toolbarInsidePlayer) {
-        config.toolbarInsidePlayer = !!changes.toolbarInsidePlayer.newValue;
+        config.toolbarInsidePlayer = false;
+        if (changes.toolbarInsidePlayer.newValue) {
+          chrome.storage.local.set({ toolbarInsidePlayer: false });
+        }
         schedulePlayerToolbarUpdate();
       }
       if (changes.toolbarAttachToActions) {
@@ -2247,22 +2256,6 @@ declare global {
         margin-right: auto;
       }
 
-      #${PLAYER_TOOLBAR_ID}.is-inside {
-        position: absolute;
-        left: 50%;
-        bottom: 54px;
-        transform: translateX(-50%);
-        z-index: 60;
-        margin: 0;
-      }
-
-      #player-container-outer:has(#${PLAYER_TOOLBAR_ID}.is-inside),
-      #player-theater-container:has(#${PLAYER_TOOLBAR_ID}.is-inside),
-      #player:has(#${PLAYER_TOOLBAR_ID}.is-inside),
-      ytd-player:has(#${PLAYER_TOOLBAR_ID}.is-inside) {
-        position: relative !important;
-      }
-
       #${PLAYER_TOOLBAR_ID}.is-always-visible {
         opacity: 1 !important;
         pointer-events: auto !important;
@@ -2413,7 +2406,6 @@ declare global {
       config.toolbarFilters,
       config.playerSpeedButtonsEnabled,
       config.playerPopupEnabled,
-      config.toolbarInsidePlayer,
       config.toolbarAttachToActions,
       config.toolbarAlwaysVisible,
       normalizePlayerPopupSize(config.playerPopupSize),
@@ -2463,15 +2455,13 @@ declare global {
 
     const signature = getPlayerToolbarSignature();
     let toolbar = document.getElementById(PLAYER_TOOLBAR_ID);
-    const insidePlayer = !!config.toolbarInsidePlayer && anchor instanceof HTMLElement;
-    const expectedParent = insidePlayer ? anchor : parent;
+    const expectedParent = parent;
     const expectedNext = normalizeToolbarPosition(config.toolbarPosition) === "above"
       ? anchor
       : (anchor.nextSibling === toolbar ? toolbar.nextSibling : anchor.nextSibling);
 
     if (toolbar && toolbar.parentElement === expectedParent && playerToolbarSignature === signature) {
       toolbar.classList.toggle("is-centered", config.toolbarCenter !== false);
-      toolbar.classList.toggle("is-inside", insidePlayer);
       toolbar.classList.toggle("is-always-visible", !!config.toolbarAlwaysVisible);
       updatePlayerToolbarStates();
       return;
@@ -2496,16 +2486,13 @@ declare global {
 
     toolbar.className = [
       config.toolbarCenter !== false ? "is-centered" : "",
-      config.toolbarInsidePlayer ? "is-inside" : "",
       config.toolbarAlwaysVisible ? "is-always-visible" : "",
     ].filter(Boolean).join(" ");
     for (const item of getPlayerToolbarActions()) {
       toolbar.appendChild(createPlayerToolbarButton(item.action, item.title, item.icon));
     }
 
-    if (insidePlayer) {
-      anchor.appendChild(toolbar);
-    } else if (normalizeToolbarPosition(config.toolbarPosition) === "above") {
+    if (normalizeToolbarPosition(config.toolbarPosition) === "above") {
       parent.insertBefore(toolbar, anchor);
     } else {
       parent.insertBefore(toolbar, expectedNext);

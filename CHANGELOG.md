@@ -2,6 +2,13 @@
 
 Todas as mudancas relevantes deste projeto serao registradas aqui.
 
+## 5.0.2 - 2026-08-17
+
+### Corrigido
+
+- Removido o modo legado que colocava a barra de controles sobre o video.
+- Instalacoes que ainda tinham essa opcao ativa sao migradas automaticamente para o layout externo seguro.
+
 ## 5.0.1 - 2026-08-17
 
 ### Adicionado
