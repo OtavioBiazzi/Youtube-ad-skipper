@@ -83,6 +83,9 @@
     const text = String(value || "").trim().toLocaleLowerCase();
     return ["skip", "pular", "ignorar", "omitir", "saltar"].some((term) => text.includes(term));
   }
+  function shouldCountAdCompletion(state) {
+    return !state.watching && state.skipActionPerformed && !state.alreadyCounted;
+  }
   const ADBLOCK_TERMS = [
     "ad blocker",
     "adblock",
@@ -528,6 +531,7 @@
       todayDate: null,
       lastVideoTime: -1,
       alreadyCounted: false,
+      skipActionPerformed: false,
       forceSkipInterval: null,
       forceSkipStartedAt: null,
       skipTimeout: null,
@@ -771,6 +775,9 @@
         if (changes.aggressiveSkip) config.aggressiveSkip = !!changes.aggressiveSkip.newValue;
         if (changes.instantSkip) config.instantSkip = !!changes.instantSkip.newValue;
         if (changes.showToast) config.showToast = !!changes.showToast.newValue;
+        if (changes.totalAdsSkipped) adState.totalSkipped = Number(changes.totalAdsSkipped.newValue) || 0;
+        if (changes.adsSkippedToday) adState.adsSkippedToday = Number(changes.adsSkippedToday.newValue) || 0;
+        if (changes.todayDate) adState.todayDate = changes.todayDate.newValue || null;
         if (changes.shortcutEnabled) config.shortcutEnabled = !!changes.shortcutEnabled.newValue;
         if (changes.listMode) config.listMode = changes.listMode.newValue === "blacklist" ? "blacklist" : "whitelist";
         if (changes.whitelist) config.whitelist = Array.isArray(changes.whitelist.newValue) ? changes.whitelist.newValue : [];
@@ -3208,6 +3215,7 @@
         }
       } catch (err) {
       }
+      if (attempted) adState.skipActionPerformed = true;
       return attempted;
     }
     function stopForceSkipBurst() {
@@ -3263,6 +3271,7 @@
         }
       } catch (err) {
       }
+      if (attempted) adState.skipActionPerformed = true;
       return attempted;
     }
     function startSpeedThrough() {
@@ -3342,6 +3351,7 @@
       }
     }
     function finishSkipClick() {
+      adState.skipActionPerformed = true;
       stopForceSkipBurst();
       clearSkipTimeout();
       stopSkipButtonObserver();
@@ -3803,6 +3813,7 @@
       adState.skipTargetTime = null;
       adState.lastVideoTime = -1;
       adState.alreadyCounted = false;
+      adState.skipActionPerformed = false;
       adState.forceSkipInterval = null;
       adState.forceSkipStartedAt = null;
       adState.skipTimeout = null;
@@ -3882,6 +3893,7 @@
         adState.startTime = Date.now();
         adState.lastVideoTime = -1;
         adState.alreadyCounted = false;
+        adState.skipActionPerformed = false;
         capturePlaybackRate();
         muteVideo();
         startSpeedThrough();
@@ -3905,7 +3917,7 @@
           attemptScheduledSkip();
         }
       } else if (!adPlaying && adState.active) {
-        if (!adState.watching) {
+        if (shouldCountAdCompletion(adState)) {
           if (incrementAdCounter()) showToastNotification();
         }
         cleanupRuntimeState();

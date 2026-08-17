@@ -2,10 +2,11 @@
 
 Todas as mudancas relevantes deste projeto serao registradas aqui.
 
-## Unreleased
+## 5.0.1 - 2026-08-17
 
 ### Adicionado
 
+- Botao para zerar somente o contador de anuncios, sem apagar as demais configuracoes.
 - Busca instantanea no Control Center, com atalho `/` e estado sem resultados.
 - Perfis Seguro, Equilibrado, Turbo e Foco para aplicar grupos coerentes de configuracoes.
 - Temas de um clique Graphite Red, Deep Dark, Slate Blue e Warm Cinema.
@@ -24,6 +25,8 @@ Todas as mudancas relevantes deste projeto serao registradas aqui.
 
 ### Corrigido
 
+- Contador agora registra apenas anuncios em que a extensao executou clique, seek ou aceleracao; anuncios encerrados naturalmente nao entram mais como pulados.
+- Releases agora usam versoes imutaveis, permitindo que o verificador diferencie corretamente builds novos.
 - Instalacoes antigas agora desativam controles legados de autoplay/abas que podiam pausar videos normais ao iniciar.
 - Anti-adblock agora remove apenas avisos relacionados a bloqueadores e preserva dialogs, backdrops e promocoes normais do YouTube.
 - Titulos de status do popup e da visao geral agora acompanham corretamente o estado pausado.

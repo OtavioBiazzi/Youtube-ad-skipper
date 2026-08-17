@@ -39,6 +39,7 @@ const elements = {
   changeNote: byId<HTMLElement>("change-note"),
   updateStatus: byId<HTMLElement>("update-status"),
   checkUpdate: byId<HTMLButtonElement>("check-update"),
+  resetStats: byId<HTMLButtonElement>("btn-reset-stats"),
   version: byId<HTMLElement>("version-tag"),
   stateIcons: Array.from(document.querySelectorAll<HTMLImageElement>("[data-state-icon]")),
 };
@@ -217,5 +218,13 @@ for (const id of ["btn-open-settings", "btn-open-settings-main"]) {
 }
 
 elements.checkUpdate.addEventListener("click", checkForUpdate);
+
+elements.resetStats.addEventListener("click", () => {
+  if (!window.confirm("Zerar somente as estatisticas de anuncios?")) return;
+  chrome.storage.local.set({ totalAdsSkipped: 0, adsSkippedToday: 0, todayDate: null }, () => {
+    renderStats(0, 0, Number(elements.metricWarnings.textContent) || 0);
+    announceChange("Contador de anuncios zerado.");
+  });
+});
 
 export {};

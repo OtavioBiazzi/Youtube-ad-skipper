@@ -282,6 +282,8 @@ footer { justify-content: space-between; gap: 12px; color: var(--faint); font-si
 footer span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 footer a { flex: none; color: var(--muted); text-decoration: none; }
 footer a:hover { color: var(--text); }
+footer button { flex:none; border:0; padding:0; background:transparent; color:var(--muted); cursor:pointer; font:inherit; }
+footer button:hover { color:var(--text); }
 
 .extension-disabled .control-card { opacity: 0.52; }
 

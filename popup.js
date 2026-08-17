@@ -228,6 +228,7 @@
     changeNote: byId("change-note"),
     updateStatus: byId("update-status"),
     checkUpdate: byId("check-update"),
+    resetStats: byId("btn-reset-stats"),
     version: byId("version-tag"),
     stateIcons: Array.from(document.querySelectorAll("[data-state-icon]"))
   };
@@ -376,4 +377,11 @@
     byId(id).addEventListener("click", () => chrome.runtime.openOptionsPage());
   }
   elements.checkUpdate.addEventListener("click", checkForUpdate);
+  elements.resetStats.addEventListener("click", () => {
+    if (!window.confirm("Zerar somente as estatisticas de anuncios?")) return;
+    chrome.storage.local.set({ totalAdsSkipped: 0, adsSkippedToday: 0, todayDate: null }, () => {
+      renderStats(0, 0, Number(elements.metricWarnings.textContent) || 0);
+      announceChange("Contador de anuncios zerado.");
+    });
+  });
 })();
