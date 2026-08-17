@@ -1,11 +1,15 @@
 (function() {
   "use strict";
-  const PLAYER_DEFAULTS_PROFILE_VERSION = 2;
+  const PLAYER_DEFAULTS_PROFILE_VERSION = 3;
   const PLAYER_DEFAULTS_PROFILE = {
     playerSpeedEnabled: true,
     playerSpeedStep: 0.02,
     playerSpeedWheel: true,
-    autoplayBlockBackground: true,
+    autoplayBlockBackground: false,
+    autoplayBlockForeground: false,
+    autoplayDisableAll: false,
+    autoplayStopPreload: false,
+    pauseBackgroundTabs: false,
     autoplayAllowPlaylists: true,
     miniplayerEnabled: true,
     miniplayerSize: "480x270",
@@ -77,7 +81,7 @@
     volumeBoostLevel: 2,
     volumeBoostAuto: false,
     playerWheelInvert: false,
-    autoplayBlockBackground: true,
+    autoplayBlockBackground: false,
     autoplayBlockForeground: false,
     autoplayAllowPlaylists: true,
     pauseBackgroundTabs: false,

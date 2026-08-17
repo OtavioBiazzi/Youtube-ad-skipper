@@ -57,6 +57,24 @@ describe("shared settings", () => {
     expect(settings.miniplayerSize).toBe(PLAYER_DEFAULTS_PROFILE.miniplayerSize);
   });
 
+  it("disables legacy automatic pause controls during the safe profile migration", () => {
+    const settings = migrateSettings({
+      playerDefaultsProfileVersion: 2,
+      autoplayBlockBackground: true,
+      autoplayBlockForeground: true,
+      autoplayDisableAll: true,
+      autoplayStopPreload: true,
+      pauseBackgroundTabs: true,
+    });
+
+    expect(settings.playerDefaultsProfileVersion).toBe(PLAYER_DEFAULTS_PROFILE_VERSION);
+    expect(settings.autoplayBlockBackground).toBe(false);
+    expect(settings.autoplayBlockForeground).toBe(false);
+    expect(settings.autoplayDisableAll).toBe(false);
+    expect(settings.autoplayStopPreload).toBe(false);
+    expect(settings.pauseBackgroundTabs).toBe(false);
+  });
+
   it("exposes import/export keys without duplicates", () => {
     const unique = new Set(SETTINGS_EXPORT_KEYS);
 

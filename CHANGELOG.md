@@ -24,6 +24,7 @@ Todas as mudancas relevantes deste projeto serao registradas aqui.
 
 ### Corrigido
 
+- Instalacoes antigas agora desativam controles legados de autoplay/abas que podiam pausar videos normais ao iniciar.
 - Anti-adblock agora remove apenas avisos relacionados a bloqueadores e preserva dialogs, backdrops e promocoes normais do YouTube.
 - Titulos de status do popup e da visao geral agora acompanham corretamente o estado pausado.
 - Dependencias de build foram atualizadas para remover vulnerabilidades conhecidas no ambiente de desenvolvimento.

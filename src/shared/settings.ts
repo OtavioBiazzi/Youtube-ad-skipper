@@ -1,5 +1,5 @@
 export const SETTINGS_VERSION = 1;
-export const PLAYER_DEFAULTS_PROFILE_VERSION = 2;
+export const PLAYER_DEFAULTS_PROFILE_VERSION = 3;
 
 export type ListMode = "whitelist" | "blacklist";
 export type QualityLevel = "auto" | "medium" | "large" | "hd720" | "hd1080" | "hd1440" | "hd2160" | "highres";
@@ -14,7 +14,11 @@ export const PLAYER_DEFAULTS_PROFILE: Record<string, PlannedSettingValue> = {
   playerSpeedEnabled: true,
   playerSpeedStep: 0.02,
   playerSpeedWheel: true,
-  autoplayBlockBackground: true,
+  autoplayBlockBackground: false,
+  autoplayBlockForeground: false,
+  autoplayDisableAll: false,
+  autoplayStopPreload: false,
+  pauseBackgroundTabs: false,
   autoplayAllowPlaylists: true,
   miniplayerEnabled: true,
   miniplayerSize: "480x270",
@@ -87,7 +91,7 @@ export const DEFAULT_SETTINGS = {
   volumeBoostLevel: 2,
   volumeBoostAuto: false,
   playerWheelInvert: false,
-  autoplayBlockBackground: true,
+  autoplayBlockBackground: false,
   autoplayBlockForeground: false,
   autoplayAllowPlaylists: true,
   pauseBackgroundTabs: false,
