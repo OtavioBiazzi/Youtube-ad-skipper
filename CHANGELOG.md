@@ -2,6 +2,15 @@
 
 Todas as mudancas relevantes deste projeto serao registradas aqui.
 
+## 5.0.3 - 2026-08-21
+
+### Corrigido
+
+- Removidos os bloqueios legados de autoplay e abas que podiam pausar o video logo depois de um anuncio inicial.
+- Videos comuns e itens de playlists nao recebem mais comandos automaticos de pausa da extensao.
+- A reproducao do conteudo e retomada uma vez quando o YouTube fica pausado depois de um skip confirmado.
+- Instalacoes anteriores migram novamente as configuracoes de reproducao para valores seguros.
+
 ## 5.0.2 - 2026-08-17
 
 ### Corrigido

@@ -1,6 +1,6 @@
 (function() {
   "use strict";
-  const PLAYER_DEFAULTS_PROFILE_VERSION = 3;
+  const PLAYER_DEFAULTS_PROFILE_VERSION = 4;
   const PLAYER_DEFAULTS_PROFILE = {
     playerSpeedEnabled: true,
     playerSpeedStep: 0.02,

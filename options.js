@@ -38,7 +38,7 @@
     const safe = Number.isFinite(n) ? n : SAFE_AD_SPEED_RATE;
     return safe.toFixed(safe % 1 === 0 ? 0 : 1) + "x";
   }
-  const PLAYER_DEFAULTS_PROFILE_VERSION = 3;
+  const PLAYER_DEFAULTS_PROFILE_VERSION = 4;
   const PLAYER_DEFAULTS_PROFILE = {
     playerSpeedEnabled: true,
     playerSpeedStep: 0.02,
@@ -409,10 +409,6 @@
   const optPlayerVolumeWheel = byId("opt-player-volume-wheel");
   const optPlayerVolumeRightButton = byId("opt-player-volume-right-button");
   const optPlayerWheelInvert = byId("opt-player-wheel-invert");
-  const optAutoplayBackground = byId("opt-autoplay-background");
-  const optAutoplayForeground = byId("opt-autoplay-foreground");
-  const optAutoplayAllowPlaylists = byId("opt-autoplay-allow-playlists");
-  const optPauseBackgroundTabs = byId("opt-pause-background-tabs");
   const optQualityEnabled = byId("opt-quality-enabled");
   const optQualityVideo = byId("opt-quality-video");
   const optQualityPlaylist = byId("opt-quality-playlist");
@@ -516,10 +512,6 @@
     optPlayerVolumeWheel.checked = !!s.playerVolumeWheel;
     optPlayerVolumeRightButton.checked = !!s.playerVolumeWheelRightButton;
     optPlayerWheelInvert.checked = !!s.playerWheelInvert;
-    optAutoplayBackground.checked = !!s.autoplayBlockBackground;
-    optAutoplayForeground.checked = !!s.autoplayBlockForeground;
-    optAutoplayAllowPlaylists.checked = s.autoplayAllowPlaylists !== false;
-    optPauseBackgroundTabs.checked = !!s.pauseBackgroundTabs;
     optQualityEnabled.checked = !!s.qualityEnabled;
     optQualityVideo.value = normalizeQuality(s.qualityVideo);
     optQualityPlaylist.value = normalizeQuality(s.qualityPlaylist);
@@ -557,7 +549,6 @@
     renderListMode(s.listMode || "whitelist");
     renderTimingControls();
     renderPlayerControlLocks();
-    renderAutoplayControlLocks();
     renderQualityControlLocks();
     renderMiniplayerControlLocks();
     renderToolbarControlLocks();
@@ -739,20 +730,6 @@
   });
   optPlayerWheelInvert.addEventListener("change", () => {
     chrome.storage.local.set({ playerWheelInvert: optPlayerWheelInvert.checked });
-  });
-  optAutoplayBackground.addEventListener("change", () => {
-    chrome.storage.local.set({ autoplayBlockBackground: optAutoplayBackground.checked });
-    renderAutoplayControlLocks();
-  });
-  optAutoplayForeground.addEventListener("change", () => {
-    chrome.storage.local.set({ autoplayBlockForeground: optAutoplayForeground.checked });
-    renderAutoplayControlLocks();
-  });
-  optAutoplayAllowPlaylists.addEventListener("change", () => {
-    chrome.storage.local.set({ autoplayAllowPlaylists: optAutoplayAllowPlaylists.checked });
-  });
-  optPauseBackgroundTabs.addEventListener("change", () => {
-    chrome.storage.local.set({ pauseBackgroundTabs: optPauseBackgroundTabs.checked });
   });
   optQualityEnabled.addEventListener("change", () => {
     chrome.storage.local.set({ qualityEnabled: optQualityEnabled.checked });
@@ -1236,10 +1213,6 @@
     optPlayerVolumeDefault.disabled = !optPlayerVolumeEnabled.checked;
     optPlayerVolumeRightButton.disabled = !optPlayerVolumeWheel.checked;
   }
-  function renderAutoplayControlLocks() {
-    const blockingAutoplay = optAutoplayBackground.checked || optAutoplayForeground.checked;
-    optAutoplayAllowPlaylists.disabled = !blockingAutoplay;
-  }
   function renderQualityControlLocks() {
     optQualityVideo.disabled = !optQualityEnabled.checked;
     optQualityPlaylist.disabled = !optQualityEnabled.checked;
@@ -1421,16 +1394,6 @@
     }
     if (changes.playerVolumeWheelRightButton) optPlayerVolumeRightButton.checked = !!changes.playerVolumeWheelRightButton.newValue;
     if (changes.playerWheelInvert) optPlayerWheelInvert.checked = !!changes.playerWheelInvert.newValue;
-    if (changes.autoplayBlockBackground) {
-      optAutoplayBackground.checked = !!changes.autoplayBlockBackground.newValue;
-      renderAutoplayControlLocks();
-    }
-    if (changes.autoplayBlockForeground) {
-      optAutoplayForeground.checked = !!changes.autoplayBlockForeground.newValue;
-      renderAutoplayControlLocks();
-    }
-    if (changes.autoplayAllowPlaylists) optAutoplayAllowPlaylists.checked = changes.autoplayAllowPlaylists.newValue !== false;
-    if (changes.pauseBackgroundTabs) optPauseBackgroundTabs.checked = !!changes.pauseBackgroundTabs.newValue;
     if (changes.qualityEnabled) {
       optQualityEnabled.checked = !!changes.qualityEnabled.newValue;
       renderQualityControlLocks();

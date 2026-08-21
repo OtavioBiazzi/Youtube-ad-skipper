@@ -73,8 +73,6 @@ declare global {
   const PLAYBACK_RESTORE_RETRY_MS = 150;
   const PLAYBACK_RESTORE_WINDOW_MS = 2400;
   const POST_SKIP_RESTORE_DELAYS_MS = [180, 450, 900, 1500];
-  const USER_PLAYBACK_INTENT_WINDOW_MS = 12000;
-  const BACKGROUND_PLAYBACK_INTENT_WINDOW_MS = 20000;
   const APPEARANCE_TASK_INTERVAL_MS = 1200;
   const PLAYER_UI_TASK_INTERVAL_MS = 650;
   const MAIN_LOOP_SLOW_THRESHOLD_MS = 16;
@@ -95,6 +93,7 @@ declare global {
     lastVideoTime: -1,
     alreadyCounted: false,
     skipActionPerformed: false,
+    wasPlayingBeforeAd: false,
     forceSkipInterval: null,
     forceSkipStartedAt: null,
     skipTimeout: null,
@@ -108,12 +107,6 @@ declare global {
     defaultSpeedAppliedKey: "",
     defaultVolumeAppliedKey: "",
     rightMouseDown: false,
-    lastUserPlaybackIntentAt: 0,
-    lastUserPlaybackIntentReason: "",
-    lastPlaybackPauseReason: "",
-    lastPlaybackPauseAt: 0,
-    autoplayVideo: null,
-    tabPlaybackToken: Date.now() + "-" + Math.random().toString(36).slice(2),
     qualityVideoKey: "",
     qualityRequestKey: "",
     qualityRequestStartedAt: 0,
@@ -211,10 +204,6 @@ declare global {
             config.volumeBoostLevel = normalizeVolumeBoostLevel(s.volumeBoostLevel);
             config.volumeBoostAuto = !!s.volumeBoostAuto;
             config.playerWheelInvert = !!s.playerWheelInvert;
-            config.autoplayBlockBackground = !!s.autoplayBlockBackground;
-            config.autoplayBlockForeground = !!s.autoplayBlockForeground;
-            config.autoplayAllowPlaylists = s.autoplayAllowPlaylists !== false;
-            config.pauseBackgroundTabs = !!s.pauseBackgroundTabs;
             config.qualityEnabled = !!s.qualityEnabled;
             config.qualityVideo = normalizeQualityLevel(s.qualityVideo, "hd720");
             config.qualityPlaylist = normalizeQualityLevel(s.qualityPlaylist, "hd720");
@@ -259,9 +248,6 @@ declare global {
             config.shortcutScreenshot = normalizeShortcutSetting(s.shortcutScreenshot, "Alt+Shift+P");
             config.shortcutPopup = normalizeShortcutSetting(s.shortcutPopup, "Alt+Shift+O");
             config.shortcutLoop = normalizeShortcutSetting(s.shortcutLoop, "Alt+Shift+L");
-            config.autoplayDisableAll = !!s.autoplayDisableAll;
-            config.autoplayStopPreload = !!s.autoplayStopPreload;
-            config.autoplayIgnorePopup = s.autoplayIgnorePopup !== false;
             config.playerPopupEnabled = s.playerPopupEnabled !== false;
             config.layoutVideosPerRow = normalizeGridCount(s.layoutVideosPerRow, 4, 1, 8);
             config.layoutChannelVideosPerRow = normalizeGridCount(s.layoutChannelVideosPerRow, 4, 1, 8);
@@ -403,10 +389,6 @@ declare global {
         applyVolumeBoost();
       }
       if (changes.playerWheelInvert) config.playerWheelInvert = !!changes.playerWheelInvert.newValue;
-      if (changes.autoplayBlockBackground) config.autoplayBlockBackground = !!changes.autoplayBlockBackground.newValue;
-      if (changes.autoplayBlockForeground) config.autoplayBlockForeground = !!changes.autoplayBlockForeground.newValue;
-      if (changes.autoplayAllowPlaylists) config.autoplayAllowPlaylists = changes.autoplayAllowPlaylists.newValue !== false;
-      if (changes.pauseBackgroundTabs) config.pauseBackgroundTabs = !!changes.pauseBackgroundTabs.newValue;
       if (changes.qualityEnabled) {
         config.qualityEnabled = !!changes.qualityEnabled.newValue;
         resetQualityState();
@@ -554,9 +536,6 @@ declare global {
       shortcutKeys.forEach((key) => {
         if (changes[key]) config[key] = normalizeShortcutText(changes[key].newValue, "");
       });
-      if (changes.autoplayDisableAll) config.autoplayDisableAll = !!changes.autoplayDisableAll.newValue;
-      if (changes.autoplayStopPreload) config.autoplayStopPreload = !!changes.autoplayStopPreload.newValue;
-      if (changes.autoplayIgnorePopup) config.autoplayIgnorePopup = changes.autoplayIgnorePopup.newValue !== false;
       const layoutKeys = [
         ["layoutVideosPerRow", 4, 1, 8],
         ["layoutChannelVideosPerRow", 4, 1, 8],
@@ -656,9 +635,6 @@ declare global {
       if (changes.codecForceAvc) {
         config.codecForceAvc = !!changes.codecForceAvc.newValue;
         syncCodecSettingsToMainWorld();
-      }
-      if (changes.tubeShieldActivePlayback) {
-        handleExternalPlaybackSignal(changes.tubeShieldActivePlayback.newValue);
       }
     });
   }
@@ -2637,7 +2613,6 @@ declare global {
 
   function handlePlayerToolbarAction(action) {
     const video = getActiveVideo();
-    markUserPlaybackIntent("toolbar");
 
     if (action === "loop") {
       if (video) {
@@ -2787,6 +2762,13 @@ declare global {
     return !!document.querySelector("ytd-playlist-panel-renderer, ytd-playlist-video-list-renderer");
   }
 
+  function isPopupWindow() {
+    try {
+      if (new URL(location.href).searchParams.get("yse_popup") === "1") return true;
+    } catch (err) {}
+    return window.name === "youtubeExtensionPlayerPopup" || (!!window.opener && window.outerWidth <= 1040 && window.outerHeight <= 680);
+  }
+
   function isDiagnosticsEnabled() {
     try {
       return localStorage.getItem(DIAGNOSTIC_STORAGE_KEY) === "1"
@@ -2801,47 +2783,6 @@ declare global {
     console.debug("[YouTube Extension][playback]", message, data);
   }
 
-  function markUserPlaybackIntent(reason = "user") {
-    adState.lastUserPlaybackIntentAt = Date.now();
-    adState.lastUserPlaybackIntentReason = reason;
-  }
-
-  function hasRecentPlaybackIntent(windowMs = USER_PLAYBACK_INTENT_WINDOW_MS) {
-    return Date.now() - (adState.lastUserPlaybackIntentAt || 0) < windowMs;
-  }
-
-  function isNearVideoStart(video) {
-    const current = Number(video?.currentTime || 0);
-    return !Number.isFinite(current) || current < 4;
-  }
-
-  function isPopupWindow() {
-    try {
-      if (new URL(location.href).searchParams.get("yse_popup") === "1") return true;
-    } catch (err) {}
-    return window.name === "youtubeExtensionPlayerPopup" || (!!window.opener && window.outerWidth <= 1040 && window.outerHeight <= 680);
-  }
-
-  function getAutoplayBlockReason(video = getActiveVideo()) {
-    if (!video || !config.enabled || adState.active || getAdPlaying()) return "";
-    if (!isNearVideoStart(video)) return "";
-    if (config.autoplayIgnorePopup && isPopupWindow()) return "";
-    if (config.autoplayAllowPlaylists && isPlaylistContext()) return "";
-    if (document.hidden && isAdSkipperActive() && isWatchPage()) return "";
-
-    const intentWindow = document.hidden ? BACKGROUND_PLAYBACK_INTENT_WINDOW_MS : USER_PLAYBACK_INTENT_WINDOW_MS;
-    if (hasRecentPlaybackIntent(intentWindow)) return "";
-
-    if (config.autoplayDisableAll) return "autoplay-disable-all";
-    if (document.hidden && config.autoplayBlockBackground) return "background-autoplay";
-    if (!document.hidden && config.autoplayBlockForeground) return "foreground-autoplay";
-    return "";
-  }
-
-  function shouldBlockAutoplay(video = getActiveVideo()) {
-    return !!getAutoplayBlockReason(video);
-  }
-
   function resumeAdPlaybackIfNeeded() {
     if (!isAdSkipperActive() || !(adState.active || getAdPlaying())) return;
     const video = getActiveVideo();
@@ -2849,129 +2790,6 @@ declare global {
     try {
       video.play().catch(() => {});
     } catch (err) {}
-  }
-
-  function pauseVideo(video = getActiveVideo(), reason = "unknown") {
-    if (!video) return false;
-    let paused = false;
-
-    try {
-      video.pause();
-      paused = true;
-    } catch (err) {}
-
-    const player: any = getYouTubePlayer();
-    try {
-      if (player && typeof player.pauseVideo === "function") {
-        player.pauseVideo();
-        paused = true;
-      }
-    } catch (err) {}
-
-    if (paused) {
-      adState.lastPlaybackPauseReason = reason;
-      adState.lastPlaybackPauseAt = Date.now();
-      debugPlayback("paused video", {
-        reason,
-        url: location.href,
-        hidden: document.hidden,
-        currentTime: Number(video.currentTime || 0),
-        videoKey: getCurrentVideoKey(),
-        recentIntent: hasRecentPlaybackIntent(document.hidden ? BACKGROUND_PLAYBACK_INTENT_WINDOW_MS : USER_PLAYBACK_INTENT_WINDOW_MS),
-        intentReason: adState.lastUserPlaybackIntentReason,
-      });
-    }
-
-    return paused;
-  }
-
-  function announceForegroundPlayback() {
-    if (!config.enabled || !config.pauseBackgroundTabs || document.hidden || adState.active || getAdPlaying()) return;
-    if (!chrome?.storage?.local) return;
-    chrome.storage.local.set({
-      tubeShieldActivePlayback: {
-        token: adState.tabPlaybackToken,
-        time: Date.now(),
-        url: location.href,
-      },
-    });
-  }
-
-  function handleVideoPlayEvent() {
-    const video = getActiveVideo();
-    if (!video) return;
-
-    const blockReason = getAutoplayBlockReason(video);
-    if (blockReason) {
-      pauseVideo(video, blockReason);
-      return;
-    }
-
-    announceForegroundPlayback();
-  }
-
-  function handleExternalPlaybackSignal(signal) {
-    if (!config.enabled || !config.pauseBackgroundTabs || !document.hidden) return;
-    if (!signal || signal.token === adState.tabPlaybackToken) return;
-
-    const signalTime = Number(signal.time) || 0;
-    if (!signalTime || Date.now() - signalTime > 5000) return;
-
-    if (hasRecentPlaybackIntent(BACKGROUND_PLAYBACK_INTENT_WINDOW_MS)) {
-      debugPlayback("ignored background pause due recent intent", {
-        signalUrl: signal.url || "",
-        intentReason: adState.lastUserPlaybackIntentReason,
-      });
-      return;
-    }
-
-    const video = getActiveVideo();
-    if (video && !video.paused && !adState.active && !getAdPlaying()) {
-      pauseVideo(video, "background-tab-playback-signal");
-    }
-  }
-
-  function bindAutoplayGuards() {
-    const video = getActiveVideo();
-    if (!video || adState.autoplayVideo === video) return;
-
-    if (adState.autoplayVideo) {
-      try {
-        adState.autoplayVideo.removeEventListener("play", handleVideoPlayEvent, true);
-        adState.autoplayVideo.removeEventListener("playing", handleVideoPlayEvent, true);
-      } catch (err) {}
-    }
-
-    adState.autoplayVideo = video;
-    video.addEventListener("play", handleVideoPlayEvent, true);
-    video.addEventListener("playing", handleVideoPlayEvent, true);
-
-    const initialBlockReason = getAutoplayBlockReason(video);
-    if (!video.paused && initialBlockReason) {
-      pauseVideo(video, initialBlockReason);
-    }
-  }
-
-  function enforceAutoplayGuards() {
-    bindAutoplayGuards();
-    resumeAdPlaybackIfNeeded();
-
-    const video = getActiveVideo();
-    if (!video) return;
-
-    const blockReason = getAutoplayBlockReason(video);
-
-    if (config.autoplayStopPreload && blockReason) {
-      try { video.preload = "none"; } catch (err) {}
-    }
-
-    if (video.paused) return;
-
-    if (blockReason) {
-      pauseVideo(video, blockReason);
-    } else {
-      announceForegroundPlayback();
-    }
   }
 
   function getSpeedThroughRate() {
@@ -3184,6 +3002,19 @@ declare global {
         clearPostSkipRestoreChecks();
       }
     }, delay));
+  }
+
+  function resumeContentPlaybackAfterSkip(videoKey = getCurrentVideoKey()) {
+    window.setTimeout(() => {
+      if (!config.enabled || adState.active || getAdPlaying() || getCurrentVideoKey() !== videoKey) return;
+
+      const video = getActiveVideo();
+      if (!video || !video.paused || video.ended) return;
+
+      try {
+        video.play().catch(() => {});
+      } catch (err) {}
+    }, 120);
   }
 
   function clearSkipTimeout() {
@@ -3739,6 +3570,7 @@ declare global {
     adState.lastVideoTime = -1;
     adState.alreadyCounted = false;
     adState.skipActionPerformed = false;
+    adState.wasPlayingBeforeAd = false;
     adState.forceSkipInterval = null;
     adState.forceSkipStartedAt = null;
     adState.skipTimeout = null;
@@ -3816,7 +3648,6 @@ declare global {
 
     if (!isAdSkipperActive()) {
       if (adState.active || adState.overlayEl) cleanupRuntimeState();
-      enforceAutoplayGuards();
       applyPlayerPreferences();
       return;
     }
@@ -3827,7 +3658,7 @@ declare global {
     dismissAdblockWarning();
 
     const adPlaying = getAdPlaying();
-    if (!adPlaying) enforceAutoplayGuards();
+    if (adPlaying) resumeAdPlaybackIfNeeded();
 
     if (adPlaying && !adState.active) {
       // ── Anúncio COMEÇOU ───
@@ -3841,6 +3672,8 @@ declare global {
       adState.lastVideoTime = -1;
       adState.alreadyCounted = false;
       adState.skipActionPerformed = false;
+      const activeAdVideo = getActiveVideo();
+      adState.wasPlayingBeforeAd = !!activeAdVideo && !activeAdVideo.paused;
 
       capturePlaybackRate();
       muteVideo();
@@ -3875,12 +3708,16 @@ declare global {
     } else if (!adPlaying && adState.active) {
       // ── Anúncio ACABOU ───
 
+      const shouldResumeContent = adState.skipActionPerformed && adState.wasPlayingBeforeAd;
+      const skippedVideoKey = getCurrentVideoKey();
+
       // Contar apenas quando a extensão realmente executou uma ação de skip.
       if (shouldCountAdCompletion(adState)) {
         if (incrementAdCounter()) showToastNotification();
       }
 
       cleanupRuntimeState();
+      if (shouldResumeContent) resumeContentPlaybackAfterSkip(skippedVideoKey);
     } else if (!adPlaying && !adState.active) {
       applyPlayerPreferences();
       const orphans = document.querySelectorAll("#" + OVERLAY_ID);
@@ -3962,20 +3799,12 @@ declare global {
   document.addEventListener("wheel", handlePlayerWheel, { capture: true, passive: false });
 
   document.addEventListener("pointerdown", (event) => {
-    markUserPlaybackIntent("pointerdown");
     if (config.volumeBoostEnabled && config.volumeBoostAuto && isPointerInsidePlayer(event.target)) {
       setTimeout(() => applyVolumeBoost(getActiveVideo()), 0);
     }
   }, true);
 
-  document.addEventListener("keydown", (event) => {
-    const playbackKeys = [" ", "Enter", "k", "K", "MediaPlayPause", "MediaPlay"];
-    if (playbackKeys.includes(event.key)) markUserPlaybackIntent("keyboard");
-  }, true);
-
   document.addEventListener("visibilitychange", () => {
-    if (!document.hidden) markUserPlaybackIntent("tab-visible");
-    enforceAutoplayGuards();
     scheduleAdWatchdogTick();
     scheduleMiniplayerUpdate();
     syncVideoFilterPopover();

@@ -1,5 +1,5 @@
 export const SETTINGS_VERSION = 1;
-export const PLAYER_DEFAULTS_PROFILE_VERSION = 3;
+export const PLAYER_DEFAULTS_PROFILE_VERSION = 4;
 
 export type ListMode = "whitelist" | "blacklist";
 export type QualityLevel = "auto" | "medium" | "large" | "hd720" | "hd1080" | "hd1440" | "hd2160" | "highres";

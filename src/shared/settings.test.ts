@@ -59,7 +59,7 @@ describe("shared settings", () => {
 
   it("disables legacy automatic pause controls during the safe profile migration", () => {
     const settings = migrateSettings({
-      playerDefaultsProfileVersion: 2,
+      playerDefaultsProfileVersion: 3,
       autoplayBlockBackground: true,
       autoplayBlockForeground: true,
       autoplayDisableAll: true,

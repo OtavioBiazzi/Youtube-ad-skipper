@@ -1,0 +1,30 @@
+import { readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
+
+const contentSource = readFileSync(new URL("./content.ts", import.meta.url), "utf8");
+const optionsSource = readFileSync(new URL("../options.html", import.meta.url), "utf8");
+
+describe("playback pause regression", () => {
+  it("does not install automatic pause guards for normal videos", () => {
+    expect(contentSource).not.toContain("function pauseVideo(");
+    expect(contentSource).not.toContain("background-tab-playback-signal");
+    expect(contentSource).not.toContain("autoplay-disable-all");
+  });
+
+  it("keeps only the deliberate pause used when opening the popup player", () => {
+    const directPauseCalls = contentSource.match(/(?:getActiveVideo\(\)|video)\?*\.pause\(\)/g) || [];
+    expect(directPauseCalls).toEqual(["getActiveVideo()?.pause()"]);
+  });
+
+  it("resumes content once after a confirmed ad skip", () => {
+    expect(contentSource).toContain("function resumeContentPlaybackAfterSkip(");
+    expect(contentSource).toContain("adState.skipActionPerformed && adState.wasPlayingBeforeAd");
+  });
+
+  it("does not expose the removed autoplay pause controls", () => {
+    expect(optionsSource).not.toContain("Autoplay e abas");
+    expect(optionsSource).not.toContain("opt-autoplay-background");
+    expect(optionsSource).not.toContain("opt-autoplay-foreground");
+    expect(optionsSource).not.toContain("opt-pause-background-tabs");
+  });
+});
