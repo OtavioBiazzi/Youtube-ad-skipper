@@ -1,6 +1,6 @@
 # YouTube Extension
 
-> Versao atual: **v5.0.3** (pacote revisado e atualizado em 21/08/2026).
+> Versao atual: **v5.0.4** (pacote revisado e atualizado em 24/08/2026).
 
 > O popup possui **Verificar atualizacoes**. Por limitacao de seguranca, extensoes carregadas sem compactacao nao substituem os proprios arquivos automaticamente; o botao encontra a release e abre o download direto.
 
@@ -13,8 +13,8 @@ Uma extensão experimental de navegador para reunir **skipper inteligente, contr
 <br>
 
 <div align="center">
-  <a href="https://github.com/OtavioBiazzi/Youtube-ad-skipper/releases/download/v5.0.3/youtube-extension-v5.0.3.zip">
-    <img src="https://img.shields.io/badge/Baixar_Vers%C3%A3o_5.0.3_(.ZIP)-000000?style=for-the-badge&logo=github&logoColor=white" alt="Baixar YouTube Extension 5.0.3" />
+  <a href="https://github.com/OtavioBiazzi/Youtube-ad-skipper/releases/download/v5.0.4/youtube-extension-v5.0.4.zip">
+    <img src="https://img.shields.io/badge/Baixar_Vers%C3%A3o_5.0.4_(.ZIP)-000000?style=for-the-badge&logo=github&logoColor=white" alt="Baixar YouTube Extension 5.0.4" />
   </a>
   <br><br>
   <a href="https://github.com/OtavioBiazzi/Youtube-ad-skipper/releases">Ver todas as versões</a>
@@ -49,8 +49,8 @@ Quando um anúncio aparece no YouTube:
 
 ### Chrome / Opera GX / Edge / Brave
 
-1. **[Baixe o pacote pronto da versão 5.0.3](https://github.com/OtavioBiazzi/Youtube-ad-skipper/releases/download/v5.0.3/youtube-extension-v5.0.3.zip)**.
-2. **Extraia (descompacte)** o arquivo `youtube-extension-v5.0.3.zip` em uma pasta permanente no seu computador.
+1. **[Baixe o pacote pronto da versão 5.0.4](https://github.com/OtavioBiazzi/Youtube-ad-skipper/releases/download/v5.0.4/youtube-extension-v5.0.4.zip)**.
+2. **Extraia (descompacte)** o arquivo `youtube-extension-v5.0.4.zip` em uma pasta permanente no seu computador.
 3. Abra o seu navegador e vá para a página de extensões:
    - Chrome: `chrome://extensions/`
    - Opera GX: `opera://extensions/`
@@ -110,7 +110,7 @@ npm run package
 
 - **`override.js`** — Injetado no contexto da página (`world: MAIN`) antes dos scripts do YouTube. Faz override do `addEventListener` nos botões de skip para que cliques programáticos sejam aceitos como `isTrusted`.
 
-- **`content.js`** — Roda como content script. Detecta anúncios verificando elementos como `.ytp-ad-visit-advertiser-button`, `.ytp-ad-badge`, e a classe `ad-showing`. Quando detecta um anúncio, agenda o skip baseado no delay configurado.
+- **`content.js`** — Roda como content script. Confirma anúncios pelo estado autoritativo `ad-showing`/`ad-interrupting` do player e ignora selos visuais antigos que o YouTube mantenha no DOM. Quando detecta um anúncio real, agenda o skip baseado no delay configurado.
 
 ## 📝 Créditos
 

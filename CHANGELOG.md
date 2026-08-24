@@ -2,6 +2,16 @@
 
 Todas as mudancas relevantes deste projeto serao registradas aqui.
 
+## 5.0.4 - 2026-08-24
+
+### Corrigido
+
+- Selos visuais antigos de anuncio nao sao mais tratados como prova de que existe um anuncio ativo.
+- O skipper nao aplica seek ou aceleracao em videos normais quando o YouTube mantem UI obsoleta no DOM.
+- A velocidade padrao nao chama mais a API do player quando a taxa solicitada ja esta ativa, evitando reinicializacoes durante navegacao e playlists.
+- Mudancas opcionais de velocidade ou qualidade preservam a reproducao quando o video ja estava tocando.
+- Corrigida uma excecao da barra de controles quando o player era o ultimo elemento do container.
+
 ## 5.0.3 - 2026-08-21
 
 ### Corrigido

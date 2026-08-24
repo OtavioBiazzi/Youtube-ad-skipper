@@ -43,6 +43,7 @@ import {
   migrateSettings,
 } from "./shared/settings";
 import { normalizeQualityLevel, pickBestQualityLevel } from "./shared/quality";
+import { shouldApplyPlaybackRate } from "./shared/playback";
 import { getYouTubeVideoIdFromUrl, getYouTubeVideoKeyFromUrl } from "./shared/youtube";
 
 declare global {
@@ -894,23 +895,45 @@ declare global {
     };
   }
 
+  function preservePlaybackAfterPreference(video: HTMLVideoElement | null, wasPlaying: boolean) {
+    if (!video || !wasPlaying) return;
+    window.setTimeout(() => {
+      if (!config.enabled || video !== getActiveVideo() || adState.active || getAdPlaying()) return;
+      if (!video.paused || video.ended) return;
+      try {
+        video.play().catch(() => {});
+      } catch (err) {}
+    }, 160);
+  }
+
   function setUserPlaybackRate(rate, video = getActiveVideo()) {
     const targetRate = normalizeUserPlaybackRate(rate, 1);
+    const wasPlaying = !!video && !video.paused;
+    let changed = false;
 
     if (video) {
       try {
-        if (video.playbackRate !== targetRate) video.playbackRate = targetRate;
+        if (shouldApplyPlaybackRate(video.playbackRate, targetRate)) {
+          video.playbackRate = targetRate;
+          changed = true;
+        }
       } catch (err) {}
     }
 
-    const player: any = getYouTubePlayer();
-    try {
-      if (player && typeof player.setPlaybackRate === "function") {
-        player.setPlaybackRate(targetRate);
-      }
-    } catch (err) {}
+    // Evita chamar a API do YouTube em todo inicio de video quando a taxa ja
+    // esta em 1x. Essa chamada redundante pode reinicializar o estado interno
+    // do player durante navegacoes SPA e trocas de playlist.
+    if (changed) {
+      const player: any = getYouTubePlayer();
+      try {
+        if (player && typeof player.setPlaybackRate === "function") {
+          player.setPlaybackRate(targetRate);
+        }
+      } catch (err) {}
 
-    if (targetRate <= MAX_PLAYBACK_RATE) requestMainWorldSpeedThrough(targetRate);
+      if (targetRate <= MAX_PLAYBACK_RATE) requestMainWorldSpeedThrough(targetRate);
+      preservePlaybackAfterPreference(video, wasPlaying);
+    }
     return targetRate;
   }
 
@@ -1217,7 +1240,10 @@ declare global {
     const player: any = getYouTubePlayer();
     if (!player) return false;
 
+    const video = getActiveVideo();
+    const wasPlaying = !!video && !video.paused;
     const level = pickAvailableQuality(target);
+    if (level !== "auto" && getCurrentQualityLevel() === level) return false;
     let attempted = false;
 
     try {
@@ -1240,6 +1266,7 @@ declare global {
 
     requestMainWorldQuality(level);
     attempted = true;
+    preservePlaybackAfterPreference(video, wasPlaying);
 
     return attempted;
   }
@@ -2434,7 +2461,7 @@ declare global {
     const expectedParent = parent;
     const expectedNext = normalizeToolbarPosition(config.toolbarPosition) === "above"
       ? anchor
-      : (anchor.nextSibling === toolbar ? toolbar.nextSibling : anchor.nextSibling);
+      : (toolbar && anchor.nextSibling === toolbar ? toolbar.nextSibling : anchor.nextSibling);
 
     if (toolbar && toolbar.parentElement === expectedParent && playerToolbarSignature === signature) {
       toolbar.classList.toggle("is-centered", config.toolbarCenter !== false);

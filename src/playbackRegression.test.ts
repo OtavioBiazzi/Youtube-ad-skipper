@@ -21,6 +21,11 @@ describe("playback pause regression", () => {
     expect(contentSource).toContain("adState.skipActionPerformed && adState.wasPlayingBeforeAd");
   });
 
+  it("preserves playback around optional player preference changes", () => {
+    expect(contentSource).toContain("function preservePlaybackAfterPreference(");
+    expect(contentSource).toContain("preservePlaybackAfterPreference(video, wasPlaying)");
+  });
+
   it("does not expose the removed autoplay pause controls", () => {
     expect(optionsSource).not.toContain("Autoplay e abas");
     expect(optionsSource).not.toContain("opt-autoplay-background");

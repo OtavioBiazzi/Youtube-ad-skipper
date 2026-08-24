@@ -147,14 +147,7 @@
   }
   function getAdPlaying(doc = document) {
     const player = getYouTubePlayer(doc);
-    if (player?.classList.contains("ad-showing") || player?.classList.contains("ad-interrupting")) {
-      return true;
-    }
-    const root = player || doc;
-    const badges = root.querySelectorAll(
-      ".ytp-ad-badge, .ytp-ad-visit-advertiser-button, .ytp-visit-advertiser-link"
-    );
-    return Array.from(badges).some((badge) => badge.offsetWidth > 0 || badge.offsetHeight > 0);
+    return !!player && (player.classList.contains("ad-showing") || player.classList.contains("ad-interrupting"));
   }
   function findSkipAdButton(doc = document) {
     const root = getYouTubePlayer(doc) || doc.documentElement;
@@ -471,6 +464,12 @@
     }
     if (best) return best;
     return normalizedAvailable.slice().sort((a, b) => QUALITY_ORDER.indexOf(b) - QUALITY_ORDER.indexOf(a))[0] || normalizedTarget;
+  }
+  function shouldApplyPlaybackRate(currentRate, targetRate) {
+    const current = Number(currentRate);
+    const target = Number(targetRate);
+    if (!Number.isFinite(current) || !Number.isFinite(target)) return false;
+    return Math.abs(current - target) > 1e-4;
   }
   function getYouTubeVideoIdFromUrl(input) {
     let url;
@@ -1298,22 +1297,42 @@
         video.removeEventListener("ended", handleEnded, true);
       };
     }
+    function preservePlaybackAfterPreference(video, wasPlaying) {
+      if (!video || !wasPlaying) return;
+      window.setTimeout(() => {
+        if (!config.enabled || video !== getActiveVideo() || adState.active || getAdPlaying()) return;
+        if (!video.paused || video.ended) return;
+        try {
+          video.play().catch(() => {
+          });
+        } catch (err) {
+        }
+      }, 160);
+    }
     function setUserPlaybackRate(rate, video = getActiveVideo()) {
       const targetRate = normalizeUserPlaybackRate(rate, 1);
+      const wasPlaying = !!video && !video.paused;
+      let changed = false;
       if (video) {
         try {
-          if (video.playbackRate !== targetRate) video.playbackRate = targetRate;
+          if (shouldApplyPlaybackRate(video.playbackRate, targetRate)) {
+            video.playbackRate = targetRate;
+            changed = true;
+          }
         } catch (err) {
         }
       }
-      const player = getYouTubePlayer();
-      try {
-        if (player && typeof player.setPlaybackRate === "function") {
-          player.setPlaybackRate(targetRate);
+      if (changed) {
+        const player = getYouTubePlayer();
+        try {
+          if (player && typeof player.setPlaybackRate === "function") {
+            player.setPlaybackRate(targetRate);
+          }
+        } catch (err) {
         }
-      } catch (err) {
+        if (targetRate <= MAX_PLAYBACK_RATE) requestMainWorldSpeedThrough(targetRate);
+        preservePlaybackAfterPreference(video, wasPlaying);
       }
-      if (targetRate <= MAX_PLAYBACK_RATE) requestMainWorldSpeedThrough(targetRate);
       return targetRate;
     }
     function setUserVolume(percent, unmute = false, video = getActiveVideo()) {
@@ -1602,7 +1621,10 @@
     function setPlaybackQuality(target) {
       const player = getYouTubePlayer();
       if (!player) return false;
+      const video = getActiveVideo();
+      const wasPlaying = !!video && !video.paused;
       const level = pickAvailableQuality(target);
+      if (level !== "auto" && getCurrentQualityLevel() === level) return false;
       let attempted = false;
       try {
         if (typeof player.setPlaybackQualityRange === "function") {
@@ -1624,6 +1646,7 @@
       }
       requestMainWorldQuality(level);
       attempted = true;
+      preservePlaybackAfterPreference(video, wasPlaying);
       return attempted;
     }
     function isFullscreenMode() {
@@ -2681,7 +2704,7 @@
       const signature = getPlayerToolbarSignature();
       let toolbar = document.getElementById(PLAYER_TOOLBAR_ID);
       const expectedParent = parent;
-      const expectedNext = normalizeToolbarPosition(config.toolbarPosition) === "above" ? anchor : anchor.nextSibling === toolbar ? toolbar.nextSibling : anchor.nextSibling;
+      const expectedNext = normalizeToolbarPosition(config.toolbarPosition) === "above" ? anchor : toolbar && anchor.nextSibling === toolbar ? toolbar.nextSibling : anchor.nextSibling;
       if (toolbar && toolbar.parentElement === expectedParent && playerToolbarSignature === signature) {
         toolbar.classList.toggle("is-centered", config.toolbarCenter !== false);
         toolbar.classList.toggle("is-always-visible", !!config.toolbarAlwaysVisible);
