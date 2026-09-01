@@ -8,7 +8,6 @@ import {
   MAIN_SPEED_THROUGH_MESSAGE,
   isBridgeMessage,
 } from "./shared/messages";
-import { getAdSeekTarget } from "./shared/adStrategy";
 
 (function() {
   const pageWindow: any = window;
@@ -32,7 +31,6 @@ import { getAdSeekTarget } from "./shared/adStrategy";
   const originalRemoveEventListener = HTMLElement.prototype.removeEventListener;
   const originalJsonParse = JSON.parse.bind(JSON);
   const originalResponseJson = typeof Response !== "undefined" ? Response.prototype.json : null;
-  const nativeCurrentTime = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, "currentTime");
   const nativePlaybackRate = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, "playbackRate");
   const wrappedListeners = new WeakMap();
   let bridgeSessionToken = "";
@@ -341,51 +339,8 @@ import { getAdSeekTarget } from "./shared/adStrategy";
     if (clickSkipButton()) {
       return { ok: true, method: "click" };
     }
-
-    const player: any = getPlayer();
-    const video = document.querySelector("video");
-    let attempted = false;
-
-    if (video) {
-      const duration = Number(video.duration);
-      const currentTime = Number(video.currentTime);
-      const target = getAdSeekTarget(duration, currentTime);
-
-      try {
-        attempted = setNativeMediaValue(nativePlaybackRate, video, speedRate) || attempted;
-        video.playbackRate = speedRate;
-        attempted = true;
-      } catch (err) {}
-
-      if (target !== null) try {
-        if (typeof video.fastSeek === "function") video.fastSeek(target);
-        attempted = setNativeMediaValue(nativeCurrentTime, video, target) || attempted;
-        video.currentTime = target;
-        attempted = true;
-      } catch (err) {
-        try {
-          attempted = setNativeMediaValue(nativeCurrentTime, video, target) || attempted;
-          video.currentTime = target;
-          attempted = true;
-        } catch (innerErr) {}
-      }
-
-      try {
-        if (player && typeof player.seekTo === "function" && target !== null) {
-          player.seekTo(target, true);
-          attempted = true;
-        }
-      } catch (err) {}
-    }
-
-    try {
-      if (player && typeof player.setPlaybackRate === "function") {
-        player.setPlaybackRate(speedRate);
-        attempted = true;
-      }
-    } catch (err) {}
-
-    return { ok: attempted, method: attempted ? "seek" : "none" };
+    const attempted = setSpeedThrough(speedRate);
+    return { ok: attempted, method: attempted ? "speed" : "none" };
   }
 
   function setSpeedThrough(rate) {
@@ -393,7 +348,7 @@ import { getAdSeekTarget } from "./shared/adStrategy";
     const video = document.querySelector("video");
     let attempted = false;
 
-    if (video) {
+    if (video && Math.abs(Number(video.playbackRate) - rate) > 0.0001) {
       try {
         attempted = setNativeMediaValue(nativePlaybackRate, video, rate) || attempted;
         video.playbackRate = rate;
@@ -402,7 +357,7 @@ import { getAdSeekTarget } from "./shared/adStrategy";
     }
 
     try {
-      if (player && typeof player.setPlaybackRate === "function") {
+      if (attempted && player && typeof player.setPlaybackRate === "function") {
         player.setPlaybackRate(rate);
         attempted = true;
       }

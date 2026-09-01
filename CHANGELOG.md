@@ -2,6 +2,16 @@
 
 Todas as mudancas relevantes deste projeto serao registradas aqui.
 
+## 5.0.5 - 2026-08-31
+
+### Corrigido
+
+- Removido definitivamente o fallback que alterava `currentTime` ou usava `seekTo` para levar anuncios ao fim.
+- Removido o ciclo de force skip de quatro segundos que podia atingir o inicio de um video normal.
+- Aceleracao e restauracao de velocidade agora so alteram o player quando a taxa realmente precisa mudar.
+- Ao remover um aviso confirmado de anti-adblock, a extensao retoma o video se ele estava tocando imediatamente antes do modal.
+- Adicionados testes que impedem a reintroducao de seek destrutivo no content script e no mundo principal.
+
 ## 5.0.4 - 2026-08-24
 
 ### Corrigido

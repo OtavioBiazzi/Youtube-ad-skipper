@@ -8,7 +8,6 @@ import {
 import { shouldProtectChannel } from "./shared/channelList";
 import {
   chooseAdSkipAction,
-  getAdSeekTarget,
 } from "./shared/adStrategy";
 import { shouldCountAdCompletion } from "./shared/adCounter";
 import { looksLikeAdblockWarningText } from "./shared/adblockWarning";
@@ -64,8 +63,6 @@ declare global {
   let config: any = { ...DEFAULT_SETTINGS };
 
   const CHECK_INTERVAL = 500;
-  const FORCE_SKIP_RETRY_MS = 250;
-  const FORCE_SKIP_WINDOW_MS = 4000;
   const MIN_PLAYBACK_RATE = 0.0625;
   const MAX_PLAYBACK_RATE = 16;
   const MIN_USER_PLAYBACK_RATE = 0.1;
@@ -95,8 +92,6 @@ declare global {
     alreadyCounted: false,
     skipActionPerformed: false,
     wasPlayingBeforeAd: false,
-    forceSkipInterval: null,
-    forceSkipStartedAt: null,
     skipTimeout: null,
     speedThroughInterval: null,
     playbackRestoreInterval: null,
@@ -125,6 +120,7 @@ declare global {
     loopEnabled: false,
     videoFiltersSessionKey: "",
     videoFiltersSessionEnabled: false,
+    lastKnownPlayingAt: 0,
   };
 
   let adblockObserver: MutationObserver | null = null;
@@ -872,6 +868,9 @@ declare global {
       if (config.volumeBoostEnabled) applyVolumeBoost(video);
       applyVideoFilters();
     };
+    const markPlaying = () => {
+      if (!video.paused && !video.ended) adState.lastKnownPlayingAt = Date.now();
+    };
     const handleEnded = () => {
       syncLoopState(video);
       if (adState.loopEnabled && adState.loopVideoKey === getCurrentVideoKey()) {
@@ -886,12 +885,16 @@ declare global {
     video.addEventListener("durationchange", reapply, true);
     video.addEventListener("emptied", reapply, true);
     video.addEventListener("ended", handleEnded, true);
+    video.addEventListener("playing", markPlaying, true);
+    video.addEventListener("timeupdate", markPlaying, true);
 
     playerStateCleanup = () => {
       video.removeEventListener("loadedmetadata", reapply, true);
       video.removeEventListener("durationchange", reapply, true);
       video.removeEventListener("emptied", reapply, true);
       video.removeEventListener("ended", handleEnded, true);
+      video.removeEventListener("playing", markPlaying, true);
+      video.removeEventListener("timeupdate", markPlaying, true);
     };
   }
 
@@ -2841,62 +2844,6 @@ declare global {
     });
   }
 
-  function forceSkipAd(video = document.querySelector("video")) {
-    if (!isAdSkipperActive() || !config.aggressiveSkip || adState.watching) return false;
-
-    requestMainWorldSkip();
-
-    const player: any = getYouTubePlayer();
-    let attempted = false;
-
-    if (video) {
-      const duration = Number(video.duration);
-      const currentTime = Number(video.currentTime);
-      const target = getAdSeekTarget(duration, currentTime);
-
-      try {
-        video.playbackRate = getSpeedThroughRate();
-        attempted = true;
-      } catch (err) {}
-
-      if (target !== null) try {
-        if (typeof video.fastSeek === "function") video.fastSeek(target);
-        video.currentTime = target;
-        attempted = true;
-      } catch (err) {
-        try {
-          video.currentTime = target;
-          attempted = true;
-        } catch (innerErr) {}
-      }
-
-      try {
-        if (player && typeof player.seekTo === "function" && target !== null) {
-          player.seekTo(target, true);
-          attempted = true;
-        }
-      } catch (err) {}
-    }
-
-    try {
-      if (player && typeof player.setPlaybackRate === "function") {
-        player.setPlaybackRate(getSpeedThroughRate());
-        attempted = true;
-      }
-    } catch (err) {}
-
-    if (attempted) adState.skipActionPerformed = true;
-    return attempted;
-  }
-
-  function stopForceSkipBurst() {
-    if (adState.forceSkipInterval) {
-      clearInterval(adState.forceSkipInterval);
-      adState.forceSkipInterval = null;
-    }
-    adState.forceSkipStartedAt = null;
-  }
-
   function getCurrentPlaybackRate(video = document.querySelector("video")) {
     const player: any = getYouTubePlayer();
     try {
@@ -2929,25 +2876,17 @@ declare global {
     if (!isAdSkipperActive() || !config.aggressiveSkip || adState.watching) return false;
 
     const rate = getSpeedThroughRate();
-    requestMainWorldSpeedThrough(rate);
 
     let attempted = false;
     if (video) {
       try {
-        if (video.playbackRate !== rate) {
+        if (shouldApplyPlaybackRate(video.playbackRate, rate)) {
           video.playbackRate = rate;
+          requestMainWorldSpeedThrough(rate);
+          attempted = true;
         }
-        attempted = true;
       } catch (err) {}
     }
-
-    const player: any = getYouTubePlayer();
-    try {
-      if (player && typeof player.setPlaybackRate === "function") {
-        player.setPlaybackRate(rate);
-        attempted = true;
-      }
-    } catch (err) {}
 
     if (attempted) adState.skipActionPerformed = true;
     return attempted;
@@ -2975,20 +2914,16 @@ declare global {
   function restorePlaybackRate(rate = adState.preAdPlaybackRate || 1) {
     const targetRate = normalizePlaybackRate(rate || 1);
     const video = document.querySelector("video");
+    let changed = false;
     if (video) {
       try {
-        if (video.playbackRate !== targetRate) video.playbackRate = targetRate;
+        if (shouldApplyPlaybackRate(video.playbackRate, targetRate)) {
+          video.playbackRate = targetRate;
+          changed = true;
+        }
       } catch (err) {}
     }
-
-    const player: any = getYouTubePlayer();
-    try {
-      if (player && typeof player.setPlaybackRate === "function") {
-        player.setPlaybackRate(targetRate);
-      }
-    } catch (err) {}
-
-    requestMainWorldSpeedThrough(targetRate);
+    if (changed) requestMainWorldSpeedThrough(targetRate);
   }
 
   function startPlaybackRateRestore(rate = adState.preAdPlaybackRate || 1) {
@@ -3053,7 +2988,6 @@ declare global {
 
   function finishSkipClick() {
     adState.skipActionPerformed = true;
-    stopForceSkipBurst();
     clearSkipTimeout();
     stopSkipButtonObserver();
     adState.skipTargetTime = Date.now() + 1000;
@@ -3082,40 +3016,12 @@ declare global {
       return true;
     }
 
-    if (action === "seek-end") {
-      forceSkipAd(video);
-      startForceSkipBurst(video);
-    } else if (action === "speed-through") {
+    if (action === "speed-through") {
+      requestMainWorldSkip();
       applySpeedThrough(video);
     }
 
     return false;
-  }
-
-  function startForceSkipBurst(video = document.querySelector("video")) {
-    if (!isAdSkipperActive() || !config.aggressiveSkip || adState.forceSkipInterval) return;
-    adState.forceSkipStartedAt = Date.now();
-
-    const tick = () => {
-      if (!isAdSkipperActive() || adState.watching || !getAdPlaying()) {
-        stopForceSkipBurst();
-        return;
-      }
-
-      if (clickSkipAdBtn()) {
-        finishSkipClick();
-        return;
-      }
-
-      forceSkipAd(video);
-
-      if (Date.now() - adState.forceSkipStartedAt >= FORCE_SKIP_WINDOW_MS) {
-        stopForceSkipBurst();
-      }
-    };
-
-    tick();
-    adState.forceSkipInterval = setInterval(tick, FORCE_SKIP_RETRY_MS);
   }
 
   function stopSkipButtonObserver() {
@@ -3230,8 +3136,16 @@ declare global {
     if (!isAdSkipperActive() || !el) return;
     const target = el.closest?.("tp-yt-paper-dialog") || el;
     const shouldCount = target.isConnected !== false;
+    const shouldResume = Date.now() - (adState.lastKnownPlayingAt || 0) < 10000;
     target.remove();
     removeOrphanedAdblockBackdrops();
+    if (shouldResume) {
+      window.setTimeout(() => {
+        const video = getActiveVideo();
+        if (!config.enabled || document.hidden || !video || !video.paused || video.ended || getAdPlaying()) return;
+        try { video.play().catch(() => {}); } catch (err) {}
+      }, 120);
+    }
 
     // Incrementar contador de avisos e salvar
     if (!shouldCount) return;
@@ -3405,7 +3319,6 @@ declare global {
     if (watchBtn) {
       watchBtn.addEventListener("click", () => {
         adState.watching = true;
-        stopForceSkipBurst();
         stopSpeedThrough();
         clearSkipTimeout();
         clearInterval(adState.countdownInterval);
@@ -3441,7 +3354,6 @@ declare global {
 
   function scheduleSkip() {
     clearInterval(adState.countdownInterval);
-    stopForceSkipBurst();
     clearSkipTimeout();
     stopSkipButtonObserver();
     const delayMs = getEffectiveDelay() * 1000;
@@ -3580,7 +3492,6 @@ declare global {
   }
 
   function cleanupRuntimeState() {
-    stopForceSkipBurst();
     stopSpeedThrough();
     stopSkipButtonObserver();
     clearPostSkipRestoreChecks();
@@ -3598,8 +3509,6 @@ declare global {
     adState.alreadyCounted = false;
     adState.skipActionPerformed = false;
     adState.wasPlayingBeforeAd = false;
-    adState.forceSkipInterval = null;
-    adState.forceSkipStartedAt = null;
     adState.skipTimeout = null;
     adState.speedThroughInterval = null;
   }

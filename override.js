@@ -10,25 +10,6 @@
   function isBridgeMessage(data) {
     return !!data && typeof data === "object" && typeof data.source === "string";
   }
-  const MIN_SEEKABLE_AD_DURATION_SECONDS = 0.5;
-  const MIN_REMAINING_AD_SECONDS = 0.15;
-  function getAdSeekTarget(duration, currentTime) {
-    const normalizedDuration = Number(duration);
-    const normalizedCurrentTime = Number(currentTime);
-    if (!Number.isFinite(normalizedDuration) || normalizedDuration < MIN_SEEKABLE_AD_DURATION_SECONDS) {
-      return null;
-    }
-    if (!Number.isFinite(normalizedCurrentTime) || normalizedCurrentTime < 0) {
-      return null;
-    }
-    if (normalizedCurrentTime >= normalizedDuration - MIN_REMAINING_AD_SECONDS) {
-      return null;
-    }
-    return Math.min(
-      normalizedDuration - 0.05,
-      Math.max(normalizedCurrentTime + 0.25, normalizedDuration - 0.05)
-    );
-  }
   (function() {
     const pageWindow = window;
     const OVERRIDE_GUARD_KEY = "__youtubeExtensionOverrideInstalled";
@@ -47,7 +28,6 @@
     const originalRemoveEventListener = HTMLElement.prototype.removeEventListener;
     const originalJsonParse = JSON.parse.bind(JSON);
     const originalResponseJson = typeof Response !== "undefined" ? Response.prototype.json : null;
-    const nativeCurrentTime = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, "currentTime");
     const nativePlaybackRate = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, "playbackRate");
     const wrappedListeners = /* @__PURE__ */ new WeakMap();
     let bridgeSessionToken = "";
@@ -302,54 +282,14 @@
       if (clickSkipButton()) {
         return { ok: true, method: "click" };
       }
-      const player = getPlayer();
-      const video = document.querySelector("video");
-      let attempted = false;
-      if (video) {
-        const duration = Number(video.duration);
-        const currentTime = Number(video.currentTime);
-        const target = getAdSeekTarget(duration, currentTime);
-        try {
-          attempted = setNativeMediaValue(nativePlaybackRate, video, speedRate) || attempted;
-          video.playbackRate = speedRate;
-          attempted = true;
-        } catch (err) {
-        }
-        if (target !== null) try {
-          if (typeof video.fastSeek === "function") video.fastSeek(target);
-          attempted = setNativeMediaValue(nativeCurrentTime, video, target) || attempted;
-          video.currentTime = target;
-          attempted = true;
-        } catch (err) {
-          try {
-            attempted = setNativeMediaValue(nativeCurrentTime, video, target) || attempted;
-            video.currentTime = target;
-            attempted = true;
-          } catch (innerErr) {
-          }
-        }
-        try {
-          if (player && typeof player.seekTo === "function" && target !== null) {
-            player.seekTo(target, true);
-            attempted = true;
-          }
-        } catch (err) {
-        }
-      }
-      try {
-        if (player && typeof player.setPlaybackRate === "function") {
-          player.setPlaybackRate(speedRate);
-          attempted = true;
-        }
-      } catch (err) {
-      }
-      return { ok: attempted, method: attempted ? "seek" : "none" };
+      const attempted = setSpeedThrough(speedRate);
+      return { ok: attempted, method: attempted ? "speed" : "none" };
     }
     function setSpeedThrough(rate) {
       const player = getPlayer();
       const video = document.querySelector("video");
       let attempted = false;
-      if (video) {
+      if (video && Math.abs(Number(video.playbackRate) - rate) > 1e-4) {
         try {
           attempted = setNativeMediaValue(nativePlaybackRate, video, rate) || attempted;
           video.playbackRate = rate;
@@ -358,7 +298,7 @@
         }
       }
       try {
-        if (player && typeof player.setPlaybackRate === "function") {
+        if (attempted && player && typeof player.setPlaybackRate === "function") {
           player.setPlaybackRate(rate);
           attempted = true;
         }

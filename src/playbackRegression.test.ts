@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const contentSource = readFileSync(new URL("./content.ts", import.meta.url), "utf8");
+const overrideSource = readFileSync(new URL("./override.ts", import.meta.url), "utf8");
 const optionsSource = readFileSync(new URL("../options.html", import.meta.url), "utf8");
 
 describe("playback pause regression", () => {
@@ -9,6 +10,13 @@ describe("playback pause regression", () => {
     expect(contentSource).not.toContain("function pauseVideo(");
     expect(contentSource).not.toContain("background-tab-playback-signal");
     expect(contentSource).not.toContain("autoplay-disable-all");
+  });
+
+  it("never seeks media to its end as an ad fallback", () => {
+    expect(contentSource).not.toContain("startForceSkipBurst");
+    expect(contentSource).not.toContain("video.currentTime = target");
+    expect(overrideSource).not.toContain("video.currentTime = target");
+    expect(overrideSource).not.toContain("player.seekTo(target");
   });
 
   it("keeps only the deliberate pause used when opening the popup player", () => {

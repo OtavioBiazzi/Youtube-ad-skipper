@@ -1,6 +1,6 @@
 # YouTube Extension
 
-> Versao atual: **v5.0.4** (pacote revisado e atualizado em 24/08/2026).
+> Versao atual: **v5.0.5** (pacote revisado e atualizado em 31/08/2026).
 
 > O popup possui **Verificar atualizacoes**. Por limitacao de seguranca, extensoes carregadas sem compactacao nao substituem os proprios arquivos automaticamente; o botao encontra a release e abre o download direto.
 
@@ -13,8 +13,8 @@ Uma extensão experimental de navegador para reunir **skipper inteligente, contr
 <br>
 
 <div align="center">
-  <a href="https://github.com/OtavioBiazzi/Youtube-ad-skipper/releases/download/v5.0.4/youtube-extension-v5.0.4.zip">
-    <img src="https://img.shields.io/badge/Baixar_Vers%C3%A3o_5.0.4_(.ZIP)-000000?style=for-the-badge&logo=github&logoColor=white" alt="Baixar YouTube Extension 5.0.4" />
+  <a href="https://github.com/OtavioBiazzi/Youtube-ad-skipper/releases/download/v5.0.5/youtube-extension-v5.0.5.zip">
+    <img src="https://img.shields.io/badge/Baixar_Vers%C3%A3o_5.0.5_(.ZIP)-000000?style=for-the-badge&logo=github&logoColor=white" alt="Baixar YouTube Extension 5.0.5" />
   </a>
   <br><br>
   <a href="https://github.com/OtavioBiazzi/Youtube-ad-skipper/releases">Ver todas as versões</a>
@@ -42,15 +42,15 @@ Quando um anúncio aparece no YouTube:
 2. **Muta o vídeo** (se configurado)
 3. Mostra um **overlay** no canto do vídeo com countdown
 4. Após o delay configurado (ou instantaneamente), **clica no botão de pular**
-5. Se não encontrar o botão, **avança o vídeo até o final**
+5. Se não encontrar o botão, **acelera temporariamente sem avançar a mídia até o final**
 6. **Restaura** o som e a velocidade normal
 
 ## 🛠️ Como Baixar e Instalar
 
 ### Chrome / Opera GX / Edge / Brave
 
-1. **[Baixe o pacote pronto da versão 5.0.4](https://github.com/OtavioBiazzi/Youtube-ad-skipper/releases/download/v5.0.4/youtube-extension-v5.0.4.zip)**.
-2. **Extraia (descompacte)** o arquivo `youtube-extension-v5.0.4.zip` em uma pasta permanente no seu computador.
+1. **[Baixe o pacote pronto da versão 5.0.5](https://github.com/OtavioBiazzi/Youtube-ad-skipper/releases/download/v5.0.5/youtube-extension-v5.0.5.zip)**.
+2. **Extraia (descompacte)** o arquivo `youtube-extension-v5.0.5.zip` em uma pasta permanente no seu computador.
 3. Abra o seu navegador e vá para a página de extensões:
    - Chrome: `chrome://extensions/`
    - Opera GX: `opera://extensions/`
