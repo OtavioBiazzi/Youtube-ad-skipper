@@ -8,8 +8,8 @@ import {
 import { shouldProtectChannel } from "./shared/channelList";
 import {
   chooseAdSkipAction,
-  getAdSeekTarget,
 } from "./shared/adStrategy";
+import { shouldCountAdCompletion } from "./shared/adCounter";
 import { looksLikeAdblockWarningText } from "./shared/adblockWarning";
 import {
   clickElement,
@@ -42,6 +42,7 @@ import {
   migrateSettings,
 } from "./shared/settings";
 import { normalizeQualityLevel, pickBestQualityLevel } from "./shared/quality";
+import { shouldApplyPlaybackRate } from "./shared/playback";
 import { getYouTubeVideoIdFromUrl, getYouTubeVideoKeyFromUrl } from "./shared/youtube";
 
 declare global {
@@ -62,8 +63,6 @@ declare global {
   let config: any = { ...DEFAULT_SETTINGS };
 
   const CHECK_INTERVAL = 500;
-  const FORCE_SKIP_RETRY_MS = 250;
-  const FORCE_SKIP_WINDOW_MS = 4000;
   const MIN_PLAYBACK_RATE = 0.0625;
   const MAX_PLAYBACK_RATE = 16;
   const MIN_USER_PLAYBACK_RATE = 0.1;
@@ -72,8 +71,6 @@ declare global {
   const PLAYBACK_RESTORE_RETRY_MS = 150;
   const PLAYBACK_RESTORE_WINDOW_MS = 2400;
   const POST_SKIP_RESTORE_DELAYS_MS = [180, 450, 900, 1500];
-  const USER_PLAYBACK_INTENT_WINDOW_MS = 12000;
-  const BACKGROUND_PLAYBACK_INTENT_WINDOW_MS = 20000;
   const APPEARANCE_TASK_INTERVAL_MS = 1200;
   const PLAYER_UI_TASK_INTERVAL_MS = 650;
   const MAIN_LOOP_SLOW_THRESHOLD_MS = 16;
@@ -93,8 +90,8 @@ declare global {
     todayDate: null,
     lastVideoTime: -1,
     alreadyCounted: false,
-    forceSkipInterval: null,
-    forceSkipStartedAt: null,
+    skipActionPerformed: false,
+    wasPlayingBeforeAd: false,
     skipTimeout: null,
     speedThroughInterval: null,
     playbackRestoreInterval: null,
@@ -106,12 +103,6 @@ declare global {
     defaultSpeedAppliedKey: "",
     defaultVolumeAppliedKey: "",
     rightMouseDown: false,
-    lastUserPlaybackIntentAt: 0,
-    lastUserPlaybackIntentReason: "",
-    lastPlaybackPauseReason: "",
-    lastPlaybackPauseAt: 0,
-    autoplayVideo: null,
-    tabPlaybackToken: Date.now() + "-" + Math.random().toString(36).slice(2),
     qualityVideoKey: "",
     qualityRequestKey: "",
     qualityRequestStartedAt: 0,
@@ -129,6 +120,7 @@ declare global {
     loopEnabled: false,
     videoFiltersSessionKey: "",
     videoFiltersSessionEnabled: false,
+    lastKnownPlayingAt: 0,
   };
 
   let adblockObserver: MutationObserver | null = null;
@@ -139,6 +131,9 @@ declare global {
   let videoFilterSignature = "";
   let miniplayerSignature = "";
   let miniplayerUpdateRaf = 0;
+  let miniplayerAnchor: HTMLElement | null = null;
+  let navigationInProgress = false;
+  let playbackInteractionRevision = 0;
   let playerToolbarUpdateRaf = 0;
   let visualMaintenanceRaf = 0;
   let visualMaintenanceTimeout: number | null = null;
@@ -209,10 +204,6 @@ declare global {
             config.volumeBoostLevel = normalizeVolumeBoostLevel(s.volumeBoostLevel);
             config.volumeBoostAuto = !!s.volumeBoostAuto;
             config.playerWheelInvert = !!s.playerWheelInvert;
-            config.autoplayBlockBackground = !!s.autoplayBlockBackground;
-            config.autoplayBlockForeground = !!s.autoplayBlockForeground;
-            config.autoplayAllowPlaylists = s.autoplayAllowPlaylists !== false;
-            config.pauseBackgroundTabs = !!s.pauseBackgroundTabs;
             config.qualityEnabled = !!s.qualityEnabled;
             config.qualityVideo = normalizeQualityLevel(s.qualityVideo, "hd720");
             config.qualityPlaylist = normalizeQualityLevel(s.qualityPlaylist, "hd720");
@@ -257,9 +248,6 @@ declare global {
             config.shortcutScreenshot = normalizeShortcutSetting(s.shortcutScreenshot, "Alt+Shift+P");
             config.shortcutPopup = normalizeShortcutSetting(s.shortcutPopup, "Alt+Shift+O");
             config.shortcutLoop = normalizeShortcutSetting(s.shortcutLoop, "Alt+Shift+L");
-            config.autoplayDisableAll = !!s.autoplayDisableAll;
-            config.autoplayStopPreload = !!s.autoplayStopPreload;
-            config.autoplayIgnorePopup = s.autoplayIgnorePopup !== false;
             config.playerPopupEnabled = s.playerPopupEnabled !== false;
             config.layoutVideosPerRow = normalizeGridCount(s.layoutVideosPerRow, 4, 1, 8);
             config.layoutChannelVideosPerRow = normalizeGridCount(s.layoutChannelVideosPerRow, 4, 1, 8);
@@ -276,7 +264,14 @@ declare global {
             config.cinemaUseYouTubeTheater = s.cinemaUseYouTubeTheater !== false;
             config.ultrawideEnabled = !!s.ultrawideEnabled;
             config.ultrawideFit = normalizeUltrawideFit(s.ultrawideFit);
-            config.toolbarInsidePlayer = !!s.toolbarInsidePlayer;
+            // O modo legado sobrepunha os controles ao video e quebrava em
+            // diferentes proporcoes/resolucoes. Migre instalacoes antigas e
+            // mantenha a barra apenas em areas externas seguras.
+            config.toolbarInsidePlayer = false;
+            if (s.toolbarInsidePlayer) {
+              chrome.storage.local.set({ toolbarInsidePlayer: false });
+            }
+            config.toolbarAttachToActions = !!s.toolbarAttachToActions;
             config.toolbarAlwaysVisible = !!s.toolbarAlwaysVisible;
             config.themeEngine = normalizeThemeEngine(s.themeEngine);
             config.themeVariant = normalizeThemeVariant(s.themeVariant);
@@ -345,6 +340,9 @@ declare global {
       if (changes.aggressiveSkip) config.aggressiveSkip = !!changes.aggressiveSkip.newValue;
       if (changes.instantSkip) config.instantSkip = !!changes.instantSkip.newValue;
       if (changes.showToast) config.showToast = !!changes.showToast.newValue;
+      if (changes.totalAdsSkipped) adState.totalSkipped = Number(changes.totalAdsSkipped.newValue) || 0;
+      if (changes.adsSkippedToday) adState.adsSkippedToday = Number(changes.adsSkippedToday.newValue) || 0;
+      if (changes.todayDate) adState.todayDate = changes.todayDate.newValue || null;
       if (changes.shortcutEnabled) config.shortcutEnabled = !!changes.shortcutEnabled.newValue;
       if (changes.listMode) config.listMode = changes.listMode.newValue === "blacklist" ? "blacklist" : "whitelist";
       if (changes.whitelist) config.whitelist = Array.isArray(changes.whitelist.newValue) ? changes.whitelist.newValue : [];
@@ -391,10 +389,6 @@ declare global {
         applyVolumeBoost();
       }
       if (changes.playerWheelInvert) config.playerWheelInvert = !!changes.playerWheelInvert.newValue;
-      if (changes.autoplayBlockBackground) config.autoplayBlockBackground = !!changes.autoplayBlockBackground.newValue;
-      if (changes.autoplayBlockForeground) config.autoplayBlockForeground = !!changes.autoplayBlockForeground.newValue;
-      if (changes.autoplayAllowPlaylists) config.autoplayAllowPlaylists = changes.autoplayAllowPlaylists.newValue !== false;
-      if (changes.pauseBackgroundTabs) config.pauseBackgroundTabs = !!changes.pauseBackgroundTabs.newValue;
       if (changes.qualityEnabled) {
         config.qualityEnabled = !!changes.qualityEnabled.newValue;
         resetQualityState();
@@ -542,9 +536,6 @@ declare global {
       shortcutKeys.forEach((key) => {
         if (changes[key]) config[key] = normalizeShortcutText(changes[key].newValue, "");
       });
-      if (changes.autoplayDisableAll) config.autoplayDisableAll = !!changes.autoplayDisableAll.newValue;
-      if (changes.autoplayStopPreload) config.autoplayStopPreload = !!changes.autoplayStopPreload.newValue;
-      if (changes.autoplayIgnorePopup) config.autoplayIgnorePopup = changes.autoplayIgnorePopup.newValue !== false;
       const layoutKeys = [
         ["layoutVideosPerRow", 4, 1, 8],
         ["layoutChannelVideosPerRow", 4, 1, 8],
@@ -589,7 +580,14 @@ declare global {
         applyAppearanceFilters();
       }
       if (changes.toolbarInsidePlayer) {
-        config.toolbarInsidePlayer = !!changes.toolbarInsidePlayer.newValue;
+        config.toolbarInsidePlayer = false;
+        if (changes.toolbarInsidePlayer.newValue) {
+          chrome.storage.local.set({ toolbarInsidePlayer: false });
+        }
+        schedulePlayerToolbarUpdate();
+      }
+      if (changes.toolbarAttachToActions) {
+        config.toolbarAttachToActions = !!changes.toolbarAttachToActions.newValue;
         schedulePlayerToolbarUpdate();
       }
       if (changes.toolbarAlwaysVisible) {
@@ -637,9 +635,6 @@ declare global {
       if (changes.codecForceAvc) {
         config.codecForceAvc = !!changes.codecForceAvc.newValue;
         syncCodecSettingsToMainWorld();
-      }
-      if (changes.tubeShieldActivePlayback) {
-        handleExternalPlaybackSignal(changes.tubeShieldActivePlayback.newValue);
       }
     });
   }
@@ -813,7 +808,7 @@ declare global {
 
   function requestMainWorldQuality(level) {
     try {
-      postMainWorldMessage({ source: MAIN_QUALITY_MESSAGE, level });
+      postMainWorldMessage({ source: MAIN_QUALITY_MESSAGE, level, videoKey: getCurrentVideoKey() });
     } catch (err) {}
   }
 
@@ -834,7 +829,7 @@ declare global {
   }
 
   function getActiveVideo() {
-    return document.querySelector("video") as HTMLVideoElement | null;
+    return getYouTubePlayer()?.querySelector<HTMLVideoElement>("video.html5-main-video, video") || null;
   }
 
   function getCurrentVideoKey() {
@@ -871,10 +866,19 @@ declare global {
     }
 
     playerStateVideo = video;
+    adState.defaultSpeedAppliedKey = "";
+    adState.defaultVolumeAppliedKey = "";
+    resetQualityState();
     const reapply = () => {
       syncLoopState(video);
       if (config.volumeBoostEnabled) applyVolumeBoost(video);
       applyVideoFilters();
+    };
+    const markPlaying = () => {
+      if (!video.paused && !video.ended) {
+        adState.lastKnownPlayingAt = Date.now();
+        if (adState.active) adState.wasPlayingBeforeAd = true;
+      }
     };
     const handleEnded = () => {
       syncLoopState(video);
@@ -890,32 +894,61 @@ declare global {
     video.addEventListener("durationchange", reapply, true);
     video.addEventListener("emptied", reapply, true);
     video.addEventListener("ended", handleEnded, true);
+    video.addEventListener("playing", markPlaying, true);
+    video.addEventListener("timeupdate", markPlaying, true);
 
     playerStateCleanup = () => {
       video.removeEventListener("loadedmetadata", reapply, true);
       video.removeEventListener("durationchange", reapply, true);
       video.removeEventListener("emptied", reapply, true);
       video.removeEventListener("ended", handleEnded, true);
+      video.removeEventListener("playing", markPlaying, true);
+      video.removeEventListener("timeupdate", markPlaying, true);
     };
+  }
+
+  function preservePlaybackAfterPreference(video: HTMLVideoElement | null, wasPlaying: boolean) {
+    if (!video || !wasPlaying) return;
+    const videoKey = getCurrentVideoKey();
+    const interactionRevision = playbackInteractionRevision;
+    window.setTimeout(() => {
+      if (interactionRevision !== playbackInteractionRevision) return;
+      if (!config.enabled || navigationInProgress || videoKey !== getCurrentVideoKey() || video !== getActiveVideo() || adState.active || getAdPlaying()) return;
+      if (!video.paused || video.ended) return;
+      try {
+        video.play().catch(() => {});
+      } catch (err) {}
+    }, 160);
   }
 
   function setUserPlaybackRate(rate, video = getActiveVideo()) {
     const targetRate = normalizeUserPlaybackRate(rate, 1);
+    const wasPlaying = !!video && !video.paused;
+    let changed = false;
 
     if (video) {
       try {
-        if (video.playbackRate !== targetRate) video.playbackRate = targetRate;
+        if (shouldApplyPlaybackRate(video.playbackRate, targetRate)) {
+          video.playbackRate = targetRate;
+          changed = true;
+        }
       } catch (err) {}
     }
 
-    const player: any = getYouTubePlayer();
-    try {
-      if (player && typeof player.setPlaybackRate === "function") {
-        player.setPlaybackRate(targetRate);
-      }
-    } catch (err) {}
+    // Evita chamar a API do YouTube em todo inicio de video quando a taxa ja
+    // esta em 1x. Essa chamada redundante pode reinicializar o estado interno
+    // do player durante navegacoes SPA e trocas de playlist.
+    if (changed) {
+      const player: any = getYouTubePlayer();
+      try {
+        if (player && typeof player.setPlaybackRate === "function") {
+          player.setPlaybackRate(targetRate);
+        }
+      } catch (err) {}
 
-    if (targetRate <= MAX_PLAYBACK_RATE) requestMainWorldSpeedThrough(targetRate);
+      if (targetRate <= MAX_PLAYBACK_RATE) requestMainWorldSpeedThrough(targetRate);
+      preservePlaybackAfterPreference(video, wasPlaying);
+    }
     return targetRate;
   }
 
@@ -1060,6 +1093,128 @@ declare global {
     showPlayerFeedback("filters", enabled ? "Filtros on" : "Filtros off", config.appearanceAutoApplyFilters ? "Aplicacao automatica" : "Somente neste video");
   }
 
+  const VIDEO_FILTER_POPOVER_ID = "tube-shield-video-filter-popover";
+  const VIDEO_FILTER_POPOVER_STYLE_ID = "tube-shield-video-filter-popover-style";
+
+  function removeVideoFilterPopover() {
+    document.getElementById(VIDEO_FILTER_POPOVER_ID)?.remove();
+  }
+
+  function ensureVideoFilterPopoverStyle() {
+    if (document.getElementById(VIDEO_FILTER_POPOVER_STYLE_ID)) return;
+    const style = document.createElement("style");
+    style.id = VIDEO_FILTER_POPOVER_STYLE_ID;
+    style.textContent = `
+      #${VIDEO_FILTER_POPOVER_ID} {
+        position: fixed !important;
+        z-index: 2147483600 !important;
+        width: min(280px, calc(100vw - 28px)) !important;
+        padding: 14px !important;
+        border: 1px solid rgba(255,255,255,.16) !important;
+        border-radius: 14px !important;
+        background: rgba(18,18,20,.96) !important;
+        color: #fff !important;
+        box-shadow: 0 18px 60px rgba(0,0,0,.5) !important;
+        backdrop-filter: blur(16px) !important;
+        font: 12px/1.2 system-ui, sans-serif !important;
+      }
+      #${VIDEO_FILTER_POPOVER_ID} .yse-filter-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; }
+      #${VIDEO_FILTER_POPOVER_ID} .yse-filter-title { font-weight:750; font-size:13px; }
+      #${VIDEO_FILTER_POPOVER_ID} .yse-filter-close { border:0; background:transparent; color:rgba(255,255,255,.7); cursor:pointer; font-size:18px; line-height:1; }
+      #${VIDEO_FILTER_POPOVER_ID} .yse-filter-row { display:grid; grid-template-columns:86px 1fr 38px; gap:8px; align-items:center; margin:9px 0; }
+      #${VIDEO_FILTER_POPOVER_ID} .yse-filter-row input[type=range] { width:100%; accent-color:#ff334b; }
+      #${VIDEO_FILTER_POPOVER_ID} .yse-filter-value { text-align:right; color:rgba(255,255,255,.68); font-variant-numeric:tabular-nums; }
+      #${VIDEO_FILTER_POPOVER_ID} .yse-filter-actions { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-top:12px; padding-top:10px; border-top:1px solid rgba(255,255,255,.1); }
+      #${VIDEO_FILTER_POPOVER_ID} .yse-filter-reset { border:1px solid rgba(255,255,255,.18); border-radius:8px; background:rgba(255,255,255,.08); color:#fff; padding:6px 9px; cursor:pointer; }
+    `;
+    (document.head || document.documentElement).appendChild(style);
+  }
+
+  function updateVideoFilterPopoverPosition() {
+    const popover = document.getElementById(VIDEO_FILTER_POPOVER_ID);
+    const player: any = getYouTubePlayer();
+    const video = getActiveVideo();
+    const rect = player?.getBoundingClientRect?.();
+    if (!popover || !video || !rect || rect.width <= 0 || rect.height <= 0 || !isWatchPage()) {
+      if (popover) removeVideoFilterPopover();
+      return;
+    }
+    const top = Math.max(10, rect.top + 14);
+    const left = Math.max(10, rect.right - popover.offsetWidth - 14);
+    popover.style.top = `${Math.min(top, window.innerHeight - popover.offsetHeight - 10)}px`;
+    popover.style.left = `${Math.min(left, window.innerWidth - popover.offsetWidth - 10)}px`;
+  }
+
+  function syncVideoFilterPopover() {
+    updateVideoFilterPopoverPosition();
+    const popover = document.getElementById(VIDEO_FILTER_POPOVER_ID);
+    if (!popover) return;
+    const toggle = popover.querySelector<HTMLInputElement>("[data-filter-toggle]");
+    if (toggle) toggle.checked = shouldUseVideoFilters();
+    popover.querySelectorAll<HTMLInputElement>("[data-filter-key]").forEach((input) => {
+      const key = input.dataset.filterKey as keyof typeof config;
+      const value = Number(config[key]);
+      if (Number.isFinite(value)) {
+        input.value = String(value);
+        const label = input.parentElement?.querySelector<HTMLElement>(".yse-filter-value");
+        if (label) label.textContent = `${value}%`;
+      }
+    });
+  }
+
+  function toggleVideoFilterPopover() {
+    const player: any = getYouTubePlayer();
+    const video = getActiveVideo();
+    const rect = player?.getBoundingClientRect?.();
+    if (!video || !rect || rect.width <= 0 || rect.height <= 0 || !isWatchPage()) {
+      removeVideoFilterPopover();
+      return;
+    }
+    const existing = document.getElementById(VIDEO_FILTER_POPOVER_ID);
+    if (existing) {
+      existing.remove();
+      return;
+    }
+    ensureVideoFilterPopoverStyle();
+    const popover = document.createElement("section");
+    popover.id = VIDEO_FILTER_POPOVER_ID;
+    popover.setAttribute("role", "dialog");
+    popover.setAttribute("aria-label", "Filtros do video");
+    const rows = [
+      ["videoFilterBrightness", "Brilho", 50, 150],
+      ["videoFilterContrast", "Contraste", 50, 150],
+      ["videoFilterSaturate", "Saturacao", 0, 200],
+      ["videoFilterGrayscale", "Cinza", 0, 100],
+      ["videoFilterSepia", "Sepia", 0, 100],
+    ];
+    popover.innerHTML = `<div class="yse-filter-head"><span class="yse-filter-title">Filtros do video</span><button class="yse-filter-close" type="button" aria-label="Fechar filtros">Ã—</button></div><label><input type="checkbox" data-filter-toggle> Ativar filtros</label>${rows.map(([key, label, min, max]) => `<label class="yse-filter-row"><span>${label}</span><input type="range" data-filter-key="${key}" min="${min}" max="${max}" value="${Number(config[key])}"><span class="yse-filter-value">${Number(config[key])}%</span></label>`).join("")}<div class="yse-filter-actions"><span>Somente neste video</span><button type="button" class="yse-filter-reset">Restaurar</button></div>`;
+    document.body.appendChild(popover);
+    popover.querySelector<HTMLButtonElement>(".yse-filter-close")?.addEventListener("click", removeVideoFilterPopover);
+    popover.querySelector<HTMLInputElement>("[data-filter-toggle]")?.addEventListener("change", (event) => {
+      setVideoFiltersEnabled((event.target as HTMLInputElement).checked);
+      syncVideoFilterPopover();
+    });
+    popover.querySelectorAll<HTMLInputElement>("[data-filter-key]").forEach((input) => {
+      input.addEventListener("input", () => {
+        const key = input.dataset.filterKey as keyof typeof config;
+        const value = Number(input.value);
+        (config as any)[key] = value;
+        try { chrome.storage.local.set({ [key]: value }); } catch (err) {}
+        applyVideoFilters();
+        const label = input.parentElement?.querySelector<HTMLElement>(".yse-filter-value");
+        if (label) label.textContent = `${value}%`;
+      });
+    });
+    popover.querySelector<HTMLButtonElement>(".yse-filter-reset")?.addEventListener("click", () => {
+      const defaults = { videoFilterBrightness: 100, videoFilterContrast: 100, videoFilterSaturate: 100, videoFilterGrayscale: 0, videoFilterSepia: 0 };
+      Object.assign(config, defaults);
+      try { chrome.storage.local.set(defaults); } catch (err) {}
+      applyVideoFilters();
+      syncVideoFilterPopover();
+    });
+    syncVideoFilterPopover();
+  }
+
   function resetQualityState() {
     adState.qualityRequestKey = "";
     adState.qualityRequestStartedAt = 0;
@@ -1100,7 +1255,10 @@ declare global {
     const player: any = getYouTubePlayer();
     if (!player) return false;
 
+    const video = getActiveVideo();
+    const wasPlaying = !!video && !video.paused;
     const level = pickAvailableQuality(target);
+    if (level !== "auto" && getCurrentQualityLevel() === level) return false;
     let attempted = false;
 
     try {
@@ -1123,6 +1281,7 @@ declare global {
 
     requestMainWorldQuality(level);
     attempted = true;
+    preservePlaybackAfterPreference(video, wasPlaying);
 
     return attempted;
   }
@@ -1672,6 +1831,7 @@ declare global {
   }
 
   function runVisualMaintenanceTasks(force = false) {
+    if (document.hidden && !force) return;
     const now = Date.now();
 
     if (force || now - appearanceTasksLastRunAt >= APPEARANCE_TASK_INTERVAL_MS) {
@@ -1890,6 +2050,9 @@ declare global {
   const MINIPLAYER_ACTIVE_CLASS = "tube-shield-miniplayer-active";
 
   function getPlayerAnchor() {
+    const watch = document.querySelector("ytd-watch-flexy");
+    if (watch?.hasAttribute("full-bleed-player")) return document.querySelector("#player-full-bleed-container");
+    if (watch?.hasAttribute("theater")) return document.querySelector("#player-theater-container");
     return document.querySelector("#player-container-outer")
       || document.querySelector("#player")
       || document.querySelector("ytd-player")
@@ -1921,6 +2084,9 @@ declare global {
   function buildMiniplayerCss() {
     const size = parseMiniplayerSize();
     return `
+      html.${MINIPLAYER_ACTIVE_CLASS} [data-yse-miniplayer-anchor] {
+        min-height: var(--yse-miniplayer-anchor-height) !important;
+      }
       html.${MINIPLAYER_ACTIVE_CLASS} ytd-watch-flexy #player,
       html.${MINIPLAYER_ACTIVE_CLASS} ytd-watch-flexy #player-container-outer,
       html.${MINIPLAYER_ACTIVE_CLASS} ytd-watch-flexy #player-theater-container,
@@ -1936,8 +2102,9 @@ declare global {
       html.${MINIPLAYER_ACTIVE_CLASS} #movie_player.html5-video-player {
         position: fixed !important;
         ${getMiniplayerPositionCss()}
-        width: min(${size.width}px, calc(100vw - 36px)) !important;
-        height: min(${size.height}px, calc(100vh - 90px)) !important;
+        width: min(${size.width}px, calc(100vw - 36px), calc((100vh - 90px) * ${size.width / size.height})) !important;
+        height: auto !important;
+        aspect-ratio: ${size.width} / ${size.height} !important;
         z-index: 2147483600 !important;
         border-radius: 10px !important;
         overflow: hidden !important;
@@ -1988,13 +2155,13 @@ declare global {
   }
 
   function shouldUseMiniplayer() {
-    if (!config.enabled || !config.miniplayerEnabled || !isWatchPage()) return false;
+    if (navigationInProgress || !config.enabled || !config.miniplayerEnabled || !isWatchPage()) return false;
     if (document.fullscreenElement || document.pictureInPictureElement) return false;
 
     const player = getYouTubePlayer();
     const video = getActiveVideo();
     const anchor: any = getPlayerAnchor();
-    if (!player || !video || !anchor?.getBoundingClientRect) return false;
+    if (!player || !video || !anchor?.getBoundingClientRect || player.classList.contains("ytp-player-minimized")) return false;
 
     const rect = anchor.getBoundingClientRect();
     const activationOffset = Math.max(80, getMastheadHeight() + 16);
@@ -2003,7 +2170,15 @@ declare global {
 
   function updateMiniplayer() {
     const root = document.documentElement;
+    if (miniplayerAnchor && miniplayerAnchor !== getPlayerAnchor()) resetMiniplayer();
     const active = shouldUseMiniplayer();
+    if (active && !miniplayerAnchor) {
+      miniplayerAnchor = getPlayerAnchor() as HTMLElement;
+      miniplayerAnchor.style.setProperty("--yse-miniplayer-anchor-height", `${miniplayerAnchor.getBoundingClientRect().height}px`);
+      miniplayerAnchor.setAttribute("data-yse-miniplayer-anchor", "");
+    } else if (!active) {
+      resetMiniplayer();
+    }
 
     if (!config.enabled || !config.miniplayerEnabled) {
       root.classList.remove(MINIPLAYER_ACTIVE_CLASS);
@@ -2014,6 +2189,14 @@ declare global {
 
     ensureMiniplayerStyle();
     root.classList.toggle(MINIPLAYER_ACTIVE_CLASS, active);
+    syncVideoFilterPopover();
+  }
+
+  function resetMiniplayer() {
+    document.documentElement.classList.remove(MINIPLAYER_ACTIVE_CLASS);
+    miniplayerAnchor?.style.removeProperty("--yse-miniplayer-anchor-height");
+    miniplayerAnchor?.removeAttribute("data-yse-miniplayer-anchor");
+    miniplayerAnchor = null;
   }
 
   function scheduleMiniplayerUpdate() {
@@ -2029,6 +2212,14 @@ declare global {
   let playerToolbarSignature = "";
 
   function getPlayerToolbarAnchor() {
+    if (config.toolbarAttachToActions) {
+      return document.querySelector("#top-level-buttons-computed, ytd-watch-metadata #actions, #actions")
+        || getPlayerToolbarAnchorDefault();
+    }
+    return getPlayerToolbarAnchorDefault();
+  }
+
+  function getPlayerToolbarAnchorDefault() {
     const watchFlexy = document.querySelector("ytd-watch-flexy");
     const theater = !!watchFlexy?.hasAttribute("theater");
     if (theater) {
@@ -2100,22 +2291,6 @@ declare global {
         margin-right: auto;
       }
 
-      #${PLAYER_TOOLBAR_ID}.is-inside {
-        position: absolute;
-        left: 50%;
-        bottom: 54px;
-        transform: translateX(-50%);
-        z-index: 60;
-        margin: 0;
-      }
-
-      #player-container-outer:has(#${PLAYER_TOOLBAR_ID}.is-inside),
-      #player-theater-container:has(#${PLAYER_TOOLBAR_ID}.is-inside),
-      #player:has(#${PLAYER_TOOLBAR_ID}.is-inside),
-      ytd-player:has(#${PLAYER_TOOLBAR_ID}.is-inside) {
-        position: relative !important;
-      }
-
       #${PLAYER_TOOLBAR_ID}.is-always-visible {
         opacity: 1 !important;
         pointer-events: auto !important;
@@ -2172,6 +2347,13 @@ declare global {
       }
 
       html.${MINIPLAYER_ACTIVE_CLASS} #${PLAYER_TOOLBAR_ID} {
+        display: none !important;
+      }
+
+      /* O layout nativo do Teatro pode transformar a barra em uma coluna lateral
+         gigante. Nesse modo, deixe os controles do próprio YouTube no comando. */
+      ytd-watch-flexy[theater] #${PLAYER_TOOLBAR_ID},
+      ytd-watch-flexy[full-bleed-player] #${PLAYER_TOOLBAR_ID} {
         display: none !important;
       }
 
@@ -2259,7 +2441,7 @@ declare global {
       config.toolbarFilters,
       config.playerSpeedButtonsEnabled,
       config.playerPopupEnabled,
-      config.toolbarInsidePlayer,
+      config.toolbarAttachToActions,
       config.toolbarAlwaysVisible,
       normalizePlayerPopupSize(config.playerPopupSize),
       location.pathname,
@@ -2308,15 +2490,13 @@ declare global {
 
     const signature = getPlayerToolbarSignature();
     let toolbar = document.getElementById(PLAYER_TOOLBAR_ID);
-    const insidePlayer = !!config.toolbarInsidePlayer && anchor instanceof HTMLElement;
-    const expectedParent = insidePlayer ? anchor : parent;
+    const expectedParent = parent;
     const expectedNext = normalizeToolbarPosition(config.toolbarPosition) === "above"
       ? anchor
-      : (anchor.nextSibling === toolbar ? toolbar.nextSibling : anchor.nextSibling);
+      : (toolbar && anchor.nextSibling === toolbar ? toolbar.nextSibling : anchor.nextSibling);
 
     if (toolbar && toolbar.parentElement === expectedParent && playerToolbarSignature === signature) {
       toolbar.classList.toggle("is-centered", config.toolbarCenter !== false);
-      toolbar.classList.toggle("is-inside", insidePlayer);
       toolbar.classList.toggle("is-always-visible", !!config.toolbarAlwaysVisible);
       updatePlayerToolbarStates();
       return;
@@ -2341,16 +2521,13 @@ declare global {
 
     toolbar.className = [
       config.toolbarCenter !== false ? "is-centered" : "",
-      config.toolbarInsidePlayer ? "is-inside" : "",
       config.toolbarAlwaysVisible ? "is-always-visible" : "",
     ].filter(Boolean).join(" ");
     for (const item of getPlayerToolbarActions()) {
       toolbar.appendChild(createPlayerToolbarButton(item.action, item.title, item.icon));
     }
 
-    if (insidePlayer) {
-      anchor.appendChild(toolbar);
-    } else if (normalizeToolbarPosition(config.toolbarPosition) === "above") {
+    if (normalizeToolbarPosition(config.toolbarPosition) === "above") {
       parent.insertBefore(toolbar, anchor);
     } else {
       parent.insertBefore(toolbar, expectedNext);
@@ -2495,7 +2672,6 @@ declare global {
 
   function handlePlayerToolbarAction(action) {
     const video = getActiveVideo();
-    markUserPlaybackIntent("toolbar");
 
     if (action === "loop") {
       if (video) {
@@ -2542,7 +2718,7 @@ declare global {
     }
 
     if (action === "filters") {
-      setVideoFiltersEnabled(!shouldUseVideoFilters());
+      toggleVideoFilterPopover();
       return;
     }
 
@@ -2560,7 +2736,8 @@ declare global {
     if (!config.enabled || adState.active || getAdPlaying()) return;
 
     const video = getActiveVideo();
-    if (!video) return;
+    // Wait until autoplay has started before changing optional preferences.
+    if (!video || video.readyState < 2 || video.paused || video.ended) return;
 
     const key = getCurrentVideoKey();
     if (key !== adState.playerVideoKey) {
@@ -2645,6 +2822,13 @@ declare global {
     return !!document.querySelector("ytd-playlist-panel-renderer, ytd-playlist-video-list-renderer");
   }
 
+  function isPopupWindow() {
+    try {
+      if (new URL(location.href).searchParams.get("yse_popup") === "1") return true;
+    } catch (err) {}
+    return window.name === "youtubeExtensionPlayerPopup" || (!!window.opener && window.outerWidth <= 1040 && window.outerHeight <= 680);
+  }
+
   function isDiagnosticsEnabled() {
     try {
       return localStorage.getItem(DIAGNOSTIC_STORAGE_KEY) === "1"
@@ -2659,179 +2843,6 @@ declare global {
     console.debug("[YouTube Extension][playback]", message, data);
   }
 
-  function markUserPlaybackIntent(reason = "user") {
-    adState.lastUserPlaybackIntentAt = Date.now();
-    adState.lastUserPlaybackIntentReason = reason;
-  }
-
-  function hasRecentPlaybackIntent(windowMs = USER_PLAYBACK_INTENT_WINDOW_MS) {
-    return Date.now() - (adState.lastUserPlaybackIntentAt || 0) < windowMs;
-  }
-
-  function isNearVideoStart(video) {
-    const current = Number(video?.currentTime || 0);
-    return !Number.isFinite(current) || current < 4;
-  }
-
-  function isPopupWindow() {
-    try {
-      if (new URL(location.href).searchParams.get("yse_popup") === "1") return true;
-    } catch (err) {}
-    return window.name === "youtubeExtensionPlayerPopup" || (!!window.opener && window.outerWidth <= 1040 && window.outerHeight <= 680);
-  }
-
-  function getAutoplayBlockReason(video = getActiveVideo()) {
-    if (!video || !config.enabled || adState.active || getAdPlaying()) return "";
-    if (!isNearVideoStart(video)) return "";
-    if (config.autoplayIgnorePopup && isPopupWindow()) return "";
-    if (config.autoplayAllowPlaylists && isPlaylistContext()) return "";
-    if (document.hidden && isAdSkipperActive() && isWatchPage()) return "";
-
-    const intentWindow = document.hidden ? BACKGROUND_PLAYBACK_INTENT_WINDOW_MS : USER_PLAYBACK_INTENT_WINDOW_MS;
-    if (hasRecentPlaybackIntent(intentWindow)) return "";
-
-    if (config.autoplayDisableAll) return "autoplay-disable-all";
-    if (document.hidden && config.autoplayBlockBackground) return "background-autoplay";
-    if (!document.hidden && config.autoplayBlockForeground) return "foreground-autoplay";
-    return "";
-  }
-
-  function shouldBlockAutoplay(video = getActiveVideo()) {
-    return !!getAutoplayBlockReason(video);
-  }
-
-  function resumeAdPlaybackIfNeeded() {
-    if (!isAdSkipperActive() || !(adState.active || getAdPlaying())) return;
-    const video = getActiveVideo();
-    if (!video || !video.paused) return;
-    try {
-      video.play().catch(() => {});
-    } catch (err) {}
-  }
-
-  function pauseVideo(video = getActiveVideo(), reason = "unknown") {
-    if (!video) return false;
-    let paused = false;
-
-    try {
-      video.pause();
-      paused = true;
-    } catch (err) {}
-
-    const player: any = getYouTubePlayer();
-    try {
-      if (player && typeof player.pauseVideo === "function") {
-        player.pauseVideo();
-        paused = true;
-      }
-    } catch (err) {}
-
-    if (paused) {
-      adState.lastPlaybackPauseReason = reason;
-      adState.lastPlaybackPauseAt = Date.now();
-      debugPlayback("paused video", {
-        reason,
-        url: location.href,
-        hidden: document.hidden,
-        currentTime: Number(video.currentTime || 0),
-        videoKey: getCurrentVideoKey(),
-        recentIntent: hasRecentPlaybackIntent(document.hidden ? BACKGROUND_PLAYBACK_INTENT_WINDOW_MS : USER_PLAYBACK_INTENT_WINDOW_MS),
-        intentReason: adState.lastUserPlaybackIntentReason,
-      });
-    }
-
-    return paused;
-  }
-
-  function announceForegroundPlayback() {
-    if (!config.enabled || !config.pauseBackgroundTabs || document.hidden || adState.active || getAdPlaying()) return;
-    if (!chrome?.storage?.local) return;
-    chrome.storage.local.set({
-      tubeShieldActivePlayback: {
-        token: adState.tabPlaybackToken,
-        time: Date.now(),
-        url: location.href,
-      },
-    });
-  }
-
-  function handleVideoPlayEvent() {
-    const video = getActiveVideo();
-    if (!video) return;
-
-    const blockReason = getAutoplayBlockReason(video);
-    if (blockReason) {
-      pauseVideo(video, blockReason);
-      return;
-    }
-
-    announceForegroundPlayback();
-  }
-
-  function handleExternalPlaybackSignal(signal) {
-    if (!config.enabled || !config.pauseBackgroundTabs || !document.hidden) return;
-    if (!signal || signal.token === adState.tabPlaybackToken) return;
-
-    const signalTime = Number(signal.time) || 0;
-    if (!signalTime || Date.now() - signalTime > 5000) return;
-
-    if (hasRecentPlaybackIntent(BACKGROUND_PLAYBACK_INTENT_WINDOW_MS)) {
-      debugPlayback("ignored background pause due recent intent", {
-        signalUrl: signal.url || "",
-        intentReason: adState.lastUserPlaybackIntentReason,
-      });
-      return;
-    }
-
-    const video = getActiveVideo();
-    if (video && !video.paused && !adState.active && !getAdPlaying()) {
-      pauseVideo(video, "background-tab-playback-signal");
-    }
-  }
-
-  function bindAutoplayGuards() {
-    const video = getActiveVideo();
-    if (!video || adState.autoplayVideo === video) return;
-
-    if (adState.autoplayVideo) {
-      try {
-        adState.autoplayVideo.removeEventListener("play", handleVideoPlayEvent, true);
-        adState.autoplayVideo.removeEventListener("playing", handleVideoPlayEvent, true);
-      } catch (err) {}
-    }
-
-    adState.autoplayVideo = video;
-    video.addEventListener("play", handleVideoPlayEvent, true);
-    video.addEventListener("playing", handleVideoPlayEvent, true);
-
-    const initialBlockReason = getAutoplayBlockReason(video);
-    if (!video.paused && initialBlockReason) {
-      pauseVideo(video, initialBlockReason);
-    }
-  }
-
-  function enforceAutoplayGuards() {
-    bindAutoplayGuards();
-    resumeAdPlaybackIfNeeded();
-
-    const video = getActiveVideo();
-    if (!video) return;
-
-    const blockReason = getAutoplayBlockReason(video);
-
-    if (config.autoplayStopPreload && blockReason) {
-      try { video.preload = "none"; } catch (err) {}
-    }
-
-    if (video.paused) return;
-
-    if (blockReason) {
-      pauseVideo(video, blockReason);
-    } else {
-      announceForegroundPlayback();
-    }
-  }
-
   function getSpeedThroughRate() {
     if (isInstantSkipEnabled()) return INSTANT_SPEED_THROUGH_RATE;
     if (config.customSpeedEnabled && config.adaptiveSpeedEnabled) return getRiskAdaptiveSpeed();
@@ -2839,77 +2850,16 @@ declare global {
     return getSafeAdaptiveSpeed();
   }
 
-  function requestMainWorldSkip() {
-    postMainWorldMessage({
-      source: MAIN_FORCE_SKIP_MESSAGE,
-      targetTime: adState.skipTargetTime || Date.now(),
-      rate: getSpeedThroughRate(),
-    });
-  }
-
-  function requestMainWorldSpeedThrough(rate = getSpeedThroughRate()) {
+  function requestMainWorldSpeedThrough(rate = getSpeedThroughRate(), adOnly = false) {
     postMainWorldMessage({
       source: MAIN_SPEED_THROUGH_MESSAGE,
       rate,
+      adOnly,
+      videoKey: getCurrentVideoKey(),
     });
   }
 
-  function forceSkipAd(video = document.querySelector("video")) {
-    if (!isAdSkipperActive() || !config.aggressiveSkip || adState.watching) return false;
-
-    requestMainWorldSkip();
-
-    const player: any = getYouTubePlayer();
-    let attempted = false;
-
-    if (video) {
-      const duration = Number(video.duration);
-      const currentTime = Number(video.currentTime);
-      const target = getAdSeekTarget(duration, currentTime);
-
-      try {
-        video.playbackRate = getSpeedThroughRate();
-        attempted = true;
-      } catch (err) {}
-
-      if (target !== null) try {
-        if (typeof video.fastSeek === "function") video.fastSeek(target);
-        video.currentTime = target;
-        attempted = true;
-      } catch (err) {
-        try {
-          video.currentTime = target;
-          attempted = true;
-        } catch (innerErr) {}
-      }
-
-      try {
-        if (player && typeof player.seekTo === "function" && target !== null) {
-          player.seekTo(target, true);
-          attempted = true;
-        }
-      } catch (err) {}
-    }
-
-    try {
-      if (player && typeof player.setPlaybackRate === "function") {
-        player.setPlaybackRate(getSpeedThroughRate());
-        attempted = true;
-      }
-    } catch (err) {}
-
-    return attempted;
-  }
-
-  function stopForceSkipBurst() {
-    if (adState.forceSkipInterval) {
-      clearInterval(adState.forceSkipInterval);
-      adState.forceSkipInterval = null;
-    }
-    adState.forceSkipStartedAt = null;
-  }
-
-  function getCurrentPlaybackRate(video = document.querySelector("video")) {
+  function getCurrentPlaybackRate(video = getActiveVideo()) {
     const player: any = getYouTubePlayer();
     try {
       if (player && typeof player.getPlaybackRate === "function") {
@@ -2933,34 +2883,29 @@ declare global {
   }
 
   function capturePlaybackRate() {
-    adState.preAdPlaybackRate = getCurrentPlaybackRate();
+    clearPostSkipRestoreChecks();
+    adState.preAdPlaybackRate = getCapturedPlaybackRate() ?? getCurrentPlaybackRate();
     stopPlaybackRateRestore();
   }
 
-  function applySpeedThrough(video = document.querySelector("video")) {
-    if (!isAdSkipperActive() || !config.aggressiveSkip || adState.watching) return false;
+  function applySpeedThrough(video = getActiveVideo()) {
+    if (!isAdSkipperActive() || !config.aggressiveSkip || adState.watching || !getAdPlaying()) return false;
 
     const rate = getSpeedThroughRate();
-    requestMainWorldSpeedThrough(rate);
 
     let attempted = false;
     if (video) {
       try {
-        if (video.playbackRate !== rate) {
+        if (shouldApplyPlaybackRate(video.playbackRate, rate)) {
           video.playbackRate = rate;
+          attempted = true;
         }
-        attempted = true;
       } catch (err) {}
+      // The native setter is also a fallback when an isolated-world setter fails.
+      if (shouldApplyPlaybackRate(video.playbackRate, rate)) requestMainWorldSpeedThrough(rate, true);
     }
 
-    const player: any = getYouTubePlayer();
-    try {
-      if (player && typeof player.setPlaybackRate === "function") {
-        player.setPlaybackRate(rate);
-        attempted = true;
-      }
-    } catch (err) {}
-
+    if (attempted || (video && !shouldApplyPlaybackRate(video.playbackRate, rate))) adState.skipActionPerformed = true;
     return attempted;
   }
 
@@ -2985,29 +2930,30 @@ declare global {
 
   function restorePlaybackRate(rate = adState.preAdPlaybackRate || 1) {
     const targetRate = normalizePlaybackRate(rate || 1);
-    const video = document.querySelector("video");
+    const video = getActiveVideo();
+    let changed = false;
     if (video) {
       try {
-        if (video.playbackRate !== targetRate) video.playbackRate = targetRate;
+        if (shouldApplyPlaybackRate(video.playbackRate, targetRate)) {
+          video.playbackRate = targetRate;
+          changed = true;
+        }
       } catch (err) {}
     }
-
-    const player: any = getYouTubePlayer();
-    try {
-      if (player && typeof player.setPlaybackRate === "function") {
-        player.setPlaybackRate(targetRate);
-      }
-    } catch (err) {}
-
-    requestMainWorldSpeedThrough(targetRate);
+    if (changed) requestMainWorldSpeedThrough(targetRate);
   }
 
   function startPlaybackRateRestore(rate = adState.preAdPlaybackRate || 1) {
     stopPlaybackRateRestore();
     const targetRate = normalizePlaybackRate(rate || 1);
+    const videoKey = getCurrentVideoKey();
     adState.playbackRestoreStartedAt = Date.now();
     restorePlaybackRate(targetRate);
     adState.playbackRestoreInterval = setInterval(() => {
+      if (getCurrentVideoKey() !== videoKey || (getAdPlaying() && !adState.watching)) {
+        stopPlaybackRateRestore();
+        return;
+      }
       restorePlaybackRate(targetRate);
       if (Date.now() - adState.playbackRestoreStartedAt >= PLAYBACK_RESTORE_WINDOW_MS) {
         stopPlaybackRateRestore();
@@ -3042,6 +2988,22 @@ declare global {
     }, delay));
   }
 
+  function resumeContentPlaybackAfterSkip(videoKey = getCurrentVideoKey()) {
+    const interactionRevision = playbackInteractionRevision;
+    let resumed = false;
+    for (const delay of [120, 450, 900, 1500]) window.setTimeout(() => {
+      if (resumed || navigationInProgress || interactionRevision !== playbackInteractionRevision) return;
+      if (!config.enabled || adState.active || getAdPlaying() || getCurrentVideoKey() !== videoKey) return;
+      const video = getActiveVideo();
+      if (!video || video.ended || video.readyState < 2) return;
+      if (!video.paused) { resumed = true; return; }
+      resumed = true;
+      try {
+        video.play().catch(() => {});
+      } catch (err) {}
+    }, delay);
+  }
+
   function clearSkipTimeout() {
     if (adState.skipTimeout) {
       clearTimeout(adState.skipTimeout);
@@ -3050,7 +3012,7 @@ declare global {
   }
 
   function finishSkipClick() {
-    stopForceSkipBurst();
+    adState.skipActionPerformed = true;
     clearSkipTimeout();
     stopSkipButtonObserver();
     adState.skipTargetTime = Date.now() + 1000;
@@ -3062,7 +3024,7 @@ declare global {
   function attemptScheduledSkip() {
     if (!isAdSkipperActive() || !adState.active || adState.watching) return false;
 
-    const video = document.querySelector("video");
+    const video = getActiveVideo();
     const skipButton = findSkipAdButton();
     const action = chooseAdSkipAction({
       adConfirmed: getAdPlaying(),
@@ -3079,40 +3041,12 @@ declare global {
       return true;
     }
 
-    if (action === "seek-end") {
-      forceSkipAd(video);
-      startForceSkipBurst(video);
-    } else if (action === "speed-through") {
+    if (action === "speed-through") {
+      startSpeedThrough();
       applySpeedThrough(video);
     }
 
     return false;
-  }
-
-  function startForceSkipBurst(video = document.querySelector("video")) {
-    if (!isAdSkipperActive() || !config.aggressiveSkip || adState.forceSkipInterval) return;
-    adState.forceSkipStartedAt = Date.now();
-
-    const tick = () => {
-      if (!isAdSkipperActive() || adState.watching || !getAdPlaying()) {
-        stopForceSkipBurst();
-        return;
-      }
-
-      if (clickSkipAdBtn()) {
-        finishSkipClick();
-        return;
-      }
-
-      forceSkipAd(video);
-
-      if (Date.now() - adState.forceSkipStartedAt >= FORCE_SKIP_WINDOW_MS) {
-        stopForceSkipBurst();
-      }
-    };
-
-    tick();
-    adState.forceSkipInterval = setInterval(tick, FORCE_SKIP_RETRY_MS);
   }
 
   function stopSkipButtonObserver() {
@@ -3227,8 +3161,16 @@ declare global {
     if (!isAdSkipperActive() || !el) return;
     const target = el.closest?.("tp-yt-paper-dialog") || el;
     const shouldCount = target.isConnected !== false;
+    const shouldResume = Date.now() - (adState.lastKnownPlayingAt || 0) < 10000;
     target.remove();
     removeOrphanedAdblockBackdrops();
+    if (shouldResume) {
+      window.setTimeout(() => {
+        const video = getActiveVideo();
+        if (!config.enabled || document.hidden || !video || !video.paused || video.ended || getAdPlaying()) return;
+        try { video.play().catch(() => {}); } catch (err) {}
+      }, 120);
+    }
 
     // Incrementar contador de avisos e salvar
     if (!shouldCount) return;
@@ -3402,7 +3344,6 @@ declare global {
     if (watchBtn) {
       watchBtn.addEventListener("click", () => {
         adState.watching = true;
-        stopForceSkipBurst();
         stopSpeedThrough();
         clearSkipTimeout();
         clearInterval(adState.countdownInterval);
@@ -3438,7 +3379,6 @@ declare global {
 
   function scheduleSkip() {
     clearInterval(adState.countdownInterval);
-    stopForceSkipBurst();
     clearSkipTimeout();
     stopSkipButtonObserver();
     const delayMs = getEffectiveDelay() * 1000;
@@ -3449,31 +3389,19 @@ declare global {
   }
 
   // ── Mute/unmute ───────────────────────────────────────
-  // Método do yt-ad-autoskipper: simula clique no botão de mute do YouTube
-  // em vez de manipular video.muted diretamente (menos detectável)
-
   function muteVideo() {
     if (!config.muteAds || adState.watching) return;
-    const muteBtn = document.querySelector(".ytp-mute-button");
-    const volumeSlider = document.querySelector(".ytp-volume-slider-handle");
-    const isMuted = volumeSlider ? parseInt(volumeSlider.style.left || "0") === 0 : false;
-
-    if (muteBtn && !isMuted) {
-      muteBtn.click();
-      adState._wasMuted = true;
+    const video = getActiveVideo();
+    if (video && !video.muted) {
+      adState.mutedVideo = video;
+      video.muted = true;
     }
   }
 
   function unmuteVideo() {
-    if (!adState._wasMuted) return;
-    const muteBtn = document.querySelector(".ytp-mute-button");
-    const volumeSlider = document.querySelector(".ytp-volume-slider-handle");
-    const isMuted = volumeSlider ? parseInt(volumeSlider.style.left || "0") === 0 : false;
-
-    if (muteBtn && isMuted) {
-      muteBtn.click();
-    }
-    adState._wasMuted = false;
+    const video = adState.mutedVideo as HTMLVideoElement | undefined;
+    if (video?.muted) video.muted = false;
+    adState.mutedVideo = null;
   }
 
   // ── Whitelist de canais ───────────────────────────────
@@ -3577,7 +3505,6 @@ declare global {
   }
 
   function cleanupRuntimeState() {
-    stopForceSkipBurst();
     stopSpeedThrough();
     stopSkipButtonObserver();
     clearPostSkipRestoreChecks();
@@ -3593,8 +3520,8 @@ declare global {
     adState.skipTargetTime = null;
     adState.lastVideoTime = -1;
     adState.alreadyCounted = false;
-    adState.forceSkipInterval = null;
-    adState.forceSkipStartedAt = null;
+    adState.skipActionPerformed = false;
+    adState.wasPlayingBeforeAd = false;
     adState.skipTimeout = null;
     adState.speedThroughInterval = null;
   }
@@ -3658,6 +3585,7 @@ declare global {
   }
 
   function mainLoopBody() {
+    if (navigationInProgress) return;
     bindPersistentVideoState();
     syncLoopState();
     runVisualMaintenanceTasks();
@@ -3670,7 +3598,6 @@ declare global {
 
     if (!isAdSkipperActive()) {
       if (adState.active || adState.overlayEl) cleanupRuntimeState();
-      enforceAutoplayGuards();
       applyPlayerPreferences();
       return;
     }
@@ -3681,7 +3608,6 @@ declare global {
     dismissAdblockWarning();
 
     const adPlaying = getAdPlaying();
-    if (!adPlaying) enforceAutoplayGuards();
 
     if (adPlaying && !adState.active) {
       // ── Anúncio COMEÇOU ───
@@ -3694,6 +3620,10 @@ declare global {
       adState.startTime = Date.now();
       adState.lastVideoTime = -1;
       adState.alreadyCounted = false;
+      adState.skipActionPerformed = false;
+      const activeAdVideo = getActiveVideo();
+      adState.wasPlayingBeforeAd = !!activeAdVideo && !activeAdVideo.paused;
+      adState.playbackInteractionRevision = playbackInteractionRevision;
 
       capturePlaybackRate();
       muteVideo();
@@ -3705,18 +3635,15 @@ declare global {
       // ── Anúncio ainda ativo — tick ───
 
       if (adState.watching) return;
+      startSpeedThrough();
 
-      const video = document.querySelector("video");
+      const video = getActiveVideo();
 
-      // Detectar novo anúncio em sequência (posição do vídeo voltou ao início)
+      // Reposicionamentos do vídeo não confirmam um novo anúncio.
       if (video) {
         const ct = video.currentTime;
         if (adState.lastVideoTime > 2 && ct < adState.lastVideoTime - 2) {
-          // Contar o anúncio anterior como pulado
-          if (incrementAdCounter()) showToastNotification();
-          // Resetar para o novo anúncio
           adState.startTime = Date.now();
-          adState.alreadyCounted = false;
           adState.lastVideoTime = ct;
           scheduleSkip();
           if (config.showOverlay) createOverlay();
@@ -3732,12 +3659,17 @@ declare global {
     } else if (!adPlaying && adState.active) {
       // ── Anúncio ACABOU ───
 
-      // Contar como pulado se não estava assistindo
-      if (!adState.watching) {
+      const shouldResumeContent = adState.skipActionPerformed && adState.wasPlayingBeforeAd
+        && adState.playbackInteractionRevision === playbackInteractionRevision;
+      const skippedVideoKey = getCurrentVideoKey();
+
+      // Contar apenas quando a extensão realmente executou uma ação de skip.
+      if (shouldCountAdCompletion(adState)) {
         if (incrementAdCounter()) showToastNotification();
       }
 
       cleanupRuntimeState();
+      if (shouldResumeContent) resumeContentPlaybackAfterSkip(skippedVideoKey);
     } else if (!adPlaying && !adState.active) {
       applyPlayerPreferences();
       const orphans = document.querySelectorAll("#" + OVERLAY_ID);
@@ -3797,6 +3729,11 @@ declare global {
   }
 
   document.addEventListener('keydown', handleConfiguredShortcut, true);
+  for (const eventName of ["pointerdown", "keydown"]) {
+    document.addEventListener(eventName, (event) => {
+      if (event.isTrusted) playbackInteractionRevision += 1;
+    }, true);
+  }
 
   // ── Picture-in-Picture (PiP) — Player Flutuante ───────
 
@@ -3819,25 +3756,27 @@ declare global {
   document.addEventListener("wheel", handlePlayerWheel, { capture: true, passive: false });
 
   document.addEventListener("pointerdown", (event) => {
-    markUserPlaybackIntent("pointerdown");
     if (config.volumeBoostEnabled && config.volumeBoostAuto && isPointerInsidePlayer(event.target)) {
       setTimeout(() => applyVolumeBoost(getActiveVideo()), 0);
     }
   }, true);
 
-  document.addEventListener("keydown", (event) => {
-    const playbackKeys = [" ", "Enter", "k", "K", "MediaPlayPause", "MediaPlay"];
-    if (playbackKeys.includes(event.key)) markUserPlaybackIntent("keyboard");
-  }, true);
-
   document.addEventListener("visibilitychange", () => {
-    if (!document.hidden) markUserPlaybackIntent("tab-visible");
-    enforceAutoplayGuards();
     scheduleAdWatchdogTick();
+    scheduleMiniplayerUpdate();
+    syncVideoFilterPopover();
   });
 
   window.addEventListener("scroll", scheduleMiniplayerUpdate, { passive: true });
-  window.addEventListener("resize", scheduleMiniplayerUpdate);
+  window.addEventListener("resize", () => {
+    resetMiniplayer();
+    scheduleMiniplayerUpdate();
+  });
+  document.addEventListener("enterpictureinpicture", scheduleMiniplayerUpdate, true);
+  document.addEventListener("leavepictureinpicture", scheduleMiniplayerUpdate, true);
+  document.addEventListener("fullscreenchange", scheduleMiniplayerUpdate, true);
+  document.addEventListener("yt-navigate-finish", scheduleMiniplayerUpdate, true);
+  window.addEventListener("popstate", scheduleMiniplayerUpdate);
 
   const PIP_BTN_ID = 'ytp-pip-float-btn';
   const PIP_STYLE_ID = 'ytp-pip-style';
@@ -3971,20 +3910,19 @@ declare global {
     }
   }
 
-  // Re-inject PiP button on YouTube SPA navigation
-  let _pipLastUrl = location.href;
-  const _pipNavObserver = new MutationObserver(() => {
-    if (location.href !== _pipLastUrl) {
-      _pipLastUrl = location.href;
-      if (config.enabled && config.pipEnabled) {
-        setTimeout(injectPipButton, 1500);
-      }
-      scheduleVisualMaintenanceTasks(true, 500);
-    }
+  document.addEventListener("yt-navigate-start", () => {
+    navigationInProgress = true;
+    resetMiniplayer();
+    cleanupRuntimeState();
+    stopPlaybackRateRestore();
+    adState.preAdPlaybackRate = null;
+    adState.lastKnownPlayingAt = 0;
   });
-  _pipNavObserver.observe(document.documentElement, { childList: true, subtree: true });
 
   document.addEventListener("yt-navigate-finish", () => {
+    navigationInProgress = false;
+    mainLoop();
+    injectPipButton();
     setTimeout(() => {
       runVisualMaintenanceTasks(true);
       if (config.volumeBoostEnabled && config.volumeBoostAuto) applyVolumeBoost();

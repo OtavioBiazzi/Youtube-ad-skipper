@@ -1,5 +1,11 @@
 # YouTube Extension
 
+> Versao atual: **v5.0.6** (pacote revisado e atualizado em 06/09/2026).
+
+> O popup possui **Verificar atualizacoes**. Por limitacao de seguranca, extensoes carregadas sem compactacao nao substituem os proprios arquivos automaticamente; o botao encontra a release e abre o download direto.
+
+> O contador de anuncios evita duplicar o mesmo anuncio quando o YouTube faz rebuffer, troca de stream ou reposiciona o video.
+
 Uma extensão experimental de navegador para reunir **skipper inteligente, controles de player, aparência e recursos avançados do YouTube** em um único painel.
 
 > A base atual ainda preserva o skipper: ela automatiza o processo de clicar no botão "Pular anúncio" do YouTube e prepara a evolução para um control center completo.
@@ -7,8 +13,8 @@ Uma extensão experimental de navegador para reunir **skipper inteligente, contr
 <br>
 
 <div align="center">
-  <a href="https://github.com/OtavioBiazzi/Youtube-ad-skipper/releases/download/v5.0.0/youtube-extension-v5.0.0.zip">
-    <img src="https://img.shields.io/badge/Baixar_Vers%C3%A3o_5.0.0_(.ZIP)-000000?style=for-the-badge&logo=github&logoColor=white" alt="Baixar YouTube Extension 5.0.0" />
+  <a href="https://github.com/OtavioBiazzi/Youtube-ad-skipper/releases/download/v5.0.6/youtube-extension-v5.0.6.zip">
+    <img src="https://img.shields.io/badge/Baixar_Vers%C3%A3o_5.0.6_(.ZIP)-000000?style=for-the-badge&logo=github&logoColor=white" alt="Baixar YouTube Extension 5.0.6" />
   </a>
   <br><br>
   <a href="https://github.com/OtavioBiazzi/Youtube-ad-skipper/releases">Ver todas as versões</a>
@@ -36,15 +42,15 @@ Quando um anúncio aparece no YouTube:
 2. **Muta o vídeo** (se configurado)
 3. Mostra um **overlay** no canto do vídeo com countdown
 4. Após o delay configurado (ou instantaneamente), **clica no botão de pular**
-5. Se não encontrar o botão, **avança o vídeo até o final**
+5. Se não encontrar o botão, **acelera temporariamente sem avançar a mídia até o final**
 6. **Restaura** o som e a velocidade normal
 
 ## 🛠️ Como Baixar e Instalar
 
 ### Chrome / Opera GX / Edge / Brave
 
-1. **[Baixe o pacote pronto da versão 5.0.0](https://github.com/OtavioBiazzi/Youtube-ad-skipper/releases/download/v5.0.0/youtube-extension-v5.0.0.zip)**.
-2. **Extraia (descompacte)** o arquivo `youtube-extension-v5.0.0.zip` em uma pasta permanente no seu computador.
+1. **[Baixe o pacote pronto da versão 5.0.6](https://github.com/OtavioBiazzi/Youtube-ad-skipper/releases/download/v5.0.6/youtube-extension-v5.0.6.zip)**.
+2. **Extraia (descompacte)** o arquivo `youtube-extension-v5.0.6.zip` em uma pasta permanente no seu computador.
 3. Abra o seu navegador e vá para a página de extensões:
    - Chrome: `chrome://extensions/`
    - Opera GX: `opera://extensions/`
@@ -104,7 +110,7 @@ npm run package
 
 - **`override.js`** — Injetado no contexto da página (`world: MAIN`) antes dos scripts do YouTube. Faz override do `addEventListener` nos botões de skip para que cliques programáticos sejam aceitos como `isTrusted`.
 
-- **`content.js`** — Roda como content script. Detecta anúncios verificando elementos como `.ytp-ad-visit-advertiser-button`, `.ytp-ad-badge`, e a classe `ad-showing`. Quando detecta um anúncio, agenda o skip baseado no delay configurado.
+- **`content.js`** — Roda como content script. Confirma anúncios pelo estado autoritativo `ad-showing`/`ad-interrupting` do player e ignora selos visuais antigos que o YouTube mantenha no DOM. Quando detecta um anúncio real, agenda o skip baseado no delay configurado.
 
 ## 📝 Créditos
 

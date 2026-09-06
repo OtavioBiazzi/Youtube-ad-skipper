@@ -17,7 +17,7 @@
         </div>
       </div>
       <div class="topbar-actions">
-        <span class="version" id="version-tag">v5.0.0</span>
+        <span class="version" id="version-tag">v5.0.6</span>
         <button class="icon-button" id="btn-open-settings" type="button" aria-label="Abrir configurações" title="Abrir configurações">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1A2 2 0 1 1 4.4 17l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1A2 2 0 1 1 7 4.4l.1.1a1.7 1.7 0 0 0 1.8.3 1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1A2 2 0 1 1 19.6 7l-.1.1a1.7 1.7 0 0 0-.3 1.8 1.7 1.7 0 0 0 1.5 1h.3a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg>
         </button>
@@ -94,6 +94,11 @@
 
     <p class="change-note" id="change-note" role="status" aria-live="polite">Configuração aplicada.</p>
 
+    <section class="update-card" aria-labelledby="update-title">
+      <div><strong id="update-title">Atualizacoes</strong><span id="update-status">Verifique se existe uma versao nova.</span></div>
+      <button id="check-update" type="button">Verificar</button>
+    </section>
+
     <button class="control-center-button" id="btn-open-settings-main" type="button">
       <span><strong>Abrir Control Center</strong><small>Player, aparência, qualidade e ferramentas</small></span>
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
@@ -101,6 +106,7 @@
 
     <footer>
       <span id="warning-text">Nenhum aviso interceptado.</span>
+      <button id="btn-reset-stats" type="button">Zerar contador</button>
       <a href="https://github.com/OtavioBiazzi/Youtube-ad-skipper/issues" target="_blank" rel="noopener noreferrer">Reportar problema</a>
     </footer>
   </main>

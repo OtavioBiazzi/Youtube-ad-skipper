@@ -10,24 +10,97 @@
   function isBridgeMessage(data) {
     return !!data && typeof data === "object" && typeof data.source === "string";
   }
-  const MIN_SEEKABLE_AD_DURATION_SECONDS = 0.5;
-  const MIN_REMAINING_AD_SECONDS = 0.15;
-  function getAdSeekTarget(duration, currentTime) {
-    const normalizedDuration = Number(duration);
-    const normalizedCurrentTime = Number(currentTime);
-    if (!Number.isFinite(normalizedDuration) || normalizedDuration < MIN_SEEKABLE_AD_DURATION_SECONDS) {
-      return null;
+  function getYouTubeVideoIdFromUrl(input) {
+    let url;
+    try {
+      url = input instanceof URL ? input : new URL(String(input), "https://www.youtube.com");
+    } catch (err) {
+      return "";
     }
-    if (!Number.isFinite(normalizedCurrentTime) || normalizedCurrentTime < 0) {
-      return null;
+    const queryId = url.searchParams.get("v");
+    if (queryId) return queryId;
+    const embedMatch = url.pathname.match(/^\/embed\/([^/?#]+)/);
+    if (embedMatch?.[1]) return decodeURIComponent(embedMatch[1]);
+    const shortsMatch = url.pathname.match(/^\/shorts\/([^/?#]+)/);
+    if (shortsMatch?.[1]) return decodeURIComponent(shortsMatch[1]);
+    return "";
+  }
+  function getYouTubeVideoKeyFromUrl(input) {
+    let url;
+    try {
+      url = input instanceof URL ? input : new URL(String(input), "https://www.youtube.com");
+    } catch (err) {
+      return "";
     }
-    if (normalizedCurrentTime >= normalizedDuration - MIN_REMAINING_AD_SECONDS) {
-      return null;
+    const videoId = getYouTubeVideoIdFromUrl(url);
+    if (videoId) return "watch:" + videoId;
+    return url.pathname + url.search;
+  }
+  function isLikelySkipControlText(value) {
+    const text = String(value || "").trim().toLocaleLowerCase();
+    return ["skip", "pular", "ignorar", "omitir", "saltar"].some((term) => text.includes(term));
+  }
+  const SKIP_BUTTON_CLASSES = [
+    "videoAdUiSkipButton",
+    "ytp-ad-skip-button ytp-button",
+    "ytp-ad-skip-button-modern ytp-button",
+    "ytp-skip-ad-button"
+  ];
+  const SKIP_BUTTON_SELECTORS = [
+    ".ytp-skip-ad-button",
+    ".ytp-ad-skip-button",
+    ".ytp-ad-skip-button-modern",
+    ".ytp-ad-skip-button-slot button",
+    ".ytp-ad-skip-button-container button",
+    'button[id^="skip-button"]',
+    "div.ytp-ad-skip-button-slot button",
+    '[aria-label*="Skip" i]',
+    '[aria-label*="Pular" i]',
+    '[title*="Skip" i]',
+    '[title*="Pular" i]',
+    '[class*="skip"][class*="ad" i]',
+    ".ytp-ad-overlay-close-button"
+  ];
+  function getYouTubePlayer(doc = document) {
+    return doc.getElementById("movie_player") || doc.querySelector(".html5-video-player");
+  }
+  function getClickableTarget(element) {
+    if (!element) return null;
+    return element.closest(
+      'button, [role="button"], .ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-ad-skip-button-modern, .videoAdUiSkipButton'
+    ) || element;
+  }
+  function isClickableVisible(element) {
+    if (!element) return false;
+    const rect = element.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return false;
+    const style = window.getComputedStyle(element);
+    return style.display !== "none" && style.visibility !== "hidden" && style.pointerEvents !== "none";
+  }
+  function getAdPlaying(doc = document) {
+    const player = getYouTubePlayer(doc);
+    return !!player && (player.classList.contains("ad-showing") || player.classList.contains("ad-interrupting"));
+  }
+  function findSkipAdButton(doc = document) {
+    const root = getYouTubePlayer(doc) || doc.documentElement;
+    for (const className of SKIP_BUTTON_CLASSES) {
+      for (const element of root.getElementsByClassName(className)) {
+        const target = getClickableTarget(element);
+        if (isClickableVisible(target)) return target;
+      }
     }
-    return Math.min(
-      normalizedDuration - 0.05,
-      Math.max(normalizedCurrentTime + 0.25, normalizedDuration - 0.05)
-    );
+    for (const selector of SKIP_BUTTON_SELECTORS) {
+      for (const element of root.querySelectorAll(selector)) {
+        const target = getClickableTarget(element);
+        if (isClickableVisible(target)) return target;
+      }
+    }
+    for (const element of root.querySelectorAll("button, [role='button'], a")) {
+      const label = [element.textContent, element.getAttribute("aria-label"), element.getAttribute("title")].filter(Boolean).join(" ");
+      const target = getClickableTarget(element);
+      if (isLikelySkipControlText(label) && isClickableVisible(target)) return target;
+    }
+    return null;
   }
   (function() {
     const pageWindow = window;
@@ -47,7 +120,6 @@
     const originalRemoveEventListener = HTMLElement.prototype.removeEventListener;
     const originalJsonParse = JSON.parse.bind(JSON);
     const originalResponseJson = typeof Response !== "undefined" ? Response.prototype.json : null;
-    const nativeCurrentTime = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, "currentTime");
     const nativePlaybackRate = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, "playbackRate");
     const wrappedListeners = /* @__PURE__ */ new WeakMap();
     let bridgeSessionToken = "";
@@ -237,46 +309,6 @@
       }
       return byListener || null;
     }
-    function isVisible(el) {
-      if (!el) return false;
-      const rect = el.getBoundingClientRect && el.getBoundingClientRect();
-      if (!rect || rect.width <= 0 || rect.height <= 0) return false;
-      const style = window.getComputedStyle(el);
-      return style.display !== "none" && style.visibility !== "hidden";
-    }
-    function getClickTarget(el) {
-      if (!el) return null;
-      return el.closest?.(
-        'button, [role="button"], .ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-ad-skip-button-modern, .videoAdUiSkipButton'
-      ) || el;
-    }
-    function clickSkipButton() {
-      const selectors = [
-        ".ytp-skip-ad-button",
-        ".ytp-ad-skip-button",
-        ".ytp-ad-skip-button-modern",
-        ".ytp-ad-skip-button-slot button",
-        ".ytp-ad-skip-button-container button",
-        ".videoAdUiSkipButton",
-        '[aria-label*="Skip" i]',
-        '[aria-label*="Pular" i]',
-        '[title*="Skip" i]',
-        '[title*="Pular" i]',
-        '[class*="skip"][class*="ad" i]'
-      ];
-      for (const selector of selectors) {
-        for (const el of document.querySelectorAll(selector)) {
-          const target = getClickTarget(el);
-          if (!target || typeof target.click !== "function" || !isVisible(target)) continue;
-          target.dispatchEvent(new MouseEvent("mouseover", { bubbles: true, cancelable: true, view: window }));
-          target.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, view: window }));
-          target.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, view: window }));
-          target.click();
-          return true;
-        }
-      }
-      return false;
-    }
     function normalizeAdRate(rate) {
       const n = Number(rate);
       if (!Number.isFinite(n)) return 3;
@@ -298,71 +330,25 @@
       return document.getElementById("movie_player") || document.querySelector(".html5-video-player");
     }
     function forceSkipFromMainWorld(rate = 3) {
+      if (!getAdPlaying()) return { ok: false, method: "none" };
       const speedRate = normalizeAdRate(rate);
-      if (clickSkipButton()) {
+      const button = findSkipAdButton();
+      if (button) {
+        button.click();
         return { ok: true, method: "click" };
       }
-      const player = getPlayer();
-      const video = document.querySelector("video");
-      let attempted = false;
-      if (video) {
-        const duration = Number(video.duration);
-        const currentTime = Number(video.currentTime);
-        const target = getAdSeekTarget(duration, currentTime);
-        try {
-          attempted = setNativeMediaValue(nativePlaybackRate, video, speedRate) || attempted;
-          video.playbackRate = speedRate;
-          attempted = true;
-        } catch (err) {
-        }
-        if (target !== null) try {
-          if (typeof video.fastSeek === "function") video.fastSeek(target);
-          attempted = setNativeMediaValue(nativeCurrentTime, video, target) || attempted;
-          video.currentTime = target;
-          attempted = true;
-        } catch (err) {
-          try {
-            attempted = setNativeMediaValue(nativeCurrentTime, video, target) || attempted;
-            video.currentTime = target;
-            attempted = true;
-          } catch (innerErr) {
-          }
-        }
-        try {
-          if (player && typeof player.seekTo === "function" && target !== null) {
-            player.seekTo(target, true);
-            attempted = true;
-          }
-        } catch (err) {
-        }
-      }
-      try {
-        if (player && typeof player.setPlaybackRate === "function") {
-          player.setPlaybackRate(speedRate);
-          attempted = true;
-        }
-      } catch (err) {
-      }
-      return { ok: attempted, method: attempted ? "seek" : "none" };
+      const attempted = setSpeedThrough(speedRate);
+      return { ok: attempted, method: attempted ? "speed" : "none" };
     }
     function setSpeedThrough(rate) {
       const player = getPlayer();
-      const video = document.querySelector("video");
+      const video = player?.querySelector("video.html5-main-video, video");
       let attempted = false;
-      if (video) {
+      if (video && Math.abs(Number(video.playbackRate) - rate) > 1e-4) {
         try {
-          attempted = setNativeMediaValue(nativePlaybackRate, video, rate) || attempted;
-          video.playbackRate = rate;
-          attempted = true;
+          attempted = setNativeMediaValue(nativePlaybackRate, video, rate);
         } catch (err) {
         }
-      }
-      try {
-        if (player && typeof player.setPlaybackRate === "function") {
-          player.setPlaybackRate(rate);
-          attempted = true;
-        }
-      } catch (err) {
       }
       return attempted;
     }
@@ -381,12 +367,14 @@
         updateCodecSettings(data.settings || {});
         return;
       }
+      if (data.videoKey !== getYouTubeVideoKeyFromUrl(location.href)) return;
       if (data.source === MAIN_FORCE_SKIP_MESSAGE) {
         const result = forceSkipFromMainWorld(data.rate);
         window.postMessage({ source: MAIN_FORCE_SKIP_RESULT, token: bridgeSessionToken, ...result }, "*");
         return;
       }
       if (data.source === MAIN_SPEED_THROUGH_MESSAGE) {
+        if (Boolean(data.adOnly) !== getAdPlaying()) return;
         setSpeedThrough(normalizePlaybackRate(data.rate));
         return;
       }

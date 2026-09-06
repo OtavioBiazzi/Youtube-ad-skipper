@@ -37,11 +37,51 @@ const elements = {
   metricWarnings: byId<HTMLElement>("metric-warnings"),
   warningText: byId<HTMLElement>("warning-text"),
   changeNote: byId<HTMLElement>("change-note"),
+  updateStatus: byId<HTMLElement>("update-status"),
+  checkUpdate: byId<HTMLButtonElement>("check-update"),
+  resetStats: byId<HTMLButtonElement>("btn-reset-stats"),
   version: byId<HTMLElement>("version-tag"),
   stateIcons: Array.from(document.querySelectorAll<HTMLImageElement>("[data-state-icon]")),
 };
 
 let noteTimer: number | null = null;
+const RELEASE_API = "https://api.github.com/repos/OtavioBiazzi/Youtube-ad-skipper/releases/latest";
+
+function compareVersions(left: string, right: string) {
+  const parse = (value: string) => value.replace(/^v/i, "").split(".").map((part) => Number(part) || 0);
+  const a = parse(left);
+  const b = parse(right);
+  for (let index = 0; index < 3; index += 1) {
+    if ((a[index] || 0) !== (b[index] || 0)) return (a[index] || 0) - (b[index] || 0);
+  }
+  return 0;
+}
+
+async function checkForUpdate() {
+  elements.checkUpdate.disabled = true;
+  elements.updateStatus.textContent = "Verificando...";
+  try {
+    const response = await fetch(RELEASE_API, { headers: { Accept: "application/vnd.github+json" } });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const release = await response.json() as { tag_name?: string; html_url?: string; assets?: Array<{ name?: string; browser_download_url?: string }> };
+    const latest = String(release.tag_name || "");
+    const current = chrome.runtime.getManifest().version;
+    if (latest && compareVersions(latest, current) > 0) {
+      elements.updateStatus.textContent = `Nova versao ${latest} disponivel.`;
+      elements.checkUpdate.textContent = "Baixar";
+      const downloadUrl = release.assets?.find((asset) => asset.name?.endsWith(".zip"))?.browser_download_url || release.html_url || "https://github.com/OtavioBiazzi/Youtube-ad-skipper/releases";
+      elements.checkUpdate.onclick = () => window.open(downloadUrl, "_blank", "noopener,noreferrer");
+    } else {
+      elements.updateStatus.textContent = `Voce esta na versao atual (${current}).`;
+      elements.checkUpdate.textContent = "Atualizado";
+    }
+  } catch (error) {
+    elements.updateStatus.textContent = "Nao foi possivel verificar agora.";
+    elements.checkUpdate.textContent = "Tentar novamente";
+  } finally {
+    elements.checkUpdate.disabled = false;
+  }
+}
 
 function announceChange(message = "Configuração aplicada ao YouTube.") {
   elements.changeNote.textContent = message;
@@ -176,5 +216,15 @@ chrome.storage.onChanged.addListener((changes) => {
 for (const id of ["btn-open-settings", "btn-open-settings-main"]) {
   byId<HTMLButtonElement>(id).addEventListener("click", () => chrome.runtime.openOptionsPage());
 }
+
+elements.checkUpdate.addEventListener("click", checkForUpdate);
+
+elements.resetStats.addEventListener("click", () => {
+  if (!window.confirm("Zerar somente as estatisticas de anuncios?")) return;
+  chrome.storage.local.set({ totalAdsSkipped: 0, adsSkippedToday: 0, todayDate: null }, () => {
+    renderStats(0, 0, Number(elements.metricWarnings.textContent) || 0);
+    announceChange("Contador de anuncios zerado.");
+  });
+});
 
 export {};

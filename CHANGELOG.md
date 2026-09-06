@@ -2,10 +2,63 @@
 
 Todas as mudancas relevantes deste projeto serao registradas aqui.
 
-## Unreleased
+## 5.0.6 - 2026-09-06
+
+### Corrigido
+
+- Preferencias automaticas aguardam o inicio da reproducao; comandos antigos sao cancelados ou ignorados ao trocar de video.
+- A restauracao de velocidade de um anuncio nao sobrescreve mais a aceleracao do anuncio seguinte; o acelerador reinicia quando interrompido.
+- Recuperacao apos skip aguarda o carregamento e respeita interacoes do usuario, com no maximo uma tentativa de play.
+- Mute de anuncios restaura somente o elemento silenciado pela extensao, sem simular cliques no controle do YouTube.
+- Miniplayer preserva o espaco original e limpa seu estado na navegacao, redimensionamento, fullscreen e PiP.
+
+### Melhorado
+
+- Menos manutencao visual em abas ocultas e remocao do observador global usado apenas para detectar navegacao.
+- Onze novos casos de teste de comportamento para reproducao e miniplayer; 83 testes automatizados no total.
+- A pausa inicial ainda requer confirmacao em uma sessao real do YouTube; os testes simulados validam as correcoes de ciclo de vida, sem garantir autoplay em todo navegador.
+
+## 5.0.5 - 2026-08-31
+
+### Corrigido
+
+- Removido definitivamente o fallback que alterava `currentTime` ou usava `seekTo` para levar anuncios ao fim.
+- Removido o ciclo de force skip de quatro segundos que podia atingir o inicio de um video normal.
+- Aceleracao e restauracao de velocidade agora so alteram o player quando a taxa realmente precisa mudar.
+- Ao remover um aviso confirmado de anti-adblock, a extensao retoma o video se ele estava tocando imediatamente antes do modal.
+- Adicionados testes que impedem a reintroducao de seek destrutivo no content script e no mundo principal.
+
+## 5.0.4 - 2026-08-24
+
+### Corrigido
+
+- Selos visuais antigos de anuncio nao sao mais tratados como prova de que existe um anuncio ativo.
+- O skipper nao aplica seek ou aceleracao em videos normais quando o YouTube mantem UI obsoleta no DOM.
+- A velocidade padrao nao chama mais a API do player quando a taxa solicitada ja esta ativa, evitando reinicializacoes durante navegacao e playlists.
+- Mudancas opcionais de velocidade ou qualidade preservam a reproducao quando o video ja estava tocando.
+- Corrigida uma excecao da barra de controles quando o player era o ultimo elemento do container.
+
+## 5.0.3 - 2026-08-21
+
+### Corrigido
+
+- Removidos os bloqueios legados de autoplay e abas que podiam pausar o video logo depois de um anuncio inicial.
+- Videos comuns e itens de playlists nao recebem mais comandos automaticos de pausa da extensao.
+- A reproducao do conteudo e retomada uma vez quando o YouTube fica pausado depois de um skip confirmado.
+- Instalacoes anteriores migram novamente as configuracoes de reproducao para valores seguros.
+
+## 5.0.2 - 2026-08-17
+
+### Corrigido
+
+- Removido o modo legado que colocava a barra de controles sobre o video.
+- Instalacoes que ainda tinham essa opcao ativa sao migradas automaticamente para o layout externo seguro.
+
+## 5.0.1 - 2026-08-17
 
 ### Adicionado
 
+- Botao para zerar somente o contador de anuncios, sem apagar as demais configuracoes.
 - Busca instantanea no Control Center, com atalho `/` e estado sem resultados.
 - Perfis Seguro, Equilibrado, Turbo e Foco para aplicar grupos coerentes de configuracoes.
 - Temas de um clique Graphite Red, Deep Dark, Slate Blue e Warm Cinema.
@@ -24,6 +77,9 @@ Todas as mudancas relevantes deste projeto serao registradas aqui.
 
 ### Corrigido
 
+- Contador agora registra apenas anuncios em que a extensao executou clique, seek ou aceleracao; anuncios encerrados naturalmente nao entram mais como pulados.
+- Releases agora usam versoes imutaveis, permitindo que o verificador diferencie corretamente builds novos.
+- Instalacoes antigas agora desativam controles legados de autoplay/abas que podiam pausar videos normais ao iniciar.
 - Anti-adblock agora remove apenas avisos relacionados a bloqueadores e preserva dialogs, backdrops e promocoes normais do YouTube.
 - Titulos de status do popup e da visao geral agora acompanham corretamente o estado pausado.
 - Dependencias de build foram atualizadas para remover vulnerabilidades conhecidas no ambiente de desenvolvimento.

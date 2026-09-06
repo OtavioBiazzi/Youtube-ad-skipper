@@ -1,11 +1,12 @@
 {
   "manifest_version": 3,
   "name": "YouTube Extension",
-  "version": "5.0.0",
+  "version": "5.0.6",
   "description": "Central de controle para YouTube com skipper inteligente, ajustes do player, aparência e recursos avançados em uma única extensão.",
   "permissions": ["storage"],
   "host_permissions": [
-    "*://*.youtube.com/*"
+    "*://*.youtube.com/*",
+    "https://api.github.com/*"
   ],
   "action": {
     "default_popup": "popup.html",

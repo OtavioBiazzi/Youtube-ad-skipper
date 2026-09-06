@@ -51,15 +51,13 @@ export function clickElement(element: Element | null): boolean {
 
 export function getAdPlaying(doc: Document = document): boolean {
   const player = getYouTubePlayer(doc);
-  if (player?.classList.contains("ad-showing") || player?.classList.contains("ad-interrupting")) {
-    return true;
-  }
-
-  const root: ParentNode = player || doc;
-  const badges = root.querySelectorAll<HTMLElement>(
-    ".ytp-ad-badge, .ytp-ad-visit-advertiser-button, .ytp-visit-advertiser-link",
+  // Elementos visuais de anuncios podem permanecer montados e com dimensoes
+  // depois da transicao. Usa apenas o estado autoritativo do player para nao
+  // aplicar seek ou velocidade a um video normal por causa de UI obsoleta.
+  return !!player && (
+    player.classList.contains("ad-showing")
+    || player.classList.contains("ad-interrupting")
   );
-  return Array.from(badges).some((badge) => badge.offsetWidth > 0 || badge.offsetHeight > 0);
 }
 
 export function findSkipAdButton(doc: Document = document): HTMLElement | null {
