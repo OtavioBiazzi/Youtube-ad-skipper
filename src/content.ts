@@ -131,6 +131,9 @@ declare global {
   let videoFilterSignature = "";
   let miniplayerSignature = "";
   let miniplayerUpdateRaf = 0;
+  let miniplayerAnchor: HTMLElement | null = null;
+  let navigationInProgress = false;
+  let playbackInteractionRevision = 0;
   let playerToolbarUpdateRaf = 0;
   let visualMaintenanceRaf = 0;
   let visualMaintenanceTimeout: number | null = null;
@@ -805,7 +808,7 @@ declare global {
 
   function requestMainWorldQuality(level) {
     try {
-      postMainWorldMessage({ source: MAIN_QUALITY_MESSAGE, level });
+      postMainWorldMessage({ source: MAIN_QUALITY_MESSAGE, level, videoKey: getCurrentVideoKey() });
     } catch (err) {}
   }
 
@@ -826,7 +829,7 @@ declare global {
   }
 
   function getActiveVideo() {
-    return document.querySelector("video") as HTMLVideoElement | null;
+    return getYouTubePlayer()?.querySelector<HTMLVideoElement>("video.html5-main-video, video") || null;
   }
 
   function getCurrentVideoKey() {
@@ -863,13 +866,19 @@ declare global {
     }
 
     playerStateVideo = video;
+    adState.defaultSpeedAppliedKey = "";
+    adState.defaultVolumeAppliedKey = "";
+    resetQualityState();
     const reapply = () => {
       syncLoopState(video);
       if (config.volumeBoostEnabled) applyVolumeBoost(video);
       applyVideoFilters();
     };
     const markPlaying = () => {
-      if (!video.paused && !video.ended) adState.lastKnownPlayingAt = Date.now();
+      if (!video.paused && !video.ended) {
+        adState.lastKnownPlayingAt = Date.now();
+        if (adState.active) adState.wasPlayingBeforeAd = true;
+      }
     };
     const handleEnded = () => {
       syncLoopState(video);
@@ -900,8 +909,11 @@ declare global {
 
   function preservePlaybackAfterPreference(video: HTMLVideoElement | null, wasPlaying: boolean) {
     if (!video || !wasPlaying) return;
+    const videoKey = getCurrentVideoKey();
+    const interactionRevision = playbackInteractionRevision;
     window.setTimeout(() => {
-      if (!config.enabled || video !== getActiveVideo() || adState.active || getAdPlaying()) return;
+      if (interactionRevision !== playbackInteractionRevision) return;
+      if (!config.enabled || navigationInProgress || videoKey !== getCurrentVideoKey() || video !== getActiveVideo() || adState.active || getAdPlaying()) return;
       if (!video.paused || video.ended) return;
       try {
         video.play().catch(() => {});
@@ -1819,6 +1831,7 @@ declare global {
   }
 
   function runVisualMaintenanceTasks(force = false) {
+    if (document.hidden && !force) return;
     const now = Date.now();
 
     if (force || now - appearanceTasksLastRunAt >= APPEARANCE_TASK_INTERVAL_MS) {
@@ -2037,6 +2050,9 @@ declare global {
   const MINIPLAYER_ACTIVE_CLASS = "tube-shield-miniplayer-active";
 
   function getPlayerAnchor() {
+    const watch = document.querySelector("ytd-watch-flexy");
+    if (watch?.hasAttribute("full-bleed-player")) return document.querySelector("#player-full-bleed-container");
+    if (watch?.hasAttribute("theater")) return document.querySelector("#player-theater-container");
     return document.querySelector("#player-container-outer")
       || document.querySelector("#player")
       || document.querySelector("ytd-player")
@@ -2068,6 +2084,9 @@ declare global {
   function buildMiniplayerCss() {
     const size = parseMiniplayerSize();
     return `
+      html.${MINIPLAYER_ACTIVE_CLASS} [data-yse-miniplayer-anchor] {
+        min-height: var(--yse-miniplayer-anchor-height) !important;
+      }
       html.${MINIPLAYER_ACTIVE_CLASS} ytd-watch-flexy #player,
       html.${MINIPLAYER_ACTIVE_CLASS} ytd-watch-flexy #player-container-outer,
       html.${MINIPLAYER_ACTIVE_CLASS} ytd-watch-flexy #player-theater-container,
@@ -2080,17 +2099,12 @@ declare global {
         contain: none !important;
       }
 
-      html.${MINIPLAYER_ACTIVE_CLASS} ytd-watch-flexy #player-container-outer {
-        height: 0 !important;
-        min-height: 0 !important;
-        margin-bottom: 0 !important;
-      }
-
       html.${MINIPLAYER_ACTIVE_CLASS} #movie_player.html5-video-player {
         position: fixed !important;
         ${getMiniplayerPositionCss()}
-        width: min(${size.width}px, calc(100vw - 36px)) !important;
-        height: min(${size.height}px, calc(100vh - 90px)) !important;
+        width: min(${size.width}px, calc(100vw - 36px), calc((100vh - 90px) * ${size.width / size.height})) !important;
+        height: auto !important;
+        aspect-ratio: ${size.width} / ${size.height} !important;
         z-index: 2147483600 !important;
         border-radius: 10px !important;
         overflow: hidden !important;
@@ -2141,13 +2155,13 @@ declare global {
   }
 
   function shouldUseMiniplayer() {
-    if (!config.enabled || !config.miniplayerEnabled || !isWatchPage()) return false;
+    if (navigationInProgress || !config.enabled || !config.miniplayerEnabled || !isWatchPage()) return false;
     if (document.fullscreenElement || document.pictureInPictureElement) return false;
 
     const player = getYouTubePlayer();
     const video = getActiveVideo();
     const anchor: any = getPlayerAnchor();
-    if (!player || !video || !anchor?.getBoundingClientRect) return false;
+    if (!player || !video || !anchor?.getBoundingClientRect || player.classList.contains("ytp-player-minimized")) return false;
 
     const rect = anchor.getBoundingClientRect();
     const activationOffset = Math.max(80, getMastheadHeight() + 16);
@@ -2156,7 +2170,15 @@ declare global {
 
   function updateMiniplayer() {
     const root = document.documentElement;
+    if (miniplayerAnchor && miniplayerAnchor !== getPlayerAnchor()) resetMiniplayer();
     const active = shouldUseMiniplayer();
+    if (active && !miniplayerAnchor) {
+      miniplayerAnchor = getPlayerAnchor() as HTMLElement;
+      miniplayerAnchor.style.setProperty("--yse-miniplayer-anchor-height", `${miniplayerAnchor.getBoundingClientRect().height}px`);
+      miniplayerAnchor.setAttribute("data-yse-miniplayer-anchor", "");
+    } else if (!active) {
+      resetMiniplayer();
+    }
 
     if (!config.enabled || !config.miniplayerEnabled) {
       root.classList.remove(MINIPLAYER_ACTIVE_CLASS);
@@ -2168,6 +2190,13 @@ declare global {
     ensureMiniplayerStyle();
     root.classList.toggle(MINIPLAYER_ACTIVE_CLASS, active);
     syncVideoFilterPopover();
+  }
+
+  function resetMiniplayer() {
+    document.documentElement.classList.remove(MINIPLAYER_ACTIVE_CLASS);
+    miniplayerAnchor?.style.removeProperty("--yse-miniplayer-anchor-height");
+    miniplayerAnchor?.removeAttribute("data-yse-miniplayer-anchor");
+    miniplayerAnchor = null;
   }
 
   function scheduleMiniplayerUpdate() {
@@ -2707,7 +2736,8 @@ declare global {
     if (!config.enabled || adState.active || getAdPlaying()) return;
 
     const video = getActiveVideo();
-    if (!video) return;
+    // Wait until autoplay has started before changing optional preferences.
+    if (!video || video.readyState < 2 || video.paused || video.ended) return;
 
     const key = getCurrentVideoKey();
     if (key !== adState.playerVideoKey) {
@@ -2813,15 +2843,6 @@ declare global {
     console.debug("[YouTube Extension][playback]", message, data);
   }
 
-  function resumeAdPlaybackIfNeeded() {
-    if (!isAdSkipperActive() || !(adState.active || getAdPlaying())) return;
-    const video = getActiveVideo();
-    if (!video || !video.paused) return;
-    try {
-      video.play().catch(() => {});
-    } catch (err) {}
-  }
-
   function getSpeedThroughRate() {
     if (isInstantSkipEnabled()) return INSTANT_SPEED_THROUGH_RATE;
     if (config.customSpeedEnabled && config.adaptiveSpeedEnabled) return getRiskAdaptiveSpeed();
@@ -2829,22 +2850,16 @@ declare global {
     return getSafeAdaptiveSpeed();
   }
 
-  function requestMainWorldSkip() {
-    postMainWorldMessage({
-      source: MAIN_FORCE_SKIP_MESSAGE,
-      targetTime: adState.skipTargetTime || Date.now(),
-      rate: getSpeedThroughRate(),
-    });
-  }
-
-  function requestMainWorldSpeedThrough(rate = getSpeedThroughRate()) {
+  function requestMainWorldSpeedThrough(rate = getSpeedThroughRate(), adOnly = false) {
     postMainWorldMessage({
       source: MAIN_SPEED_THROUGH_MESSAGE,
       rate,
+      adOnly,
+      videoKey: getCurrentVideoKey(),
     });
   }
 
-  function getCurrentPlaybackRate(video = document.querySelector("video")) {
+  function getCurrentPlaybackRate(video = getActiveVideo()) {
     const player: any = getYouTubePlayer();
     try {
       if (player && typeof player.getPlaybackRate === "function") {
@@ -2868,12 +2883,13 @@ declare global {
   }
 
   function capturePlaybackRate() {
-    adState.preAdPlaybackRate = getCurrentPlaybackRate();
+    clearPostSkipRestoreChecks();
+    adState.preAdPlaybackRate = getCapturedPlaybackRate() ?? getCurrentPlaybackRate();
     stopPlaybackRateRestore();
   }
 
-  function applySpeedThrough(video = document.querySelector("video")) {
-    if (!isAdSkipperActive() || !config.aggressiveSkip || adState.watching) return false;
+  function applySpeedThrough(video = getActiveVideo()) {
+    if (!isAdSkipperActive() || !config.aggressiveSkip || adState.watching || !getAdPlaying()) return false;
 
     const rate = getSpeedThroughRate();
 
@@ -2882,13 +2898,14 @@ declare global {
       try {
         if (shouldApplyPlaybackRate(video.playbackRate, rate)) {
           video.playbackRate = rate;
-          requestMainWorldSpeedThrough(rate);
           attempted = true;
         }
       } catch (err) {}
+      // The native setter is also a fallback when an isolated-world setter fails.
+      if (shouldApplyPlaybackRate(video.playbackRate, rate)) requestMainWorldSpeedThrough(rate, true);
     }
 
-    if (attempted) adState.skipActionPerformed = true;
+    if (attempted || (video && !shouldApplyPlaybackRate(video.playbackRate, rate))) adState.skipActionPerformed = true;
     return attempted;
   }
 
@@ -2913,7 +2930,7 @@ declare global {
 
   function restorePlaybackRate(rate = adState.preAdPlaybackRate || 1) {
     const targetRate = normalizePlaybackRate(rate || 1);
-    const video = document.querySelector("video");
+    const video = getActiveVideo();
     let changed = false;
     if (video) {
       try {
@@ -2929,9 +2946,14 @@ declare global {
   function startPlaybackRateRestore(rate = adState.preAdPlaybackRate || 1) {
     stopPlaybackRateRestore();
     const targetRate = normalizePlaybackRate(rate || 1);
+    const videoKey = getCurrentVideoKey();
     adState.playbackRestoreStartedAt = Date.now();
     restorePlaybackRate(targetRate);
     adState.playbackRestoreInterval = setInterval(() => {
+      if (getCurrentVideoKey() !== videoKey || (getAdPlaying() && !adState.watching)) {
+        stopPlaybackRateRestore();
+        return;
+      }
       restorePlaybackRate(targetRate);
       if (Date.now() - adState.playbackRestoreStartedAt >= PLAYBACK_RESTORE_WINDOW_MS) {
         stopPlaybackRateRestore();
@@ -2967,16 +2989,19 @@ declare global {
   }
 
   function resumeContentPlaybackAfterSkip(videoKey = getCurrentVideoKey()) {
-    window.setTimeout(() => {
+    const interactionRevision = playbackInteractionRevision;
+    let resumed = false;
+    for (const delay of [120, 450, 900, 1500]) window.setTimeout(() => {
+      if (resumed || navigationInProgress || interactionRevision !== playbackInteractionRevision) return;
       if (!config.enabled || adState.active || getAdPlaying() || getCurrentVideoKey() !== videoKey) return;
-
       const video = getActiveVideo();
-      if (!video || !video.paused || video.ended) return;
-
+      if (!video || video.ended || video.readyState < 2) return;
+      if (!video.paused) { resumed = true; return; }
+      resumed = true;
       try {
         video.play().catch(() => {});
       } catch (err) {}
-    }, 120);
+    }, delay);
   }
 
   function clearSkipTimeout() {
@@ -2999,7 +3024,7 @@ declare global {
   function attemptScheduledSkip() {
     if (!isAdSkipperActive() || !adState.active || adState.watching) return false;
 
-    const video = document.querySelector("video");
+    const video = getActiveVideo();
     const skipButton = findSkipAdButton();
     const action = chooseAdSkipAction({
       adConfirmed: getAdPlaying(),
@@ -3017,7 +3042,7 @@ declare global {
     }
 
     if (action === "speed-through") {
-      requestMainWorldSkip();
+      startSpeedThrough();
       applySpeedThrough(video);
     }
 
@@ -3364,31 +3389,19 @@ declare global {
   }
 
   // ── Mute/unmute ───────────────────────────────────────
-  // Método do yt-ad-autoskipper: simula clique no botão de mute do YouTube
-  // em vez de manipular video.muted diretamente (menos detectável)
-
   function muteVideo() {
     if (!config.muteAds || adState.watching) return;
-    const muteBtn = document.querySelector(".ytp-mute-button");
-    const volumeSlider = document.querySelector(".ytp-volume-slider-handle");
-    const isMuted = volumeSlider ? parseInt(volumeSlider.style.left || "0") === 0 : false;
-
-    if (muteBtn && !isMuted) {
-      muteBtn.click();
-      adState._wasMuted = true;
+    const video = getActiveVideo();
+    if (video && !video.muted) {
+      adState.mutedVideo = video;
+      video.muted = true;
     }
   }
 
   function unmuteVideo() {
-    if (!adState._wasMuted) return;
-    const muteBtn = document.querySelector(".ytp-mute-button");
-    const volumeSlider = document.querySelector(".ytp-volume-slider-handle");
-    const isMuted = volumeSlider ? parseInt(volumeSlider.style.left || "0") === 0 : false;
-
-    if (muteBtn && isMuted) {
-      muteBtn.click();
-    }
-    adState._wasMuted = false;
+    const video = adState.mutedVideo as HTMLVideoElement | undefined;
+    if (video?.muted) video.muted = false;
+    adState.mutedVideo = null;
   }
 
   // ── Whitelist de canais ───────────────────────────────
@@ -3572,6 +3585,7 @@ declare global {
   }
 
   function mainLoopBody() {
+    if (navigationInProgress) return;
     bindPersistentVideoState();
     syncLoopState();
     runVisualMaintenanceTasks();
@@ -3594,7 +3608,6 @@ declare global {
     dismissAdblockWarning();
 
     const adPlaying = getAdPlaying();
-    if (adPlaying) resumeAdPlaybackIfNeeded();
 
     if (adPlaying && !adState.active) {
       // ── Anúncio COMEÇOU ───
@@ -3610,6 +3623,7 @@ declare global {
       adState.skipActionPerformed = false;
       const activeAdVideo = getActiveVideo();
       adState.wasPlayingBeforeAd = !!activeAdVideo && !activeAdVideo.paused;
+      adState.playbackInteractionRevision = playbackInteractionRevision;
 
       capturePlaybackRate();
       muteVideo();
@@ -3621,8 +3635,9 @@ declare global {
       // ── Anúncio ainda ativo — tick ───
 
       if (adState.watching) return;
+      startSpeedThrough();
 
-      const video = document.querySelector("video");
+      const video = getActiveVideo();
 
       // Reposicionamentos do vídeo não confirmam um novo anúncio.
       if (video) {
@@ -3644,7 +3659,8 @@ declare global {
     } else if (!adPlaying && adState.active) {
       // ── Anúncio ACABOU ───
 
-      const shouldResumeContent = adState.skipActionPerformed && adState.wasPlayingBeforeAd;
+      const shouldResumeContent = adState.skipActionPerformed && adState.wasPlayingBeforeAd
+        && adState.playbackInteractionRevision === playbackInteractionRevision;
       const skippedVideoKey = getCurrentVideoKey();
 
       // Contar apenas quando a extensão realmente executou uma ação de skip.
@@ -3713,6 +3729,11 @@ declare global {
   }
 
   document.addEventListener('keydown', handleConfiguredShortcut, true);
+  for (const eventName of ["pointerdown", "keydown"]) {
+    document.addEventListener(eventName, (event) => {
+      if (event.isTrusted) playbackInteractionRevision += 1;
+    }, true);
+  }
 
   // ── Picture-in-Picture (PiP) — Player Flutuante ───────
 
@@ -3747,7 +3768,12 @@ declare global {
   });
 
   window.addEventListener("scroll", scheduleMiniplayerUpdate, { passive: true });
-  window.addEventListener("resize", scheduleMiniplayerUpdate);
+  window.addEventListener("resize", () => {
+    resetMiniplayer();
+    scheduleMiniplayerUpdate();
+  });
+  document.addEventListener("enterpictureinpicture", scheduleMiniplayerUpdate, true);
+  document.addEventListener("leavepictureinpicture", scheduleMiniplayerUpdate, true);
   document.addEventListener("fullscreenchange", scheduleMiniplayerUpdate, true);
   document.addEventListener("yt-navigate-finish", scheduleMiniplayerUpdate, true);
   window.addEventListener("popstate", scheduleMiniplayerUpdate);
@@ -3884,20 +3910,19 @@ declare global {
     }
   }
 
-  // Re-inject PiP button on YouTube SPA navigation
-  let _pipLastUrl = location.href;
-  const _pipNavObserver = new MutationObserver(() => {
-    if (location.href !== _pipLastUrl) {
-      _pipLastUrl = location.href;
-      if (config.enabled && config.pipEnabled) {
-        setTimeout(injectPipButton, 1500);
-      }
-      scheduleVisualMaintenanceTasks(true, 500);
-    }
+  document.addEventListener("yt-navigate-start", () => {
+    navigationInProgress = true;
+    resetMiniplayer();
+    cleanupRuntimeState();
+    stopPlaybackRateRestore();
+    adState.preAdPlaybackRate = null;
+    adState.lastKnownPlayingAt = 0;
   });
-  _pipNavObserver.observe(document.documentElement, { childList: true, subtree: true });
 
   document.addEventListener("yt-navigate-finish", () => {
+    navigationInProgress = false;
+    mainLoop();
+    injectPipButton();
     setTimeout(() => {
       runVisualMaintenanceTasks(true);
       if (config.volumeBoostEnabled && config.volumeBoostAuto) applyVolumeBoost();

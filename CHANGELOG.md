@@ -2,6 +2,22 @@
 
 Todas as mudancas relevantes deste projeto serao registradas aqui.
 
+## 5.0.6 - 2026-09-06
+
+### Corrigido
+
+- Preferencias automaticas aguardam o inicio da reproducao; comandos antigos sao cancelados ou ignorados ao trocar de video.
+- A restauracao de velocidade de um anuncio nao sobrescreve mais a aceleracao do anuncio seguinte; o acelerador reinicia quando interrompido.
+- Recuperacao apos skip aguarda o carregamento e respeita interacoes do usuario, com no maximo uma tentativa de play.
+- Mute de anuncios restaura somente o elemento silenciado pela extensao, sem simular cliques no controle do YouTube.
+- Miniplayer preserva o espaco original e limpa seu estado na navegacao, redimensionamento, fullscreen e PiP.
+
+### Melhorado
+
+- Menos manutencao visual em abas ocultas e remocao do observador global usado apenas para detectar navegacao.
+- Onze novos casos de teste de comportamento para reproducao e miniplayer; 83 testes automatizados no total.
+- A pausa inicial ainda requer confirmacao em uma sessao real do YouTube; os testes simulados validam as correcoes de ciclo de vida, sem garantir autoplay em todo navegador.
+
 ## 5.0.5 - 2026-08-31
 
 ### Corrigido

@@ -8,6 +8,8 @@ import {
   MAIN_SPEED_THROUGH_MESSAGE,
   isBridgeMessage,
 } from "./shared/messages";
+import { getYouTubeVideoKeyFromUrl } from "./shared/youtube";
+import { getAdPlaying, findSkipAdButton } from "./content/adDom";
 
 (function() {
   const pageWindow: any = window;
@@ -260,56 +262,6 @@ import {
     return byListener || null;
   }
 
-  function isVisible(el) {
-    if (!el) return false;
-    const rect = el.getBoundingClientRect && el.getBoundingClientRect();
-    if (!rect || rect.width <= 0 || rect.height <= 0) return false;
-    const style = window.getComputedStyle(el);
-    return style.display !== "none" && style.visibility !== "hidden";
-  }
-
-  function getClickTarget(el) {
-    if (!el) return null;
-    return el.closest?.(
-      'button, [role="button"], .ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-ad-skip-button-modern, .videoAdUiSkipButton'
-    ) || el;
-  }
-
-  function clickSkipButton() {
-    const selectors = [
-      ".ytp-skip-ad-button",
-      ".ytp-ad-skip-button",
-      ".ytp-ad-skip-button-modern",
-      ".ytp-ad-skip-button-slot button",
-      ".ytp-ad-skip-button-container button",
-      ".videoAdUiSkipButton",
-      '[aria-label*="Skip" i]',
-      '[aria-label*="Pular" i]',
-      '[title*="Skip" i]',
-      '[title*="Pular" i]',
-      '[class*="skip"][class*="ad" i]',
-    ];
-
-    for (const selector of selectors) {
-      for (const el of document.querySelectorAll(selector)) {
-        const target = getClickTarget(el);
-        if (!target || typeof target.click !== "function" || !isVisible(target)) continue;
-        target.dispatchEvent(new MouseEvent("mouseover", { bubbles: true, cancelable: true, view: window }));
-        target.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, view: window }));
-        target.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, view: window }));
-        target.click();
-        return true;
-      }
-    }
-
-    return false;
-  }
-
-  function getFinitePositiveNumber(value) {
-    const n = Number(value);
-    return Number.isFinite(n) && n > 0 ? n : 0;
-  }
-
   function normalizeAdRate(rate) {
     const n = Number(rate);
     if (!Number.isFinite(n)) return 3;
@@ -335,8 +287,11 @@ import {
   }
 
   function forceSkipFromMainWorld(rate = 3) {
+    if (!getAdPlaying()) return { ok: false, method: "none" };
     const speedRate = normalizeAdRate(rate);
-    if (clickSkipButton()) {
+    const button = findSkipAdButton();
+    if (button) {
+      button.click();
       return { ok: true, method: "click" };
     }
     const attempted = setSpeedThrough(speedRate);
@@ -345,23 +300,14 @@ import {
 
   function setSpeedThrough(rate) {
     const player: any = getPlayer();
-    const video = document.querySelector("video");
+    const video = player?.querySelector("video.html5-main-video, video");
     let attempted = false;
 
     if (video && Math.abs(Number(video.playbackRate) - rate) > 0.0001) {
       try {
-        attempted = setNativeMediaValue(nativePlaybackRate, video, rate) || attempted;
-        video.playbackRate = rate;
-        attempted = true;
+        attempted = setNativeMediaValue(nativePlaybackRate, video, rate);
       } catch (err) {}
     }
-
-    try {
-      if (attempted && player && typeof player.setPlaybackRate === "function") {
-        player.setPlaybackRate(rate);
-        attempted = true;
-      }
-    } catch (err) {}
 
     return attempted;
   }
@@ -383,12 +329,14 @@ import {
       updateCodecSettings(data.settings || {});
       return;
     }
+    if (data.videoKey !== getYouTubeVideoKeyFromUrl(location.href)) return;
     if (data.source === MAIN_FORCE_SKIP_MESSAGE) {
       const result = forceSkipFromMainWorld(data.rate);
       window.postMessage({ source: MAIN_FORCE_SKIP_RESULT, token: bridgeSessionToken, ...result }, "*");
       return;
     }
     if (data.source === MAIN_SPEED_THROUGH_MESSAGE) {
+      if (Boolean(data.adOnly) !== getAdPlaying()) return;
       setSpeedThrough(normalizePlaybackRate(data.rate));
       return;
     }
