@@ -3926,6 +3926,11 @@
         display: none;
       }
 
+      /* Cinema only dims the page around the player: pointless in fullscreen. */
+      #movie_player.ytp-fullscreen #${PLAYER_CONTROLS_ID} [data-yte-action="cinema"] {
+        display: none;
+      }
+
       #${END_TIME_ID}:empty { display: none; }
       #movie_player.yte-no-endtime #${END_TIME_ID} { display: none; }
 
@@ -4248,7 +4253,12 @@
           toggleCinemaMode();
           break;
         case "popup":
-          openPopupPlayer();
+          if (document.fullscreenElement) {
+            document.exitFullscreen().catch(() => {
+            }).finally(() => window.setTimeout(openPopupPlayer, 150));
+          } else {
+            openPopupPlayer();
+          }
           break;
         case "pip":
           togglePictureInPicture(video).then(refreshPlayerControlStates);
