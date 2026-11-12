@@ -2,6 +2,14 @@
 
 Todas as mudancas relevantes deste projeto serao registradas aqui.
 
+## 5.3.2 — Ajustes rápidos
+
+### Corrigido
+- **Ícone do Boost:** ligado e desligado têm o mesmo tamanho (raio cheio quando ligado, só o contorno quando desligado).
+- **Destaque ao passar o mouse** voltou a aparecer nos nossos botões.
+- **Animação dos filtros:** voltou a de antes (5.3.0), e o "voltar" para a engrenagem agora também anima.
+- **Menus de filtro e da live:** mesmo espaçamento dos menus do YouTube.
+
 ## 5.3.1 — Lives, ícones e player
 
 ### Corrigido
