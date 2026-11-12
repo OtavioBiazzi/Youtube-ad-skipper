@@ -60,6 +60,13 @@ declare global {
 
 (function () {
   "use strict";
+  // Listeners below are registered at module level, so bail out before any of
+  // them in iframes that are not YouTube embeds (all_frames is on).
+  try {
+    if (window.self !== window.top && !/^\/embed\//.test(location.pathname)) return;
+  } catch (err) {
+    return;
+  }
   // ── Configurações ─────────────────────────────────────
 
   let config: any = { ...DEFAULT_SETTINGS };
@@ -168,6 +175,134 @@ declare global {
 
   // ── Carregar configurações ────────────────────────────
 
+  let rawSettings: Record<string, any> = { ...DEFAULT_SETTINGS };
+
+  // Single place that turns stored settings into the runtime config.
+  function applySettingsToConfig(s: any) {
+    config.enabled = !!s.enabled;
+    config.adSkipperEnabled = s.adSkipperEnabled !== false;
+    config.skipDelay = normalizeSkipDelay(s.skipDelay);
+    config.muteAds = !!s.muteAds;
+    config.showOverlay = !!s.showOverlay;
+    config.aggressiveSkip = !!s.aggressiveSkip;
+    config.instantSkip = !!s.instantSkip;
+    config.showToast = !!s.showToast;
+    config.shortcutEnabled = !!s.shortcutEnabled;
+    config.listMode = s.listMode === "blacklist" ? "blacklist" : "whitelist";
+    config.whitelist = Array.isArray(s.whitelist) ? s.whitelist : [];
+    config.pipEnabled = !!s.pipEnabled;
+    config.adSpeedRate = normalizeSpeedRate(s.adSpeedRate);
+    config.customSpeedEnabled = !!s.customSpeedEnabled;
+    config.adaptiveSpeedEnabled = !!s.adaptiveSpeedEnabled;
+    config.playerSpeedEnabled = !!s.playerSpeedEnabled;
+    config.playerSpeedDefault = normalizeUserPlaybackRate(s.playerSpeedDefault, 1);
+    config.playerSpeedStep = normalizePlayerSpeedStep(s.playerSpeedStep);
+    config.playerSpeedWheel = !!s.playerSpeedWheel;
+    config.playerSpeedWheelRightButton = !!s.playerSpeedWheelRightButton;
+    config.playerVolumeEnabled = !!s.playerVolumeEnabled;
+    config.playerVolumeDefault = normalizeVolumePercent(s.playerVolumeDefault);
+    config.playerVolumeStep = normalizeVolumeStep(s.playerVolumeStep);
+    config.playerVolumeWheel = !!s.playerVolumeWheel;
+    config.playerVolumeWheelRightButton = !!s.playerVolumeWheelRightButton;
+    config.volumeBoostEnabled = !!s.volumeBoostEnabled;
+    config.volumeBoostLevel = normalizeVolumeBoostLevel(s.volumeBoostLevel);
+    config.volumeBoostAuto = !!s.volumeBoostAuto;
+    config.playerWheelInvert = !!s.playerWheelInvert;
+    config.autoplayBlockBackground = !!s.autoplayBlockBackground;
+    config.autoplayBlockForeground = !!s.autoplayBlockForeground;
+    config.autoplayAllowPlaylists = s.autoplayAllowPlaylists !== false;
+    config.pauseBackgroundTabs = !!s.pauseBackgroundTabs;
+    config.qualityEnabled = !!s.qualityEnabled;
+    config.qualityVideo = normalizeQualityLevel(s.qualityVideo, "hd720");
+    config.qualityPlaylist = normalizeQualityLevel(s.qualityPlaylist, "hd720");
+    config.qualityFullscreenEnabled = !!s.qualityFullscreenEnabled;
+    config.qualityFullscreenVideo = normalizeQualityLevel(s.qualityFullscreenVideo, "hd1080");
+    config.qualityFullscreenPlaylist = normalizeQualityLevel(s.qualityFullscreenPlaylist, "hd1080");
+    config.qualityPopup = normalizeQualityLevel(s.qualityPopup, "medium");
+    config.qualityFullscreenPopup = normalizeQualityLevel(s.qualityFullscreenPopup, "hd1080");
+    config.qualityRestoreOnExit = s.qualityRestoreOnExit !== false;
+    config.appearanceConvertShorts = !!s.appearanceConvertShorts;
+    config.appearanceHideShorts = !!s.appearanceHideShorts;
+    config.appearanceHideRelated = !!s.appearanceHideRelated;
+    config.appearanceHideChat = !!s.appearanceHideChat;
+    config.appearanceHideComments = !!s.appearanceHideComments;
+    config.appearanceHideEndcards = !!s.appearanceHideEndcards;
+    config.appearanceLayoutRowsEnabled = !!s.appearanceLayoutRowsEnabled;
+    config.appearanceSortNewestComments = !!s.appearanceSortNewestComments;
+    config.appearanceAutoApplyFilters = !!s.appearanceAutoApplyFilters;
+    config.miniplayerEnabled = s.miniplayerEnabled !== false;
+    config.miniplayerSize = normalizeMiniplayerSize(s.miniplayerSize);
+    config.miniplayerPosition = normalizeMiniplayerPosition(s.miniplayerPosition);
+    config.playerPopupSize = normalizePlayerPopupSize(s.playerPopupSize);
+    config.toolbarEnabled = s.toolbarEnabled !== false;
+    config.toolbarPosition = normalizeToolbarPosition(s.toolbarPosition);
+    config.toolbarCenter = s.toolbarCenter !== false;
+    config.toolbarLoop = s.toolbarLoop !== false;
+    config.toolbarSpeed = s.toolbarSpeed !== false;
+    config.toolbarPopup = s.toolbarPopup !== false;
+    config.toolbarPip = s.toolbarPip !== false;
+    config.toolbarScreenshot = s.toolbarScreenshot !== false;
+    config.toolbarTheater = s.toolbarTheater !== false;
+    config.toolbarSettings = s.toolbarSettings !== false;
+    config.toolbarVolumeBoost = s.toolbarVolumeBoost !== false;
+    config.toolbarFilters = s.toolbarFilters !== false;
+    config.playerSpeedButtonsEnabled = s.playerSpeedButtonsEnabled !== false;
+    config.shortcutSkipAd = normalizeShortcutSetting(s.shortcutSkipAd, "Alt+Shift+S");
+    config.shortcutSpeedDown = normalizeShortcutSetting(s.shortcutSpeedDown, "Alt+Shift+,");
+    config.shortcutSpeedUp = normalizeShortcutSetting(s.shortcutSpeedUp, "Alt+Shift+.");
+    config.shortcutVolumeDown = normalizeShortcutSetting(s.shortcutVolumeDown, "Alt+Shift+ArrowDown");
+    config.shortcutVolumeUp = normalizeShortcutSetting(s.shortcutVolumeUp, "Alt+Shift+ArrowUp");
+    config.shortcutCinema = normalizeShortcutSetting(s.shortcutCinema, "Alt+Shift+C");
+    config.shortcutScreenshot = normalizeShortcutSetting(s.shortcutScreenshot, "Alt+Shift+P");
+    config.shortcutPopup = normalizeShortcutSetting(s.shortcutPopup, "Alt+Shift+O");
+    config.shortcutLoop = normalizeShortcutSetting(s.shortcutLoop, "Alt+Shift+L");
+    config.autoplayDisableAll = !!s.autoplayDisableAll;
+    config.autoplayStopPreload = !!s.autoplayStopPreload;
+    config.autoplayIgnorePopup = s.autoplayIgnorePopup !== false;
+    config.playerPopupEnabled = s.playerPopupEnabled !== false;
+    config.layoutVideosPerRow = normalizeGridCount(s.layoutVideosPerRow, 4, 1, 8);
+    config.layoutChannelVideosPerRow = normalizeGridCount(s.layoutChannelVideosPerRow, 4, 1, 8);
+    config.layoutShortsPerRow = normalizeGridCount(s.layoutShortsPerRow, 8, 1, 12);
+    config.layoutChannelShortsPerRow = normalizeGridCount(s.layoutChannelShortsPerRow, 5, 1, 12);
+    config.layoutPostsPerRow = normalizeGridCount(s.layoutPostsPerRow, 4, 1, 8);
+    config.appearanceAutoTheater = !!s.appearanceAutoTheater;
+    config.appearanceAutoExpandPlayer = !!s.appearanceAutoExpandPlayer;
+    config.appearanceUseViewportPlayer = !!s.appearanceUseViewportPlayer;
+    config.cinemaColor = normalizeHexColor(s.cinemaColor, "#000000");
+    config.cinemaOpacity = normalizePercent(s.cinemaOpacity, 85);
+    config.cinemaDefault = !!s.cinemaDefault;
+    config.cinemaAutoResize = !!s.cinemaAutoResize;
+    config.cinemaUseYouTubeTheater = s.cinemaUseYouTubeTheater !== false;
+    config.ultrawideEnabled = !!s.ultrawideEnabled;
+    config.ultrawideFit = normalizeUltrawideFit(s.ultrawideFit);
+    config.toolbarInsidePlayer = !!s.toolbarInsidePlayer;
+    config.toolbarAlwaysVisible = !!s.toolbarAlwaysVisible;
+    config.themeEngine = normalizeThemeEngine(s.themeEngine);
+    config.themeVariant = normalizeThemeVariant(s.themeVariant);
+    config.themeDeepDarkCustom = !!s.themeDeepDarkCustom;
+    config.themeCustomAccent = normalizeHexColor(s.themeCustomAccent, "#ff334b");
+    config.themeCustomBackground = normalizeHexColor(s.themeCustomBackground, "#0f0f0f");
+    config.themeCustomSurface = normalizeHexColor(s.themeCustomSurface, "#17191f");
+    config.themeCustomSurfaceRaised = normalizeHexColor(s.themeCustomSurfaceRaised, "#20232b");
+    config.themeCustomText = normalizeHexColor(s.themeCustomText, "#f4f5f7");
+    config.themeCustomMuted = normalizeHexColor(s.themeCustomMuted, "#a9adb8");
+    config.themeCustomBorder = normalizeHexColor(s.themeCustomBorder, "#343741");
+    config.themeCustomCss = String(s.themeCustomCss || "");
+    config.videoFiltersEnabled = !!s.videoFiltersEnabled;
+    config.videoFilterBrightness = normalizePercent(s.videoFilterBrightness, 100);
+    config.videoFilterContrast = normalizePercent(s.videoFilterContrast, 100);
+    config.videoFilterSaturate = normalizePercent(s.videoFilterSaturate, 100);
+    config.videoFilterGrayscale = normalizePercent(s.videoFilterGrayscale, 0);
+    config.videoFilterSepia = normalizePercent(s.videoFilterSepia, 0);
+    config.codecForceStandardFps = !!s.codecForceStandardFps;
+    config.codecForceAvc = !!s.codecForceAvc;
+    adState.warningCount = s.warningCount || 0;
+    adState.totalSkipped = s.totalAdsSkipped || 0;
+    adState.adsSkippedToday = s.adsSkippedToday || 0;
+    adState.todayDate = s.todayDate || null;
+  }
+
+
   function loadSettings() {
     return new Promise<void>((resolve) => {
       if (chrome?.storage?.local) {
@@ -178,127 +313,8 @@ declare global {
             s = migrateSettings(s);
             if (migrationPatch) chrome.storage.local.set(migrationPatch);
 
-            config.enabled = !!s.enabled;
-            config.adSkipperEnabled = s.adSkipperEnabled !== false;
-            config.skipDelay = normalizeSkipDelay(s.skipDelay);
-            config.muteAds = !!s.muteAds;
-            config.showOverlay = !!s.showOverlay;
-            config.aggressiveSkip = !!s.aggressiveSkip;
-            config.instantSkip = !!s.instantSkip;
-            config.showToast = !!s.showToast;
-            config.shortcutEnabled = !!s.shortcutEnabled;
-            config.listMode = s.listMode === "blacklist" ? "blacklist" : "whitelist";
-            config.whitelist = Array.isArray(s.whitelist) ? s.whitelist : [];
-            config.pipEnabled = !!s.pipEnabled;
-            config.adSpeedRate = normalizeSpeedRate(s.adSpeedRate);
-            config.customSpeedEnabled = !!s.customSpeedEnabled;
-            config.adaptiveSpeedEnabled = !!s.adaptiveSpeedEnabled;
-            config.playerSpeedEnabled = !!s.playerSpeedEnabled;
-            config.playerSpeedDefault = normalizeUserPlaybackRate(s.playerSpeedDefault, 1);
-            config.playerSpeedStep = normalizePlayerSpeedStep(s.playerSpeedStep);
-            config.playerSpeedWheel = !!s.playerSpeedWheel;
-            config.playerSpeedWheelRightButton = !!s.playerSpeedWheelRightButton;
-            config.playerVolumeEnabled = !!s.playerVolumeEnabled;
-            config.playerVolumeDefault = normalizeVolumePercent(s.playerVolumeDefault);
-            config.playerVolumeStep = normalizeVolumeStep(s.playerVolumeStep);
-            config.playerVolumeWheel = !!s.playerVolumeWheel;
-            config.playerVolumeWheelRightButton = !!s.playerVolumeWheelRightButton;
-            config.volumeBoostEnabled = !!s.volumeBoostEnabled;
-            config.volumeBoostLevel = normalizeVolumeBoostLevel(s.volumeBoostLevel);
-            config.volumeBoostAuto = !!s.volumeBoostAuto;
-            config.playerWheelInvert = !!s.playerWheelInvert;
-            config.autoplayBlockBackground = !!s.autoplayBlockBackground;
-            config.autoplayBlockForeground = !!s.autoplayBlockForeground;
-            config.autoplayAllowPlaylists = s.autoplayAllowPlaylists !== false;
-            config.pauseBackgroundTabs = !!s.pauseBackgroundTabs;
-            config.qualityEnabled = !!s.qualityEnabled;
-            config.qualityVideo = normalizeQualityLevel(s.qualityVideo, "hd720");
-            config.qualityPlaylist = normalizeQualityLevel(s.qualityPlaylist, "hd720");
-            config.qualityFullscreenEnabled = !!s.qualityFullscreenEnabled;
-            config.qualityFullscreenVideo = normalizeQualityLevel(s.qualityFullscreenVideo, "hd1080");
-            config.qualityFullscreenPlaylist = normalizeQualityLevel(s.qualityFullscreenPlaylist, "hd1080");
-            config.qualityPopup = normalizeQualityLevel(s.qualityPopup, "medium");
-            config.qualityFullscreenPopup = normalizeQualityLevel(s.qualityFullscreenPopup, "hd1080");
-            config.qualityRestoreOnExit = s.qualityRestoreOnExit !== false;
-            config.appearanceConvertShorts = !!s.appearanceConvertShorts;
-            config.appearanceHideShorts = !!s.appearanceHideShorts;
-            config.appearanceHideRelated = !!s.appearanceHideRelated;
-            config.appearanceHideChat = !!s.appearanceHideChat;
-            config.appearanceHideComments = !!s.appearanceHideComments;
-            config.appearanceHideEndcards = !!s.appearanceHideEndcards;
-            config.appearanceLayoutRowsEnabled = !!s.appearanceLayoutRowsEnabled;
-            config.appearanceSortNewestComments = !!s.appearanceSortNewestComments;
-            config.appearanceAutoApplyFilters = !!s.appearanceAutoApplyFilters;
-            config.miniplayerEnabled = s.miniplayerEnabled !== false;
-            config.miniplayerSize = normalizeMiniplayerSize(s.miniplayerSize);
-            config.miniplayerPosition = normalizeMiniplayerPosition(s.miniplayerPosition);
-            config.playerPopupSize = normalizePlayerPopupSize(s.playerPopupSize);
-            config.toolbarEnabled = s.toolbarEnabled !== false;
-            config.toolbarPosition = normalizeToolbarPosition(s.toolbarPosition);
-            config.toolbarCenter = s.toolbarCenter !== false;
-            config.toolbarLoop = s.toolbarLoop !== false;
-            config.toolbarSpeed = s.toolbarSpeed !== false;
-            config.toolbarPopup = s.toolbarPopup !== false;
-            config.toolbarPip = s.toolbarPip !== false;
-            config.toolbarScreenshot = s.toolbarScreenshot !== false;
-            config.toolbarTheater = s.toolbarTheater !== false;
-            config.toolbarSettings = s.toolbarSettings !== false;
-            config.toolbarVolumeBoost = s.toolbarVolumeBoost !== false;
-            config.toolbarFilters = s.toolbarFilters !== false;
-            config.playerSpeedButtonsEnabled = s.playerSpeedButtonsEnabled !== false;
-            config.shortcutSkipAd = normalizeShortcutSetting(s.shortcutSkipAd, "Alt+Shift+S");
-            config.shortcutSpeedDown = normalizeShortcutSetting(s.shortcutSpeedDown, "Alt+Shift+,");
-            config.shortcutSpeedUp = normalizeShortcutSetting(s.shortcutSpeedUp, "Alt+Shift+.");
-            config.shortcutVolumeDown = normalizeShortcutSetting(s.shortcutVolumeDown, "Alt+Shift+ArrowDown");
-            config.shortcutVolumeUp = normalizeShortcutSetting(s.shortcutVolumeUp, "Alt+Shift+ArrowUp");
-            config.shortcutCinema = normalizeShortcutSetting(s.shortcutCinema, "Alt+Shift+C");
-            config.shortcutScreenshot = normalizeShortcutSetting(s.shortcutScreenshot, "Alt+Shift+P");
-            config.shortcutPopup = normalizeShortcutSetting(s.shortcutPopup, "Alt+Shift+O");
-            config.shortcutLoop = normalizeShortcutSetting(s.shortcutLoop, "Alt+Shift+L");
-            config.autoplayDisableAll = !!s.autoplayDisableAll;
-            config.autoplayStopPreload = !!s.autoplayStopPreload;
-            config.autoplayIgnorePopup = s.autoplayIgnorePopup !== false;
-            config.playerPopupEnabled = s.playerPopupEnabled !== false;
-            config.layoutVideosPerRow = normalizeGridCount(s.layoutVideosPerRow, 4, 1, 8);
-            config.layoutChannelVideosPerRow = normalizeGridCount(s.layoutChannelVideosPerRow, 4, 1, 8);
-            config.layoutShortsPerRow = normalizeGridCount(s.layoutShortsPerRow, 8, 1, 12);
-            config.layoutChannelShortsPerRow = normalizeGridCount(s.layoutChannelShortsPerRow, 5, 1, 12);
-            config.layoutPostsPerRow = normalizeGridCount(s.layoutPostsPerRow, 4, 1, 8);
-            config.appearanceAutoTheater = !!s.appearanceAutoTheater;
-            config.appearanceAutoExpandPlayer = !!s.appearanceAutoExpandPlayer;
-            config.appearanceUseViewportPlayer = !!s.appearanceUseViewportPlayer;
-            config.cinemaColor = normalizeHexColor(s.cinemaColor, "#000000");
-            config.cinemaOpacity = normalizePercent(s.cinemaOpacity, 85);
-            config.cinemaDefault = !!s.cinemaDefault;
-            config.cinemaAutoResize = !!s.cinemaAutoResize;
-            config.cinemaUseYouTubeTheater = s.cinemaUseYouTubeTheater !== false;
-            config.ultrawideEnabled = !!s.ultrawideEnabled;
-            config.ultrawideFit = normalizeUltrawideFit(s.ultrawideFit);
-            config.toolbarInsidePlayer = !!s.toolbarInsidePlayer;
-            config.toolbarAlwaysVisible = !!s.toolbarAlwaysVisible;
-            config.themeEngine = normalizeThemeEngine(s.themeEngine);
-            config.themeVariant = normalizeThemeVariant(s.themeVariant);
-            config.themeDeepDarkCustom = !!s.themeDeepDarkCustom;
-            config.themeCustomAccent = normalizeHexColor(s.themeCustomAccent, "#ff334b");
-            config.themeCustomBackground = normalizeHexColor(s.themeCustomBackground, "#0f0f0f");
-            config.themeCustomSurface = normalizeHexColor(s.themeCustomSurface, "#17191f");
-            config.themeCustomSurfaceRaised = normalizeHexColor(s.themeCustomSurfaceRaised, "#20232b");
-            config.themeCustomText = normalizeHexColor(s.themeCustomText, "#f4f5f7");
-            config.themeCustomMuted = normalizeHexColor(s.themeCustomMuted, "#a9adb8");
-            config.themeCustomBorder = normalizeHexColor(s.themeCustomBorder, "#343741");
-            config.themeCustomCss = String(s.themeCustomCss || "");
-            config.videoFiltersEnabled = !!s.videoFiltersEnabled;
-            config.videoFilterBrightness = normalizePercent(s.videoFilterBrightness, 100);
-            config.videoFilterContrast = normalizePercent(s.videoFilterContrast, 100);
-            config.videoFilterSaturate = normalizePercent(s.videoFilterSaturate, 100);
-            config.videoFilterGrayscale = normalizePercent(s.videoFilterGrayscale, 0);
-            config.videoFilterSepia = normalizePercent(s.videoFilterSepia, 0);
-            config.codecForceStandardFps = !!s.codecForceStandardFps;
-            config.codecForceAvc = !!s.codecForceAvc;
-            adState.warningCount = s.warningCount || 0;
-            adState.totalSkipped = s.totalAdsSkipped || 0;
-            adState.adsSkippedToday = s.adsSkippedToday || 0;
-            adState.todayDate = s.todayDate || null;
+            rawSettings = { ...s };
+            applySettingsToConfig(s);
             resolve();
           }
         );
@@ -308,22 +324,32 @@ declare global {
     });
   }
 
+  const has = (changes: Record<string, unknown>, ...keys: string[]) => keys.some((key) => key in changes);
+  const hasPrefix = (changes: Record<string, unknown>, ...prefixes: string[]) =>
+    Object.keys(changes).some((key) => prefixes.some((prefix) => key.startsWith(prefix)));
+
   if (chrome?.storage?.onChanged) {
-    chrome.storage.onChanged.addListener((changes) => {
-      if (changes.enabled) {
-        config.enabled = !!changes.enabled.newValue;
-        if (config.enabled) {
-          if (isAdSkipperActive()) startAdblockProtection();
-          if (config.pipEnabled) injectPipButton();
-        } else {
-          cleanupRuntimeState();
-          stopAdblockProtection();
-          removePipButton();
-        }
-        scheduleVisualMaintenanceTasks(true);
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+      if (areaName && areaName !== "local") return;
+
+      if (changes.tubeShieldActivePlayback) {
+        handleExternalPlaybackSignal(changes.tubeShieldActivePlayback.newValue);
       }
-      if (changes.adSkipperEnabled) {
-        config.adSkipperEnabled = changes.adSkipperEnabled.newValue !== false;
+
+      const settingChanges: Record<string, unknown> = {};
+      for (const [key, change] of Object.entries(changes)) {
+        if (key in DEFAULT_SETTINGS) settingChanges[key] = (change as chrome.storage.StorageChange).newValue;
+      }
+      if (!Object.keys(settingChanges).length) return;
+
+      const wasEnabled = !!config.enabled;
+      const wasSkipperActive = isAdSkipperActive();
+      for (const [key, value] of Object.entries(settingChanges)) {
+        rawSettings[key] = value === undefined ? (DEFAULT_SETTINGS as any)[key] : value;
+      }
+      applySettingsToConfig(rawSettings);
+
+      if (config.enabled !== wasEnabled || isAdSkipperActive() !== wasSkipperActive) {
         if (isAdSkipperActive()) {
           startAdblockProtection();
           scheduleAdWatchdogTick();
@@ -332,313 +358,38 @@ declare global {
           stopAdblockProtection();
         }
       }
-      if (changes.skipDelay) {
-        config.skipDelay = normalizeSkipDelay(changes.skipDelay.newValue);
+      if (config.enabled !== wasEnabled) {
+        if (config.enabled && config.pipEnabled) injectPipButton();
+        if (!config.enabled) removePipButton();
+        scheduleVisualMaintenanceTasks(true);
       }
-      if (changes.muteAds) config.muteAds = !!changes.muteAds.newValue;
-      if (changes.showOverlay) {
-        config.showOverlay = !!changes.showOverlay.newValue;
-        if (!config.showOverlay) removeOverlay();
+
+      if (has(settingChanges, "showOverlay") && !config.showOverlay) removeOverlay();
+      if (has(settingChanges, "pipEnabled")) {
+        if (config.enabled && config.pipEnabled) injectPipButton(); else removePipButton();
       }
-      if (changes.aggressiveSkip) config.aggressiveSkip = !!changes.aggressiveSkip.newValue;
-      if (changes.instantSkip) config.instantSkip = !!changes.instantSkip.newValue;
-      if (changes.showToast) config.showToast = !!changes.showToast.newValue;
-      if (changes.shortcutEnabled) config.shortcutEnabled = !!changes.shortcutEnabled.newValue;
-      if (changes.listMode) config.listMode = changes.listMode.newValue === "blacklist" ? "blacklist" : "whitelist";
-      if (changes.whitelist) config.whitelist = Array.isArray(changes.whitelist.newValue) ? changes.whitelist.newValue : [];
-      if (changes.pipEnabled) {
-        config.pipEnabled = !!changes.pipEnabled.newValue;
-        if (config.enabled && config.pipEnabled) { injectPipButton(); } else { removePipButton(); }
-      }
-      if (changes.adSpeedRate) config.adSpeedRate = normalizeSpeedRate(changes.adSpeedRate.newValue);
-      if (changes.customSpeedEnabled) config.customSpeedEnabled = !!changes.customSpeedEnabled.newValue;
-      if (changes.adaptiveSpeedEnabled) config.adaptiveSpeedEnabled = !!changes.adaptiveSpeedEnabled.newValue;
-      if (changes.playerSpeedEnabled) {
-        config.playerSpeedEnabled = !!changes.playerSpeedEnabled.newValue;
-        if (config.playerSpeedEnabled) adState.defaultSpeedAppliedKey = "";
-      }
-      if (changes.playerSpeedDefault) {
-        config.playerSpeedDefault = normalizeUserPlaybackRate(changes.playerSpeedDefault.newValue, 1);
-        adState.defaultSpeedAppliedKey = "";
-      }
-      if (changes.playerSpeedStep) config.playerSpeedStep = normalizePlayerSpeedStep(changes.playerSpeedStep.newValue);
-      if (changes.playerSpeedWheel) config.playerSpeedWheel = !!changes.playerSpeedWheel.newValue;
-      if (changes.playerSpeedWheelRightButton) config.playerSpeedWheelRightButton = !!changes.playerSpeedWheelRightButton.newValue;
-      if (changes.playerVolumeEnabled) {
-        config.playerVolumeEnabled = !!changes.playerVolumeEnabled.newValue;
-        if (config.playerVolumeEnabled) adState.defaultVolumeAppliedKey = "";
-      }
-      if (changes.playerVolumeDefault) {
-        config.playerVolumeDefault = normalizeVolumePercent(changes.playerVolumeDefault.newValue);
-        adState.defaultVolumeAppliedKey = "";
-      }
-      if (changes.playerVolumeStep) config.playerVolumeStep = normalizeVolumeStep(changes.playerVolumeStep.newValue);
-      if (changes.playerVolumeWheel) config.playerVolumeWheel = !!changes.playerVolumeWheel.newValue;
-      if (changes.playerVolumeWheelRightButton) config.playerVolumeWheelRightButton = !!changes.playerVolumeWheelRightButton.newValue;
-      if (changes.volumeBoostEnabled) {
-        config.volumeBoostEnabled = !!changes.volumeBoostEnabled.newValue;
-        applyVolumeBoost();
-        schedulePlayerToolbarUpdate();
-      }
-      if (changes.volumeBoostLevel) {
-        config.volumeBoostLevel = normalizeVolumeBoostLevel(changes.volumeBoostLevel.newValue);
-        applyVolumeBoost();
-      }
-      if (changes.volumeBoostAuto) {
-        config.volumeBoostAuto = !!changes.volumeBoostAuto.newValue;
-        applyVolumeBoost();
-      }
-      if (changes.playerWheelInvert) config.playerWheelInvert = !!changes.playerWheelInvert.newValue;
-      if (changes.autoplayBlockBackground) config.autoplayBlockBackground = !!changes.autoplayBlockBackground.newValue;
-      if (changes.autoplayBlockForeground) config.autoplayBlockForeground = !!changes.autoplayBlockForeground.newValue;
-      if (changes.autoplayAllowPlaylists) config.autoplayAllowPlaylists = changes.autoplayAllowPlaylists.newValue !== false;
-      if (changes.pauseBackgroundTabs) config.pauseBackgroundTabs = !!changes.pauseBackgroundTabs.newValue;
-      if (changes.qualityEnabled) {
-        config.qualityEnabled = !!changes.qualityEnabled.newValue;
-        resetQualityState();
-      }
-      if (changes.qualityVideo) {
-        config.qualityVideo = normalizeQualityLevel(changes.qualityVideo.newValue, "hd720");
-        resetQualityState();
-      }
-      if (changes.qualityPlaylist) {
-        config.qualityPlaylist = normalizeQualityLevel(changes.qualityPlaylist.newValue, "hd720");
-        resetQualityState();
-      }
-      if (changes.qualityFullscreenEnabled) {
-        config.qualityFullscreenEnabled = !!changes.qualityFullscreenEnabled.newValue;
-        resetQualityState();
-      }
-      if (changes.qualityFullscreenVideo) {
-        config.qualityFullscreenVideo = normalizeQualityLevel(changes.qualityFullscreenVideo.newValue, "hd1080");
-        resetQualityState();
-      }
-      if (changes.qualityFullscreenPlaylist) {
-        config.qualityFullscreenPlaylist = normalizeQualityLevel(changes.qualityFullscreenPlaylist.newValue, "hd1080");
-        resetQualityState();
-      }
-      if (changes.qualityPopup) {
-        config.qualityPopup = normalizeQualityLevel(changes.qualityPopup.newValue, "medium");
-        resetQualityState();
-      }
-      if (changes.qualityFullscreenPopup) {
-        config.qualityFullscreenPopup = normalizeQualityLevel(changes.qualityFullscreenPopup.newValue, "hd1080");
-        resetQualityState();
-      }
-      if (changes.qualityRestoreOnExit) config.qualityRestoreOnExit = changes.qualityRestoreOnExit.newValue !== false;
-      if (changes.appearanceConvertShorts) {
-        config.appearanceConvertShorts = !!changes.appearanceConvertShorts.newValue;
-        convertShortsUrlIfNeeded();
-      }
-      if (changes.appearanceHideShorts) {
-        config.appearanceHideShorts = !!changes.appearanceHideShorts.newValue;
+      if (has(settingChanges, "playerSpeedEnabled", "playerSpeedDefault")) adState.defaultSpeedAppliedKey = "";
+      if (has(settingChanges, "playerVolumeEnabled", "playerVolumeDefault")) adState.defaultVolumeAppliedKey = "";
+      if (hasPrefix(settingChanges, "volumeBoost")) applyVolumeBoost();
+      if (hasPrefix(settingChanges, "quality")) resetQualityState();
+      if (has(settingChanges, "appearanceConvertShorts")) convertShortsUrlIfNeeded();
+      if (hasPrefix(settingChanges, "appearanceHide", "layout", "theme", "ultrawide") ||
+          has(settingChanges, "appearanceLayoutRowsEnabled", "appearanceUseViewportPlayer")) {
         applyAppearanceFilters();
       }
-      if (changes.appearanceHideRelated) {
-        config.appearanceHideRelated = !!changes.appearanceHideRelated.newValue;
-        applyAppearanceFilters();
-      }
-      if (changes.appearanceHideChat) {
-        config.appearanceHideChat = !!changes.appearanceHideChat.newValue;
-        applyAppearanceFilters();
-      }
-      if (changes.appearanceHideComments) {
-        config.appearanceHideComments = !!changes.appearanceHideComments.newValue;
-        applyAppearanceFilters();
-      }
-      if (changes.appearanceHideEndcards) {
-        config.appearanceHideEndcards = !!changes.appearanceHideEndcards.newValue;
-        applyAppearanceFilters();
-      }
-      if (changes.appearanceLayoutRowsEnabled) {
-        config.appearanceLayoutRowsEnabled = !!changes.appearanceLayoutRowsEnabled.newValue;
-        applyAppearanceFilters();
-        scheduleYouTubeLayoutRefresh();
-      }
-      if (changes.appearanceSortNewestComments) {
-        config.appearanceSortNewestComments = !!changes.appearanceSortNewestComments.newValue;
+      if (has(settingChanges, "appearanceLayoutRowsEnabled")) scheduleYouTubeLayoutRefresh();
+      if (has(settingChanges, "appearanceSortNewestComments")) {
         adState.commentsSortKey = "";
         adState.commentsSortAttemptAt = 0;
       }
-      if (changes.appearanceAutoApplyFilters) {
-        config.appearanceAutoApplyFilters = !!changes.appearanceAutoApplyFilters.newValue;
-        applyVideoFilters();
-      }
-      if (changes.miniplayerEnabled) {
-        config.miniplayerEnabled = changes.miniplayerEnabled.newValue !== false;
-        scheduleMiniplayerUpdate();
-      }
-      if (changes.miniplayerSize) {
-        config.miniplayerSize = normalizeMiniplayerSize(changes.miniplayerSize.newValue);
-        scheduleMiniplayerUpdate();
-      }
-      if (changes.miniplayerPosition) {
-        config.miniplayerPosition = normalizeMiniplayerPosition(changes.miniplayerPosition.newValue);
-        scheduleMiniplayerUpdate();
-      }
-      if (changes.playerPopupSize) config.playerPopupSize = normalizePlayerPopupSize(changes.playerPopupSize.newValue);
-      if (changes.toolbarEnabled) {
-        config.toolbarEnabled = changes.toolbarEnabled.newValue !== false;
+      if (hasPrefix(settingChanges, "videoFilter") || has(settingChanges, "appearanceAutoApplyFilters")) applyVideoFilters();
+      if (hasPrefix(settingChanges, "miniplayer")) scheduleMiniplayerUpdate();
+      if (hasPrefix(settingChanges, "toolbar", "volumeBoost") || has(settingChanges, "playerSpeedButtonsEnabled", "playerPopupEnabled")) {
         schedulePlayerToolbarUpdate();
       }
-      if (changes.toolbarPosition) {
-        config.toolbarPosition = normalizeToolbarPosition(changes.toolbarPosition.newValue);
-        schedulePlayerToolbarUpdate();
-      }
-      if (changes.toolbarCenter) {
-        config.toolbarCenter = changes.toolbarCenter.newValue !== false;
-        schedulePlayerToolbarUpdate();
-      }
-      if (changes.toolbarLoop) {
-        config.toolbarLoop = changes.toolbarLoop.newValue !== false;
-        schedulePlayerToolbarUpdate();
-      }
-      if (changes.toolbarSpeed) {
-        config.toolbarSpeed = changes.toolbarSpeed.newValue !== false;
-        schedulePlayerToolbarUpdate();
-      }
-      if (changes.toolbarPopup) {
-        config.toolbarPopup = changes.toolbarPopup.newValue !== false;
-        schedulePlayerToolbarUpdate();
-      }
-      if (changes.toolbarPip) {
-        config.toolbarPip = changes.toolbarPip.newValue !== false;
-        schedulePlayerToolbarUpdate();
-      }
-      if (changes.toolbarScreenshot) {
-        config.toolbarScreenshot = changes.toolbarScreenshot.newValue !== false;
-        schedulePlayerToolbarUpdate();
-      }
-      if (changes.toolbarTheater) {
-        config.toolbarTheater = changes.toolbarTheater.newValue !== false;
-        schedulePlayerToolbarUpdate();
-      }
-      if (changes.toolbarSettings) {
-        config.toolbarSettings = changes.toolbarSettings.newValue !== false;
-        schedulePlayerToolbarUpdate();
-      }
-      if (changes.toolbarVolumeBoost) {
-        config.toolbarVolumeBoost = changes.toolbarVolumeBoost.newValue !== false;
-        schedulePlayerToolbarUpdate();
-      }
-      if (changes.toolbarFilters) {
-        config.toolbarFilters = changes.toolbarFilters.newValue !== false;
-        schedulePlayerToolbarUpdate();
-      }
-      if (changes.playerSpeedButtonsEnabled) {
-        config.playerSpeedButtonsEnabled = changes.playerSpeedButtonsEnabled.newValue !== false;
-        schedulePlayerToolbarUpdate();
-      }
-      if (changes.playerPopupEnabled) {
-        config.playerPopupEnabled = changes.playerPopupEnabled.newValue !== false;
-        schedulePlayerToolbarUpdate();
-      }
-      const shortcutKeys = [
-        "shortcutSkipAd", "shortcutSpeedDown", "shortcutSpeedUp", "shortcutVolumeDown", "shortcutVolumeUp",
-        "shortcutCinema", "shortcutScreenshot", "shortcutPopup", "shortcutLoop"
-      ];
-      shortcutKeys.forEach((key) => {
-        if (changes[key]) config[key] = normalizeShortcutText(changes[key].newValue, "");
-      });
-      if (changes.autoplayDisableAll) config.autoplayDisableAll = !!changes.autoplayDisableAll.newValue;
-      if (changes.autoplayStopPreload) config.autoplayStopPreload = !!changes.autoplayStopPreload.newValue;
-      if (changes.autoplayIgnorePopup) config.autoplayIgnorePopup = changes.autoplayIgnorePopup.newValue !== false;
-      const layoutKeys = [
-        ["layoutVideosPerRow", 4, 1, 8],
-        ["layoutChannelVideosPerRow", 4, 1, 8],
-        ["layoutShortsPerRow", 8, 1, 12],
-        ["layoutChannelShortsPerRow", 5, 1, 12],
-        ["layoutPostsPerRow", 4, 1, 8],
-      ] as const;
-      let layoutChanged = false;
-      layoutKeys.forEach(([key, fallback, min, max]) => {
-        if (changes[key]) {
-          config[key] = normalizeGridCount(changes[key].newValue, fallback, min, max);
-          layoutChanged = true;
-        }
-      });
-      if (layoutChanged) applyAppearanceFilters();
-      if (changes.appearanceAutoTheater) config.appearanceAutoTheater = !!changes.appearanceAutoTheater.newValue;
-      if (changes.appearanceAutoExpandPlayer) config.appearanceAutoExpandPlayer = !!changes.appearanceAutoExpandPlayer.newValue;
-      if (changes.appearanceUseViewportPlayer) {
-        config.appearanceUseViewportPlayer = !!changes.appearanceUseViewportPlayer.newValue;
-        applyAppearanceFilters();
-      }
-      if (changes.cinemaColor) {
-        config.cinemaColor = normalizeHexColor(changes.cinemaColor.newValue, "#000000");
-        applyCinemaMode();
-      }
-      if (changes.cinemaOpacity) {
-        config.cinemaOpacity = normalizePercent(changes.cinemaOpacity.newValue, 85);
-        applyCinemaMode();
-      }
-      if (changes.cinemaDefault) {
-        config.cinemaDefault = !!changes.cinemaDefault.newValue;
-        setCinemaMode(config.cinemaDefault);
-      }
-      if (changes.cinemaAutoResize) config.cinemaAutoResize = !!changes.cinemaAutoResize.newValue;
-      if (changes.cinemaUseYouTubeTheater) config.cinemaUseYouTubeTheater = changes.cinemaUseYouTubeTheater.newValue !== false;
-      if (changes.ultrawideEnabled) {
-        config.ultrawideEnabled = !!changes.ultrawideEnabled.newValue;
-        applyAppearanceFilters();
-      }
-      if (changes.ultrawideFit) {
-        config.ultrawideFit = normalizeUltrawideFit(changes.ultrawideFit.newValue);
-        applyAppearanceFilters();
-      }
-      if (changes.toolbarInsidePlayer) {
-        config.toolbarInsidePlayer = !!changes.toolbarInsidePlayer.newValue;
-        schedulePlayerToolbarUpdate();
-      }
-      if (changes.toolbarAlwaysVisible) {
-        config.toolbarAlwaysVisible = !!changes.toolbarAlwaysVisible.newValue;
-        schedulePlayerToolbarUpdate();
-      }
-      const themeKeys = [
-        "themeEngine", "themeVariant", "themeDeepDarkCustom", "themeCustomAccent",
-        "themeCustomBackground", "themeCustomSurface", "themeCustomSurfaceRaised",
-        "themeCustomText", "themeCustomMuted", "themeCustomBorder", "themeCustomCss"
-      ];
-      let themeChanged = false;
-      themeKeys.forEach((key) => {
-        if (!changes[key]) return;
-        if (key === "themeEngine") config.themeEngine = normalizeThemeEngine(changes[key].newValue);
-        else if (key === "themeVariant") config.themeVariant = normalizeThemeVariant(changes[key].newValue);
-        else if (key === "themeDeepDarkCustom") config.themeDeepDarkCustom = !!changes[key].newValue;
-        else if (key === "themeCustomAccent") config.themeCustomAccent = normalizeHexColor(changes[key].newValue, "#ff334b");
-        else if (key === "themeCustomBackground") config.themeCustomBackground = normalizeHexColor(changes[key].newValue, "#0f0f0f");
-        else if (key === "themeCustomSurface") config.themeCustomSurface = normalizeHexColor(changes[key].newValue, "#17191f");
-        else if (key === "themeCustomSurfaceRaised") config.themeCustomSurfaceRaised = normalizeHexColor(changes[key].newValue, "#20232b");
-        else if (key === "themeCustomText") config.themeCustomText = normalizeHexColor(changes[key].newValue, "#f4f5f7");
-        else if (key === "themeCustomMuted") config.themeCustomMuted = normalizeHexColor(changes[key].newValue, "#a9adb8");
-        else if (key === "themeCustomBorder") config.themeCustomBorder = normalizeHexColor(changes[key].newValue, "#343741");
-        else if (key === "themeCustomCss") config.themeCustomCss = String(changes[key].newValue || "");
-        themeChanged = true;
-      });
-      if (themeChanged) applyAppearanceFilters();
-      const videoFilterKeys = [
-        "videoFiltersEnabled", "videoFilterBrightness", "videoFilterContrast",
-        "videoFilterSaturate", "videoFilterGrayscale", "videoFilterSepia"
-      ];
-      let videoFiltersChanged = false;
-      videoFilterKeys.forEach((key) => {
-        if (!changes[key]) return;
-        if (key === "videoFiltersEnabled") config.videoFiltersEnabled = !!changes[key].newValue;
-        else config[key] = normalizePercent(changes[key].newValue, key === "videoFilterBrightness" || key === "videoFilterContrast" || key === "videoFilterSaturate" ? 100 : 0);
-        videoFiltersChanged = true;
-      });
-      if (videoFiltersChanged) applyVideoFilters();
-      if (changes.codecForceStandardFps) {
-        config.codecForceStandardFps = !!changes.codecForceStandardFps.newValue;
-        syncCodecSettingsToMainWorld();
-      }
-      if (changes.codecForceAvc) {
-        config.codecForceAvc = !!changes.codecForceAvc.newValue;
-        syncCodecSettingsToMainWorld();
-      }
-      if (changes.tubeShieldActivePlayback) {
-        handleExternalPlaybackSignal(changes.tubeShieldActivePlayback.newValue);
-      }
+      if (has(settingChanges, "cinemaColor", "cinemaOpacity")) applyCinemaMode();
+      if (has(settingChanges, "cinemaDefault")) setCinemaMode(config.cinemaDefault);
+      if (hasPrefix(settingChanges, "codec")) syncCodecSettingsToMainWorld();
     });
   }
 
@@ -884,12 +635,19 @@ declare global {
       }
     };
 
+    const handlePause = () => {
+      adState.lastNativePauseAt = Date.now();
+      adState.lastNativePauseWasUser = hasRecentPlaybackIntent(1500);
+    };
+
+    video.addEventListener("pause", handlePause, true);
     video.addEventListener("loadedmetadata", reapply, true);
     video.addEventListener("durationchange", reapply, true);
     video.addEventListener("emptied", reapply, true);
     video.addEventListener("ended", handleEnded, true);
 
     playerStateCleanup = () => {
+      video.removeEventListener("pause", handlePause, true);
       video.removeEventListener("loadedmetadata", reapply, true);
       video.removeEventListener("durationchange", reapply, true);
       video.removeEventListener("emptied", reapply, true);
@@ -3449,12 +3207,28 @@ declare global {
     }, 0);
   }
 
+  // YouTube pauses the video when it shows the anti-adblock modal. Removing
+  // the modal left the video paused "for no reason"; resume it unless the
+  // user paused it themselves.
+  function resumeAfterAdblockWarning() {
+    const video = getMainVideo();
+    if (!video || !video.paused || video.ended) return;
+    if (adState.lastNativePauseWasUser) return;
+    if (Date.now() - (adState.lastNativePauseAt || 0) > 4000) return;
+    window.setTimeout(() => {
+      if (!video.paused || hasRecentPlaybackIntent(1500)) return;
+      video.play().catch(() => {});
+      recordPlaybackEvent("resume", "adblock-warning-removed", Number(video.currentTime || 0));
+    }, 150);
+  }
+
   function nukeAdblockElement(el) {
     if (!isAdSkipperActive() || !el) return;
     const target = el.closest?.("tp-yt-paper-dialog") || el;
     const shouldCount = target.isConnected !== false;
     target.remove();
     removeOrphanedAdblockBackdrops();
+    resumeAfterAdblockWarning();
 
     // Incrementar contador de avisos e salvar
     if (!shouldCount) return;
@@ -4202,20 +3976,19 @@ declare global {
     }
   }
 
-  // Re-inject PiP button on YouTube SPA navigation
-  let _pipLastUrl = location.href;
-  const _pipNavObserver = new MutationObserver(() => {
-    if (location.href !== _pipLastUrl) {
-      _pipLastUrl = location.href;
-      if (config.enabled && config.pipEnabled) {
-        setTimeout(injectPipButton, 1500);
-      }
-      scheduleVisualMaintenanceTasks(true, 500);
-    }
-  });
-  _pipNavObserver.observe(document.documentElement, { childList: true, subtree: true });
+  // SPA navigation. This used to be a MutationObserver on the whole document
+  // (fires thousands of times per page); YouTube's own event is enough.
+  let lastNavigationUrl = location.href;
+  function handleSpaNavigation() {
+    if (location.href === lastNavigationUrl) return;
+    lastNavigationUrl = location.href;
+    if (config.enabled && config.pipEnabled) setTimeout(injectPipButton, 600);
+    scheduleVisualMaintenanceTasks(true, 300);
+  }
+  window.addEventListener("popstate", handleSpaNavigation);
 
   document.addEventListener("yt-navigate-finish", () => {
+    handleSpaNavigation();
     setTimeout(() => {
       runVisualMaintenanceTasks(true);
       if (config.volumeBoostEnabled && config.volumeBoostAuto) applyVolumeBoost();
