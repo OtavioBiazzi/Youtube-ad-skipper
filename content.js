@@ -422,6 +422,7 @@
     resumePlaybackEnabled: false,
     playerControlsEnabled: true,
     playerControlsStyle: "pill",
+    settingsMenuItemsEnabled: true,
     playerEndTimeEnabled: false,
     liveCatchUpEnabled: true,
     liveCatchUpTarget: 3,
@@ -906,6 +907,7 @@
       config.resumePlaybackEnabled = !!s.resumePlaybackEnabled;
       config.playerControlsEnabled = s.playerControlsEnabled !== false;
       config.playerControlsStyle = s.playerControlsStyle === "divider" ? "divider" : "pill";
+      config.settingsMenuItemsEnabled = s.settingsMenuItemsEnabled !== false;
       config.playerEndTimeEnabled = s.playerEndTimeEnabled === true;
       config.liveCatchUpEnabled = s.liveCatchUpEnabled !== false;
       config.liveCatchUpTarget = Number(s.liveCatchUpTarget) > 0 ? Number(s.liveCatchUpTarget) : 3;
@@ -990,7 +992,7 @@
           applyVideoFilters();
           syncFilterPanel();
         }
-        if (hasPrefix(settingChanges, "toolbar", "playerControls", "playerEndTime", "liveCatchUp") || has(settingChanges, "playerSpeedButtonsEnabled", "playerPopupEnabled")) {
+        if (hasPrefix(settingChanges, "toolbar", "playerControls", "playerEndTime", "liveCatchUp", "settingsMenu") || has(settingChanges, "playerSpeedButtonsEnabled", "playerPopupEnabled")) {
           updatePlayerControls();
         }
         if (hasPrefix(settingChanges, "miniplayer")) scheduleMiniplayerUpdate();
@@ -4070,11 +4072,12 @@
       if (config.toolbarSpeed !== false && config.playerSpeedButtonsEnabled !== false) {
         items.push({ id: "speed", tip: "Velocidade · clique para alternar, role para ajustar, botão direito volta a 1x", text: "1x", priority: "high", className: "yte-btn--text" });
       }
-      if (config.toolbarLoop !== false) items.push({ id: "loop", tip: "Repetir vídeo", icon: "loop", priority: "mid" });
+      const inGear = config.settingsMenuItemsEnabled !== false;
+      if (config.toolbarLoop !== false && !inGear) items.push({ id: "loop", tip: "Repetir vídeo", icon: "loop", priority: "mid" });
       if (config.toolbarFilters !== false) items.push({ id: "filters", tip: "Filtros de imagem", icon: "filters", priority: "mid" });
       if (config.toolbarScreenshot !== false) items.push({ id: "screenshot", tip: "Salvar frame (PNG)", icon: "camera", priority: "low" });
-      if (config.toolbarVolumeBoost !== false) items.push({ id: "boost", tip: "Volume boost", icon: "boost", priority: "low" });
-      items.push({ id: "cinema", tip: "Modo cinema", icon: "cinema", priority: "low" });
+      if (config.toolbarVolumeBoost !== false && !inGear) items.push({ id: "boost", tip: "Volume boost", icon: "boost", priority: "low" });
+      if (!inGear) items.push({ id: "cinema", tip: "Modo cinema", icon: "cinema", priority: "low" });
       if (config.toolbarPopup !== false && config.playerPopupEnabled !== false) items.push({ id: "popup", tip: "Abrir em janela", icon: "popup", priority: "low" });
       if (config.toolbarPip !== false && document.pictureInPictureEnabled) items.push({ id: "pip", tip: "Picture-in-picture", icon: "pip", priority: "mid" });
       return items;
@@ -4131,6 +4134,7 @@
       event.stopPropagation();
     }
     function updatePlayerControls() {
+      bindGearMenu();
       if (!shouldShowPlayerControls()) {
         removePlayerControls();
         return;
@@ -4196,6 +4200,7 @@
       fitPlayerControls(player);
       ensureEndTimeLabel(player);
       bindPlayerControlsVideo();
+      bindGearMenu();
       refreshPlayerControlStates();
     }
     function bindPlayerControlsVideo() {
@@ -4600,6 +4605,169 @@
     };
     document.addEventListener("fullscreenchange", resizeOpenFilterPanel);
     window.addEventListener("resize", resizeOpenFilterPanel);
+    const GEAR_ITEM_ATTR = "data-yte-gear";
+    const GEAR_ICONS = {
+      filters: FILTER_ROW_ICONS.toggle,
+      loop: "M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z",
+      boost: "M7 18h2V6H7v12zm4 4h2V2h-2v20zm-8-8h2v-4H3v4zm12 4h2V6h-2v12zm4-8v4h2v-4h-2z",
+      cinema: "M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.39 5.39 0 0 1-4.4 2.26 5.4 5.4 0 0 1-3.14-9.8c-.44-.06-.9-.1-1.36-.1z",
+      live: "M7.76 16.24A5.98 5.98 0 0 1 6 12c0-1.66.67-3.16 1.76-4.24l1.42 1.42A3.99 3.99 0 0 0 8 12c0 1.1.45 2.1 1.17 2.83l-1.41 1.41zm8.48 0A5.98 5.98 0 0 0 18 12c0-1.66-.67-3.16-1.76-4.24l-1.42 1.42A3.99 3.99 0 0 1 16 12c0 1.1-.45 2.1-1.17 2.83l1.41 1.41zM12 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm8 2c0 2.21-.9 4.21-2.35 5.65l1.42 1.42A9.97 9.97 0 0 0 22 12c0-2.76-1.12-5.26-2.93-7.07l-1.42 1.42A7.95 7.95 0 0 1 20 12zM6.35 6.35 4.93 4.93A9.97 9.97 0 0 0 2 12c0 2.76 1.12 5.26 2.93 7.07l1.42-1.42A7.95 7.95 0 0 1 4 12c0-2.21.9-4.21 2.35-5.65z"
+    };
+    let gearObserver = null;
+    let gearObservedMenu = null;
+    let gearRaf = 0;
+    function gearIcon(name) {
+      return '<svg height="24" viewBox="0 0 24 24" width="24" aria-hidden="true"><path fill="#fff" d="' + (GEAR_ICONS[name] || "") + '"/></svg>';
+    }
+    function shouldAddGearItems() {
+      return !!config.enabled && config.settingsMenuItemsEnabled !== false && (isWatchPage() || /^\/embed\//.test(location.pathname));
+    }
+    function getGearItems() {
+      const key = getCurrentVideoKey();
+      const video = getActiveVideo();
+      const items = [
+        { id: "filters", label: "Filtros de imagem", value: shouldUseVideoFilters() ? "Ativados" : "Desativados" },
+        { id: "loop", label: "Repetir vídeo", checked: !!video?.loop || adState.loopEnabled && adState.loopVideoKey === key },
+        { id: "boost", label: "Volume boost", checked: shouldUseVolumeBoost() }
+      ];
+      if (!document.fullscreenElement) items.push({ id: "cinema", label: "Modo cinema", checked: !!adState.cinemaActive });
+      if (isLiveStream()) items.push({ id: "live", label: "Tirar atraso da live", checked: config.liveCatchUpEnabled !== false });
+      return items;
+    }
+    function closeYouTubeSettingsMenu() {
+      const button = getYouTubePlayer()?.querySelector(".ytp-settings-button");
+      if (button?.getAttribute("aria-expanded") === "true") button.click();
+    }
+    function handleGearItem(id) {
+      markUserPlaybackIntent("settings-menu");
+      switch (id) {
+        case "filters":
+          closeYouTubeSettingsMenu();
+          window.setTimeout(() => {
+            const panel = document.getElementById(FILTER_PANEL_ID);
+            if (!panel || panel.hidden) toggleFilterPanel();
+          }, 60);
+          return;
+        case "loop":
+          handlePlayerToolbarAction("loop");
+          break;
+        case "boost":
+          setVolumeBoostEnabled(!config.volumeBoostEnabled, getActiveVideo());
+          break;
+        case "cinema":
+          toggleCinemaMode();
+          break;
+        case "live":
+          config.liveCatchUpEnabled = config.liveCatchUpEnabled === false;
+          try {
+            chrome.storage.local.set({ liveCatchUpEnabled: config.liveCatchUpEnabled });
+          } catch (err) {
+          }
+          if (!config.liveCatchUpEnabled) restoreLiveRate();
+          break;
+      }
+      refreshGearItems();
+      refreshPlayerControlStates();
+    }
+    function refreshGearItems() {
+      const states = new Map(getGearItems().map((item) => [item.id, item]));
+      document.querySelectorAll(`[${GEAR_ITEM_ATTR}]`).forEach((row) => {
+        const item = states.get(row.getAttribute(GEAR_ITEM_ATTR) || "");
+        if (!item) return;
+        if (typeof item.checked === "boolean") row.setAttribute("aria-checked", String(item.checked));
+        if (item.value) {
+          const content = row.querySelector(".ytp-menuitem-content");
+          if (content && content.textContent !== item.value) content.textContent = item.value;
+        }
+      });
+    }
+    function buildGearRow(item) {
+      const row = document.createElement("div");
+      row.className = "ytp-menuitem";
+      row.setAttribute(GEAR_ITEM_ATTR, item.id);
+      row.tabIndex = 0;
+      if (typeof item.checked === "boolean") {
+        row.setAttribute("role", "menuitemcheckbox");
+        row.setAttribute("aria-checked", String(item.checked));
+      } else {
+        row.setAttribute("role", "menuitem");
+        row.setAttribute("aria-haspopup", "true");
+      }
+      row.innerHTML = '<div class="ytp-menuitem-icon">' + gearIcon(item.id) + '</div><div class="ytp-menuitem-label"></div><div class="ytp-menuitem-content"></div>';
+      row.querySelector(".ytp-menuitem-label").textContent = item.label;
+      const content = row.querySelector(".ytp-menuitem-content");
+      if (typeof item.checked === "boolean") {
+        const toggle = document.createElement("div");
+        toggle.className = "ytp-menuitem-toggle-checkbox";
+        content.appendChild(toggle);
+      } else {
+        content.textContent = item.value || "";
+      }
+      const activate = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        handleGearItem(item.id);
+      };
+      row.addEventListener("click", activate);
+      row.addEventListener("keydown", (event) => {
+        const key = event.key;
+        if (key === "Enter" || key === " ") activate(event);
+      });
+      return row;
+    }
+    function fitGearMenu(player, menu, panel, list) {
+      const current = parseFloat(list.style.height);
+      if (!Number.isFinite(current)) return;
+      const listStyle = getComputedStyle(list);
+      const padding = (parseFloat(listStyle.paddingTop) || 0) + (parseFloat(listStyle.paddingBottom) || 0);
+      const rowsHeight = padding + Array.from(list.children).reduce((sum, row) => sum + row.getBoundingClientRect().height, 0);
+      const max = Math.max(200, player.clientHeight - 80);
+      const target = Math.min(max, Math.ceil(rowsHeight));
+      for (const el of [list, panel, menu]) {
+        const height = parseFloat(el.style.height);
+        if (Number.isFinite(height) && Math.abs(height - target) >= 1) el.style.height = target + "px";
+      }
+    }
+    function injectGearItems() {
+      gearRaf = 0;
+      const player = getYouTubePlayer();
+      const menu = player?.querySelector(".ytp-settings-menu");
+      if (!player || !menu || menu.style.display === "none" || !shouldAddGearItems()) return;
+      const panels = Array.from(menu.querySelectorAll(".ytp-panel")).filter((panel2) => !panel2.querySelector(".ytp-panel-header"));
+      const panel = panels[panels.length - 1];
+      const list = panel?.querySelector(".ytp-panel-menu");
+      if (!panel || !list) return;
+      if (list.querySelector(`[${GEAR_ITEM_ATTR}]`)) {
+        refreshGearItems();
+        fitGearMenu(player, menu, panel, list);
+        return;
+      }
+      const rows = getGearItems().map(buildGearRow);
+      const firstSubmenu = list.querySelector(':scope > .ytp-menuitem[aria-haspopup="true"]');
+      for (const row of rows) list.insertBefore(row, firstSubmenu);
+      fitGearMenu(player, menu, panel, list);
+    }
+    function scheduleGearInjection() {
+      if (gearRaf) return;
+      gearRaf = requestAnimationFrame(injectGearItems);
+    }
+    function bindGearMenu() {
+      if (!shouldAddGearItems()) return;
+      const menu = getYouTubePlayer()?.querySelector(".ytp-settings-menu");
+      if (!menu || menu === gearObservedMenu) return;
+      gearObserver?.disconnect();
+      gearObservedMenu = menu;
+      gearObserver = new MutationObserver(scheduleGearInjection);
+      gearObserver.observe(menu, { childList: true, subtree: true, attributes: true, attributeFilter: ["style"] });
+      scheduleGearInjection();
+    }
+    document.addEventListener("click", (event) => {
+      const target = event.target;
+      if (target?.closest?.(".ytp-settings-button")) window.setTimeout(() => {
+        bindGearMenu();
+        scheduleGearInjection();
+      }, 0);
+    }, true);
     function getLiveTarget() {
       const n = Number(config.liveCatchUpTarget);
       return Number.isFinite(n) && n > 0 ? n : 3;

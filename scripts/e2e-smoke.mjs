@@ -141,6 +141,27 @@ try {
     }
   }
 
+  // ── Items inside YouTube's own settings (gear) menu ──
+  if (!process.env.E2E_NO_EXTENSION) {
+    await page.hover("#movie_player");
+    await page.click("#movie_player .ytp-settings-button").catch(() => {});
+    await page.waitForTimeout(700);
+    const gear = await page.evaluate(() => {
+      const menu = document.querySelector(".ytp-settings-menu");
+      const list = menu?.querySelector(".ytp-panel-menu");
+      const last = list?.lastElementChild?.getBoundingClientRect();
+      const box = menu?.getBoundingClientRect();
+      const player = document.getElementById("movie_player");
+      // Either every row is visible, or the menu reached YouTube's max height and scrolls.
+      const capped = !!box && !!player && box.height >= player.clientHeight - 81;
+      return { ours: menu ? menu.querySelectorAll("[data-yte-gear]").length : 0, fits: (!!last && !!box && last.bottom <= box.bottom + 1) || capped };
+    });
+    check("our items appear in YouTube's settings menu", gear.ours >= 3, `items=${gear.ours}`);
+    check("settings menu grows to fit them", gear.fits);
+    await page.keyboard.press("Escape");
+    await page.click("#movie_player .ytp-settings-button").catch(() => {});
+  }
+
   const start = Date.now();
   let sawAd = false;
   let lastTime = 0;

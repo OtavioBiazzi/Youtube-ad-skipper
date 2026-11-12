@@ -206,6 +206,7 @@
     resumePlaybackEnabled: false,
     playerControlsEnabled: true,
     playerControlsStyle: "pill",
+    settingsMenuItemsEnabled: true,
     playerEndTimeEnabled: false,
     liveCatchUpEnabled: true,
     liveCatchUpTarget: 3,
