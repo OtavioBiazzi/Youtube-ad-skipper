@@ -655,3 +655,28 @@ body.theme-light { font-size: 15px; }
   #advanced .section-grid:has(#playback-log) { grid-template-columns: 1fr !important; }
   #advanced .section-grid:has(#playback-log) > article:first-child { grid-row: auto; }
 }
+
+
+/* Update check card (About). */
+.update-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+  padding: 16px 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.update-info { display: grid; gap: 4px; }
+.update-info strong { font: 500 17px/1.2 var(--font-display); }
+.update-info span { color: var(--text-muted); font-size: 14px; }
+.update-info b { color: var(--text); font: 500 14px var(--font-mono); }
+.update-card[data-state="new"] { border-color: var(--accent); }
+.update-card[data-state="new"] .update-info span { color: var(--text); }
+.update-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.update-download[hidden] { display: none; }
+.update-download { border-color: var(--accent); color: var(--accent); text-decoration: none; display: inline-flex; align-items: center; padding: 0 14px; min-height: 34px; }

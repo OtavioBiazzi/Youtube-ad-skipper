@@ -2,6 +2,10 @@
 
 Todas as mudancas relevantes deste projeto serao registradas aqui.
 
+## 5.2.6
+
+- Control Center → Sobre: área "Atualizações" com a versão instalada, botão "Verificar agora" e, quando houver versão nova, "Baixar nova versão". Usa o mesmo cache de 6 horas do popup.
+
 ## 5.2.5
 
 - Filtros de imagem abrem como submenu dentro da própria engrenagem do YouTube: a caixa redimensiona e o conteúdo desliza como nos submenus dele, e o "voltar" faz o caminho inverso. Os menus da live e de filtros avulsos também deslizam entre telas.

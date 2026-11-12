@@ -1504,3 +1504,72 @@ window.addEventListener("resize", syncHeaderHeight);
   window.addEventListener("resize", schedule);
   update();
 })();
+
+// ── Update check (shares the popup's 6h cache) ───────────────
+
+const UPDATE_RELEASES_API = "https://api.github.com/repos/OtavioBiazzi/Youtube-ad-skipper/releases/latest";
+const UPDATE_CACHE_KEY = "updateCheckCache";
+
+function isNewerRelease(latest: string, current: string) {
+  const a = latest.replace(/^v/, "").split(".").map(Number);
+  const b = current.replace(/^v/, "").split(".").map(Number);
+  for (let i = 0; i < 3; i += 1) {
+    if ((a[i] || 0) !== (b[i] || 0)) return (a[i] || 0) > (b[i] || 0);
+  }
+  return false;
+}
+
+function renderUpdateState(tag: string, url: string, checkedAt: number) {
+  const card = document.getElementById("update-card");
+  const status = document.getElementById("update-status");
+  const download = document.getElementById("update-download") as HTMLAnchorElement | null;
+  if (!card || !status || !download) return;
+  const current = chrome.runtime.getManifest().version;
+  const when = checkedAt ? " · verificado " + new Date(checkedAt).toLocaleString() : "";
+  if (tag && url && isNewerRelease(tag, current)) {
+    card.dataset.state = "new";
+    status.innerHTML = "";
+    status.append("Nova versão disponível: ", Object.assign(document.createElement("b"), { textContent: tag }), " (instalada: v" + current + ")" + when);
+    download.href = url;
+    download.hidden = false;
+  } else {
+    card.dataset.state = "ok";
+    status.innerHTML = "";
+    status.append("Você está na versão mais recente: ", Object.assign(document.createElement("b"), { textContent: "v" + current }), tag ? when : "");
+    download.hidden = true;
+  }
+}
+
+async function checkForUpdate(force: boolean) {
+  const button = document.getElementById("update-check") as HTMLButtonElement | null;
+  const current = document.getElementById("update-current");
+  try {
+    if (current) current.textContent = "v" + chrome.runtime.getManifest().version;
+  } catch (err) {}
+  const cached: any = await new Promise((resolve) => chrome.storage.local.get({ [UPDATE_CACHE_KEY]: null }, (data: any) => resolve(data[UPDATE_CACHE_KEY])));
+  if (cached && !force) {
+    renderUpdateState(cached.tag, cached.url, cached.at);
+    return;
+  }
+  if (!force) return;
+  if (button) { button.disabled = true; button.textContent = "Verificando…"; }
+  try {
+    const response = await fetch(UPDATE_RELEASES_API, { headers: { Accept: "application/vnd.github+json" } });
+    if (!response.ok) throw new Error(String(response.status));
+    const release = await response.json();
+    const tag = String(release.tag_name || "");
+    const asset = Array.isArray(release.assets) ? release.assets.find((a: any) => String(a.name).endsWith(".zip")) : null;
+    const url = asset?.browser_download_url || release.html_url || "";
+    const entry = { at: Date.now(), tag, url };
+    chrome.storage.local.set({ [UPDATE_CACHE_KEY]: entry });
+    renderUpdateState(tag, url, entry.at);
+  } catch (err) {
+    const status = document.getElementById("update-status");
+    if (status) status.textContent = "Não foi possível verificar agora (sem conexão ou limite do GitHub). Tente de novo em alguns minutos.";
+  } finally {
+    if (button) { button.disabled = false; button.textContent = "Verificar agora"; }
+  }
+}
+
+document.getElementById("update-check")?.addEventListener("click", () => checkForUpdate(true));
+checkForUpdate(false);
