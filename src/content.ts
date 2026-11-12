@@ -449,6 +449,7 @@ declare global {
     const data = event.data || {};
     if (!isBridgeMessage(data)) return;
     if (data.source === MAIN_LIVE_STATS && data.token === mainWorldSessionToken) {
+      adState.lastBridgeReplyAt = Date.now();
       adState.liveStats = {
         latency: Number(data.latency),
         health: Number(data.health),
@@ -458,6 +459,7 @@ declare global {
       return;
     }
     if (data.source === MAIN_QUALITY_RESULT && data.token === mainWorldSessionToken) {
+      adState.lastBridgeReplyAt = Date.now();
       adState.qualityCurrent = typeof data.current === "string" ? data.current : "";
       if (Array.isArray(data.available)) adState.qualityAvailable = data.available.filter((level) => typeof level === "string");
       if (data.query && adState.fullscreenQualityMode && adState.preFullscreenQuality === null) {
@@ -4825,9 +4827,61 @@ declare global {
 
   function runPlayerUiTick() {
     runLiveCatchUp();
+    runHealthCheck();
     if (!shouldShowPlayerControls()) return;
     updateEndTimeLabel();
     refreshPlayerControlStates();
+  }
+
+  // ── Saúde da extensão ─────────────────────────────────
+  // Every ~10s on a watch page, check that each YouTube hook we rely on is
+  // still found, and store the result for the Control Center. When YouTube
+  // changes its layout the panel shows exactly which feature lost its hook.
+  const HEALTH_INTERVAL_MS = 10000;
+  let lastHealthCheckAt = 0;
+  let lastHealthSignature = "";
+  let lastHealthWriteAt = 0;
+
+  function runHealthCheck() {
+    if (!config.enabled || document.hidden || !isWatchPage()) return;
+    const now = Date.now();
+    if (now - lastHealthCheckAt < HEALTH_INTERVAL_MS) return;
+    lastHealthCheckAt = now;
+    // Ping the page bridge, then evaluate once its reply had time to arrive.
+    queryMainWorldQuality();
+    window.setTimeout(evaluateHealth, 1500);
+  }
+
+  function evaluateHealth() {
+    const now = Date.now();
+    const player = getYouTubePlayer();
+    const checks: Array<{ id: string; label: string; ok: boolean; detail?: string }> = [
+      { id: "player", label: "Player do YouTube", ok: !!player },
+      { id: "video", label: "Vídeo principal", ok: !!getMainVideo() },
+      { id: "controls", label: "Barra de controles", ok: !!player?.querySelector(".ytp-right-controls") },
+      { id: "time", label: "Tempo do vídeo", ok: !!player?.querySelector(".ytp-time-display") },
+      { id: "bridge", label: "Comunicação com a página", ok: now - (adState.lastBridgeReplyAt || 0) < 3000, detail: "qualidade, volume e velocidade passam por ela" },
+    ];
+    if (config.playerControlsEnabled !== false) {
+      checks.push({ id: "buttons", label: "Botões da extensão no player", ok: !!document.getElementById(PLAYER_CONTROLS_ID) });
+    }
+    if (config.settingsMenuItemsEnabled !== false) {
+      const menu = player?.querySelector(".ytp-settings-menu");
+      checks.push({ id: "gear", label: "Itens na engrenagem", ok: !!menu?.querySelector(`[${GEAR_ITEM_ATTR}]`), detail: menu ? "" : "abra a engrenagem uma vez" });
+    }
+    if (isLiveStream()) {
+      const stats = getLiveStats();
+      checks.push({ id: "live", label: "Estatísticas da live", ok: !!stats && Number.isFinite(stats.latency), detail: "atraso e buffer do player" });
+    }
+
+    const signature = checks.map((c) => c.id + (c.ok ? "1" : "0")).join(",");
+    // Write only when something changed (or once a minute for the timestamp).
+    if (signature === lastHealthSignature && now - lastHealthWriteAt < 60000) return;
+    lastHealthSignature = signature;
+    lastHealthWriteAt = now;
+    try {
+      chrome.storage.local.set({ extensionHealth: { at: now, video: getCurrentVideoId() || "", version: chrome.runtime.getManifest().version, checks } });
+    } catch (err) {}
   }
 
   // ── Main loop ─────────────────────────────────────────

@@ -633,8 +633,8 @@ body.theme-light { font-size: 15px; }
   align-items: start;
 }
 
-#advanced .section-grid:has(#playback-log) > article:first-child { grid-row: span 2; }
-#advanced .section-grid:has(#playback-log) { grid-template-rows: auto 1fr; }
+#advanced .section-grid:has(#playback-log) > article:first-child { grid-row: span 3; }
+#advanced .section-grid:has(#playback-log) { grid-template-rows: auto auto 1fr; }
 
 .playback-log { max-height: 320px; }
 
@@ -680,3 +680,13 @@ body.theme-light { font-size: 15px; }
 .update-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .update-download[hidden] { display: none; }
 .update-download { border-color: var(--accent); color: var(--accent); text-decoration: none; display: inline-flex; align-items: center; padding: 0 14px; min-height: 34px; }
+
+
+/* Extension health list */
+.health-list { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; }
+.health-list li { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: var(--radius-sm); background: var(--bg); font-size: 14px; }
+.health-list .health-mark { width: 18px; font: 600 14px var(--font-mono); text-align: center; }
+.health-list .is-ok .health-mark { color: var(--green); }
+.health-list .is-bad { color: var(--text); }
+.health-list .is-bad .health-mark { color: var(--red); }
+.health-list .health-empty { color: var(--text-muted); }

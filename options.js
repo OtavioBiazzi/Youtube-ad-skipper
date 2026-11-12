@@ -1687,4 +1687,35 @@
   }
   document.getElementById("update-check")?.addEventListener("click", () => checkForUpdate(true));
   checkForUpdate(false);
+  function renderHealth(health) {
+    const list = document.getElementById("health-list");
+    const meta = document.getElementById("health-meta");
+    if (!list || !meta) return;
+    list.textContent = "";
+    if (!health || !Array.isArray(health.checks)) {
+      const empty = document.createElement("li");
+      empty.className = "health-empty";
+      empty.textContent = "Abra um vídeo no YouTube para a extensão fazer a primeira verificação.";
+      list.appendChild(empty);
+      meta.textContent = "";
+      return;
+    }
+    for (const check of health.checks) {
+      const item = document.createElement("li");
+      item.className = check.ok ? "is-ok" : "is-bad";
+      const mark = document.createElement("span");
+      mark.className = "health-mark";
+      mark.textContent = check.ok ? "✓" : "✗";
+      const label = document.createElement("span");
+      label.textContent = check.label + (!check.ok && check.detail ? " — " + check.detail : "");
+      item.append(mark, label);
+      list.appendChild(item);
+    }
+    const bad = health.checks.filter((c) => !c.ok).length;
+    meta.textContent = (bad ? bad + " item(ns) com problema · " : "Tudo encontrado · ") + "verificado " + new Date(Number(health.at) || 0).toLocaleString() + (health.version ? " · v" + health.version : "");
+  }
+  chrome.storage.local.get({ extensionHealth: null }, (data) => renderHealth(data.extensionHealth));
+  chrome.storage.onChanged.addListener((changes) => {
+    if (changes.extensionHealth) renderHealth(changes.extensionHealth.newValue);
+  });
 })();

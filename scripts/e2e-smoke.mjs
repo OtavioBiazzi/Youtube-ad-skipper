@@ -151,6 +151,15 @@ try {
     }
   }
 
+  // ── Extension health panel (Control Center) after ~12s on the video ──
+  if (!process.env.E2E_NO_EXTENSION && worker) {
+    await page.waitForTimeout(12000);
+    const health = await worker.evaluate(() => chrome.storage.local.get("extensionHealth"));
+    const checks = health.extensionHealth?.checks || [];
+    const bad = checks.filter((c) => !c.ok).map((c) => c.label);
+    check("extension health: every YouTube hook found", checks.length >= 5 && bad.length === 0, bad.join(", ") || `${checks.length} checks`);
+  }
+
   // ── Items inside YouTube's own settings (gear) menu ──
   if (!process.env.E2E_NO_EXTENSION) {
     await page.hover("#movie_player");
