@@ -452,14 +452,18 @@ declare global {
     if (data.source === MAIN_LIVE_STATS && data.token === mainWorldSessionToken) {
       adState.lastBridgeReplyAt = Date.now();
       const latency = Number(data.latency);
-      // YouTube's "at live head" flag flickers near the edge: only switch to
-      // DVR after 4 readings in a row, and a small delay is always "live".
-      const reportedDvr = data.atLiveHead === false && !(Number.isFinite(latency) && latency < 30);
-      adState.liveDvrStreak = reportedDvr ? (adState.liveDvrStreak || 0) + 1 : 0;
+      const behind = Number(data.behind);
+      // Being behind is not DVR by itself (stalls pile up delay too): DVR is
+      // only when the viewer seeked back on purpose (see runLiveCatchUp).
+      const prevBehind = adState.liveStats?.behind;
+      if (Number.isFinite(behind) && Number.isFinite(prevBehind) && behind - prevBehind > 8 && hasRecentPlaybackIntent(5000)) {
+        adState.liveDvrKey = getCurrentVideoKey();
+      }
       adState.liveStats = {
         latency,
+        behind,
         health: Number(data.health),
-        atLiveHead: (adState.liveDvrStreak || 0) < 4,
+        atLiveHead: adState.liveDvrKey !== getCurrentVideoKey(),
         at: Date.now(),
       };
       return;
@@ -3441,8 +3445,20 @@ declare global {
     boost: "M3 9v6h4l5 5V4L7 9H3zm15-5-4 8h3l-1 8 5-10h-3l2-6z",
   };
 
-  function playerIcon(name: string) {
-    return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="' + (PLAYER_ICON_PATHS[name] || "") + '"/></svg>';
+  // Icons whose look changes with the state, like YouTube's own buttons
+  // (instead of an underline): hollow when off, filled when on.
+  const PLAYER_ICON_STATES: Record<string, { on: string; off: string }> = {
+    boost: {
+      on: '<path d="M3 9v6h4l5 5V4L7 9H3zm15-5-4 8h3l-1 8 5-10h-3l2-6z"/>',
+      off: '<path d="M3 9v6h4l5 5V4L7 9H3zm7-.17v6.34L7.83 13H5v-2h2.83L10 8.83z"/>'
+        + '<path d="M18 4.6 15 11h3l-1 6.6L20.6 10h-3l1.6-5.4z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>',
+    },
+  };
+
+  function playerIcon(name: string, active = false) {
+    const states = PLAYER_ICON_STATES[name];
+    const inner = states ? (active ? states.on : states.off) : '<path d="' + (PLAYER_ICON_PATHS[name] || "") + '"/>';
+    return '<svg viewBox="0 0 24 24" aria-hidden="true">' + inner + "</svg>";
   }
 
 
@@ -3467,7 +3483,7 @@ declare global {
   function getPlayerControlItems() {
     const items: Array<{ id: string; tip: string; icon?: string; text?: string; priority: "high" | "mid" | "low"; className?: string }> = [];
     if (config.toolbarSpeed !== false && config.playerSpeedButtonsEnabled !== false) {
-      items.push({ id: "speed", tip: "Velocidade · clique para alternar, role para ajustar, botão direito volta a 1x", text: "1x", priority: "high", className: "yte-btn--text" });
+      items.push({ id: "speed", tip: SPEED_BUTTON_TIP, text: "1x", priority: "high", className: "yte-btn--text" });
     }
     // With the gear integration on, set-and-forget items (filters, loop)
     // live in YouTube's settings menu; the bar keeps quick actions.
@@ -3639,18 +3655,34 @@ declare global {
     video.addEventListener("ratechange", refreshPlayerControlStates);
   }
 
+  const SPEED_BUTTON_TIP = "Velocidade · clique para alternar, role para ajustar, botão direito volta a 1x";
+
   function refreshPlayerControlStates() {
     const controls = document.getElementById(PLAYER_CONTROLS_ID);
     if (!controls) return;
     const video = getActiveVideo();
     const key = getCurrentVideoKey();
-    const set = (id: string, active: boolean) => controls.querySelector(`[data-yte-action="${id}"]`)?.classList.toggle("is-active", active);
+    const set = (id: string, active: boolean) => {
+      const button = controls.querySelector(`[data-yte-action="${id}"]`) as HTMLElement | null;
+      if (!button) return;
+      button.classList.toggle("is-active", active);
+      button.setAttribute("aria-pressed", String(active));
+      // Swap to the filled/hollow icon when the state changes.
+      if (PLAYER_ICON_STATES[id] && button.dataset.iconState !== String(active)) {
+        button.dataset.iconState = String(active);
+        button.innerHTML = playerIcon(id, active);
+      }
+    };
 
     const speed = controls.querySelector('[data-yte-action="speed"]') as HTMLElement | null;
     if (speed && video) {
       const label = formatPlaybackRate(video.playbackRate);
       if (speed.textContent !== label) speed.textContent = label;
-      speed.classList.toggle("is-active", Math.abs(video.playbackRate - 1) > 0.001 && !adState.liveRateApplied);
+      const liveBoost = (adState.liveRateApplied || 1) > 1.005 && video.playbackRate > 1.005;
+      speed.classList.toggle("is-active", Math.abs(video.playbackRate - 1) > 0.001 && !liveBoost);
+      speed.classList.toggle("is-live-boost", liveBoost);
+      const tip = liveBoost ? "Acelerando sozinho para tirar o atraso da live" : SPEED_BUTTON_TIP;
+      if (speed.dataset.tip !== tip) speed.dataset.tip = tip;
     }
     set("loop", !!video?.loop || (adState.loopEnabled && adState.loopVideoKey === key));
     set("filters", shouldUseVideoFilters());
@@ -4050,15 +4082,16 @@ declare global {
 
   function slidePanels(outgoing: HTMLElement | null, incoming: HTMLElement, direction: "forward" | "back" | "none") {
     if (direction === "none") return;
+    // YouTube's sub-menu slide: the new view comes all the way from the side.
     const sign = direction === "forward" ? 1 : -1;
-    const easing = "cubic-bezier(0.4, 0, 0.2, 1)";
+    const easing = "cubic-bezier(0, 0, 0.2, 1)";
     incoming.animate(
-      [{ transform: `translateX(${sign * 40}%)`, opacity: 0 }, { transform: "translateX(0)", opacity: 1 }],
+      [{ transform: `translateX(${sign * 100}%)` }, { transform: "translateX(0)" }],
       { duration: SUBMENU_ANIM_MS, easing },
     );
     if (outgoing) {
       outgoing.animate(
-        [{ transform: "translateX(0)", opacity: 1 }, { transform: `translateX(${-sign * 40}%)`, opacity: 0 }],
+        [{ transform: "translateX(0)" }, { transform: `translateX(${-sign * 100}%)` }],
         { duration: SUBMENU_ANIM_MS, easing, fill: "forwards" },
       );
     }
@@ -4079,20 +4112,18 @@ declare global {
     morphPanelFrom(panel, from.width, from.height);
   }
 
-  // Grow from the previous box (gear menu or previous view) to the panel's
-  // own size by animating a clip instead of width/height: no page layout
-  // per frame, so it runs as smoothly as YouTube's own menus. Panels are
-  // anchored bottom-right/bottom-left, so the clip opens from that corner.
+  // Resize from the previous box (gear menu or previous view) to the panel's
+  // own size, both growing and shrinking, like YouTube's popups. The panel
+  // has CSS containment, so only its own subtree is laid out per frame.
   function morphPanelFrom(panel: HTMLElement, fromWidth: number, fromHeight: number) {
     const to = panel.getBoundingClientRect();
-    const dx = Math.max(0, to.width - fromWidth);
-    const dy = Math.max(0, to.height - fromHeight);
-    if (dx < 1 && dy < 1) return;
-    const leftAnchored = panel.id === "yte-live-panel";
-    const start = leftAnchored ? `inset(${dy}px ${dx}px 0 0 round 12px)` : `inset(${dy}px 0 0 ${dx}px round 12px)`;
+    if (Math.abs(to.width - fromWidth) < 1 && Math.abs(to.height - fromHeight) < 1) return;
     panel.animate(
-      [{ clipPath: start }, { clipPath: "inset(0 0 0 0 round 12px)" }],
-      { duration: SUBMENU_ANIM_MS, easing: "cubic-bezier(0.4, 0, 0.2, 1)" },
+      [
+        { width: fromWidth + "px", height: fromHeight + "px" },
+        { width: to.width + "px", height: to.height + "px" },
+      ],
+      { duration: SUBMENU_ANIM_MS, easing: "cubic-bezier(0, 0, 0.2, 1)" },
     );
   }
 
@@ -4555,14 +4586,45 @@ declare global {
     }
 
     const stats = getLiveStats();
+    // Back near live (e.g. clicked "AO VIVO"): DVR is over.
+    if (stats && adState.liveDvrKey === key && Number.isFinite(stats.behind) && stats.behind < 8) {
+      adState.liveDvrKey = "";
+      stats.atLiveHead = true;
+    }
     if (!stats || !stats.atLiveHead) {
-      // DVR (watching behind on purpose) or no stats yet: stay at 1x.
-      if (applied !== 1) setLiveRate(1);
+      // DVR (viewer seeked back on purpose) or no stats yet: hands off.
+      if (applied !== 1) restoreLiveRate();
+      return;
+    }
+
+    // Some lives don't let the speed change: YouTube snaps the video back to
+    // 1x right away. Detect it (no click/key from the viewer), stop fighting,
+    // and keep the delay down by jumping to the live edge instead.
+    if (adState.liveRateBlockedKey !== key && applied > 1.001 && Math.abs(video.playbackRate - applied) > 0.02 && !hasRecentPlaybackIntent(3000)) {
+      adState.liveBlockStrikes = (adState.liveBlockStrikes || 0) + 1;
+      if (adState.liveBlockStrikes >= 3) {
+        adState.liveRateBlockedKey = key;
+        adState.liveRateApplied = 1;
+        adState.livePreRate = 0;
+        recordPlaybackEvent("live-rate-blocked", "live-catch-up", Number(video.currentTime || 0));
+      }
+    } else if (Math.abs(video.playbackRate - applied) <= 0.02) {
+      adState.liveBlockStrikes = 0;
+    }
+    if (adState.liveRateBlockedKey === key) {
+      const cushion = LIVE_MODES[normalizeLiveMode(config.liveCatchUpMode)].cushion;
+      const gap = Number.isFinite(stats.behind) ? stats.behind : stats.latency;
+      if (gap > cushion + 8 && stats.health > 1.5 && Date.now() - (adState.liveLastJumpAt || 0) > 20000) {
+        adState.liveLastJumpAt = Date.now();
+        postMainWorldMessage({ source: MAIN_PLAYER_COMMAND, command: "seekToLiveHead" });
+        recordPlaybackEvent("live-jump", "live-rate-blocked", Number(video.currentTime || 0));
+      }
       return;
     }
 
     const decision = decideLiveRate({
       latency: stats.latency,
+      behind: stats.behind,
       bufferHealth: stats.health,
       mode: normalizeLiveMode(config.liveCatchUpMode),
       maxRate: Number(config.liveCatchUpMaxRate) || 1.25,
@@ -4581,6 +4643,7 @@ declare global {
       if (applied === 1 && decision.rate > 1) adState.livePreRate = video.playbackRate || 1;
       setLiveRate(decision.rate);
       if (decision.rate === 1) adState.livePreRate = 0;
+      refreshPlayerControlStates();
     }
   }
 
@@ -4619,13 +4682,18 @@ declare global {
       badge.insertAdjacentElement("afterend", button);
     }
     const stats = getLiveStats();
-    const catching = (adState.liveRateApplied || 1) > 1.005;
+    const video = getActiveVideo();
+    const realRate = video?.playbackRate || 1;
+    const blocked = adState.liveRateBlockedKey === getCurrentVideoKey();
+    const catching = !blocked && (adState.liveRateApplied || 1) > 1.005 && realRate > 1.005;
     const text = stats && stats.atLiveHead ? formatSeconds(stats.latency) : stats ? "DVR" : "…";
     if (button.textContent !== text) button.textContent = text;
     button.dataset.state = !config.liveCatchUpEnabled ? "off" : catching ? "catching" : "on";
-    button.title = config.liveCatchUpEnabled
-      ? (catching ? "Acelerando " + (adState.liveRateApplied || 1).toFixed(2) + "x para tirar o atraso" : "Atraso até o ao vivo") + " · clique para configurar"
-      : "Atraso até o ao vivo · clique para ativar o \"tirar atraso\"";
+    button.title = !config.liveCatchUpEnabled
+      ? "Atraso até o ao vivo · clique para ativar o \"tirar atraso\""
+      : blocked
+        ? "Esta live não deixa mudar a velocidade · a extensão pula para o ao vivo quando atrasar · clique para configurar"
+        : (catching ? "Acelerando " + realRate.toFixed(2) + "x para tirar o atraso" : "Atraso até o ao vivo") + " · clique para configurar";
   }
 
   function renderLivePanel(panel: HTMLElement, direction: "forward" | "back" | "none" = "none") {
@@ -4711,7 +4779,7 @@ declare global {
       onMenuActivate(now, () => { jumpToLiveEdge(); closeLivePanel(); });
       menu.appendChild(now);
 
-      for (const [key, label] of [["latency", "Atraso"], ["health", "Buffer"], ["rate", "Velocidade agora"]]) {
+      for (const [key, label] of [["latency", "Atraso"], ["behind", "Atrás do ao vivo"], ["health", "Buffer"], ["rate", "Velocidade agora"]]) {
         const info = createMenuItem({ role: "menuitem", label, content: "—" });
         info.classList.add("yte-menuitem--info");
         info.dataset.liveInfo = key;
@@ -4744,8 +4812,10 @@ declare global {
       if (content && content.textContent !== value) content.textContent = value;
     };
     set("latency", stats ? (stats.atLiveHead ? formatSeconds(stats.latency) : "assistindo atrás (DVR)") : "—");
+    set("behind", stats && Number.isFinite(stats.behind) ? formatSeconds(stats.behind) : "—");
     set("health", stats ? formatSeconds(stats.health) : "—");
-    set("rate", (getActiveVideo()?.playbackRate || 1).toFixed(2).replace(".", ",") + "x");
+    const blockedHere = adState.liveRateBlockedKey === getCurrentVideoKey();
+    set("rate", (getActiveVideo()?.playbackRate || 1).toFixed(2).replace(".", ",") + "x" + (blockedHere ? " (live não permite acelerar; pula para o ao vivo)" : ""));
   }
 
   function closeLivePanel() {

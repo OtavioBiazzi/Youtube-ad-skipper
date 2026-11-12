@@ -588,21 +588,36 @@
       opacity: 1;
     }
 
-    /* Same hover as YouTube's own buttons: a soft white pill (10%). */
+    /* Same hover as YouTube's own buttons: a 48x32 pill (radius 16, straight
+       sides) drawn by a pseudo-element, exactly like .ytp-button::before. A
+       clipped background gave elliptical corners and looked like a ball. */
     #${PLAYER_CONTROLS_ID} .yte-btn {
-      border-radius: 40px;
-      /* YouTube's pill is 48x32 inside the 40px-tall button: 4px of air above
-         and below. Vertical padding + content-box background reproduces it. */
-      padding-top: 4px;
-      padding-bottom: 4px;
-      background-clip: content-box;
-      transition: background-color 0.1s cubic-bezier(0.4, 0, 1, 1);
+      isolation: isolate;
     }
 
-    #${PLAYER_CONTROLS_ID} .yte-btn:hover,
-    #${PLAYER_CONTROLS_ID} .yte-btn:focus-visible {
+    #${PLAYER_CONTROLS_ID} .yte-btn::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 0;
+      right: 0;
+      height: 32px;
+      transform: translateY(-50%);
+      border-radius: 40px;
+      background-color: transparent;
+      transition: background-color 0.1s cubic-bezier(0.4, 0, 1, 1);
+      pointer-events: none;
+      z-index: -1;
+    }
+
+    #${PLAYER_CONTROLS_ID} .yte-btn:hover::after,
+    #${PLAYER_CONTROLS_ID} .yte-btn:focus-visible::after {
       background-color: rgba(255, 255, 255, 0.1);
       transition-timing-function: cubic-bezier(0, 0, 0.2, 1);
+    }
+
+    #${PLAYER_CONTROLS_ID} .yte-btn.is-live-boost {
+      color: #ffb020;
     }
 
     #${PLAYER_CONTROLS_ID} .yte-btn svg {
@@ -613,26 +628,13 @@
       filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.35));
     }
 
-    #${PLAYER_CONTROLS_ID} .yte-btn.is-active::after {
-      content: "";
-      position: absolute;
-      left: 50%;
-      bottom: 7px;
-      width: 20px;
-      height: 3px;
-      margin-left: -10px;
-      border-radius: 2px;
-      background: #f03;
-    }
 
     #${PLAYER_CONTROLS_ID} .yte-btn--text {
       width: auto;
       min-width: 48px;
       font-size: 17px;
       font-weight: 400;
-      /* Same 4px vertical air as the icon buttons; no side padding so the
-         hover pill keeps YouTube's full button width. */
-      padding: 4px 0;
+      padding: 0;
       font-variant-numeric: tabular-nums;
     }
 
@@ -707,6 +709,8 @@
     }
 
     #${FILTER_PANEL_ID}.yte-from-gear:not([hidden]) { animation: none; }
+    /* Size animations only lay out the panel itself; the slide is clipped. */
+    #${FILTER_PANEL_ID}, #yte-live-panel { contain: layout paint; will-change: width, height; }
 
     /* YouTube's main settings panel briefly overflows while it animates into
        a sub-menu (it holds our extra rows); hide that transient scrollbar. */
@@ -1191,31 +1195,34 @@ ${customCss}
   const LIVE_MAX_RATES = [1.1, 1.25, 1.5];
   const LIVE_JUMP_SECONDS = 30;
   const STALL_GUARD = 1.5;
-  const MIN_LATENCY = 2;
-  const FULL_DEMAND = 6;
-  const SURPLUS_RAMP = 2;
+  const SAFE_BUFFER = 3;
   const ENGAGE_MARGIN = 1.5;
+  const RELEASE_MARGIN = 0.3;
+  const FULL_SPEED_GAP = 4;
   function normalizeLiveMode(value) {
     return value === "close" || value === "extreme" ? value : "balanced";
   }
   const clamp01 = (x) => x < 0 ? 0 : x > 1 ? 1 : x;
   function decideLiveRate(input) {
     const latency = Number(input.latency);
+    const behind = Number(input.behind);
     const health = Number(input.bufferHealth);
     const maxRate = Math.min(2, Math.max(1.05, Number(input.maxRate) || 1.25));
     const cushion = LIVE_MODES[normalizeLiveMode(input.mode)].cushion;
     const rest = (engaged2, jumpToLive = false) => ({ rate: 1, engaged: engaged2, jumpToLive });
-    if (!Number.isFinite(latency) || !Number.isFinite(health)) return rest(false);
-    if (input.jumpEnabled && latency >= LIVE_JUMP_SECONDS) return rest(false, true);
-    if (latency < MIN_LATENCY || health < STALL_GUARD) return rest(input.engaged && health >= STALL_GUARD);
+    const gap = Number.isFinite(behind) && behind >= 0 ? behind : latency;
+    if (!Number.isFinite(gap) || !Number.isFinite(health)) return rest(false);
+    if (input.jumpEnabled && gap >= LIVE_JUMP_SECONDS) return rest(false, true);
+    const excess = gap - cushion;
     let engaged = input.engaged;
-    if (engaged && health <= cushion) engaged = false;
-    else if (!engaged && health > cushion + ENGAGE_MARGIN) engaged = true;
+    if (engaged && excess <= RELEASE_MARGIN) engaged = false;
+    else if (!engaged && excess > ENGAGE_MARGIN) engaged = true;
     if (!engaged) return rest(false);
-    const demand = clamp01((latency - MIN_LATENCY) / FULL_DEMAND);
-    const headroom = clamp01((health - cushion) / SURPLUS_RAMP);
-    const rate = 1 + (maxRate - 1) * demand * headroom;
-    return { rate: Math.round(rate * 100) / 100, engaged, jumpToLive: false };
+    if (health < STALL_GUARD) return rest(true);
+    const demand = clamp01(excess / FULL_SPEED_GAP);
+    const safety = clamp01((health - STALL_GUARD) / (SAFE_BUFFER - STALL_GUARD));
+    const rate = 1 + (maxRate - 1) * demand * Math.max(0.35, safety);
+    return { rate: Math.max(1.05, Math.round(rate * 100) / 100), engaged, jumpToLive: false };
   }
   const VIDEO_FILTER_DEFAULTS = {
     brightness: 100,
@@ -1635,12 +1642,16 @@ ${customCss}
       if (data.source === MAIN_LIVE_STATS && data.token === mainWorldSessionToken) {
         adState.lastBridgeReplyAt = Date.now();
         const latency = Number(data.latency);
-        const reportedDvr = data.atLiveHead === false && !(Number.isFinite(latency) && latency < 30);
-        adState.liveDvrStreak = reportedDvr ? (adState.liveDvrStreak || 0) + 1 : 0;
+        const behind = Number(data.behind);
+        const prevBehind = adState.liveStats?.behind;
+        if (Number.isFinite(behind) && Number.isFinite(prevBehind) && behind - prevBehind > 8 && hasRecentPlaybackIntent(5e3)) {
+          adState.liveDvrKey = getCurrentVideoKey();
+        }
         adState.liveStats = {
           latency,
+          behind,
           health: Number(data.health),
-          atLiveHead: (adState.liveDvrStreak || 0) < 4,
+          atLiveHead: adState.liveDvrKey !== getCurrentVideoKey(),
           at: Date.now()
         };
         return;
@@ -4151,8 +4162,16 @@ ${customCss}
       popup: "M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z",
       boost: "M3 9v6h4l5 5V4L7 9H3zm15-5-4 8h3l-1 8 5-10h-3l2-6z"
     };
-    function playerIcon(name) {
-      return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="' + (PLAYER_ICON_PATHS[name] || "") + '"/></svg>';
+    const PLAYER_ICON_STATES = {
+      boost: {
+        on: '<path d="M3 9v6h4l5 5V4L7 9H3zm15-5-4 8h3l-1 8 5-10h-3l2-6z"/>',
+        off: '<path d="M3 9v6h4l5 5V4L7 9H3zm7-.17v6.34L7.83 13H5v-2h2.83L10 8.83z"/><path d="M18 4.6 15 11h3l-1 6.6L20.6 10h-3l1.6-5.4z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>'
+      }
+    };
+    function playerIcon(name, active = false) {
+      const states = PLAYER_ICON_STATES[name];
+      const inner = states ? active ? states.on : states.off : '<path d="' + (PLAYER_ICON_PATHS[name] || "") + '"/>';
+      return '<svg viewBox="0 0 24 24" aria-hidden="true">' + inner + "</svg>";
     }
     function ensurePlayerUiStyle() {
       if (document.getElementById(PLAYER_UI_STYLE_ID)) return;
@@ -4171,7 +4190,7 @@ ${customCss}
     function getPlayerControlItems() {
       const items = [];
       if (config.toolbarSpeed !== false && config.playerSpeedButtonsEnabled !== false) {
-        items.push({ id: "speed", tip: "Velocidade · clique para alternar, role para ajustar, botão direito volta a 1x", text: "1x", priority: "high", className: "yte-btn--text" });
+        items.push({ id: "speed", tip: SPEED_BUTTON_TIP, text: "1x", priority: "high", className: "yte-btn--text" });
       }
       const inGear = config.settingsMenuItemsEnabled !== false;
       if (config.toolbarLoop !== false && !inGear) items.push({ id: "loop", tip: "Repetir vídeo", icon: "loop", priority: "mid" });
@@ -4314,17 +4333,31 @@ ${customCss}
       playerControlsVideo = video;
       video.addEventListener("ratechange", refreshPlayerControlStates);
     }
+    const SPEED_BUTTON_TIP = "Velocidade · clique para alternar, role para ajustar, botão direito volta a 1x";
     function refreshPlayerControlStates() {
       const controls = document.getElementById(PLAYER_CONTROLS_ID);
       if (!controls) return;
       const video = getActiveVideo();
       const key = getCurrentVideoKey();
-      const set = (id, active) => controls.querySelector(`[data-yte-action="${id}"]`)?.classList.toggle("is-active", active);
+      const set = (id, active) => {
+        const button = controls.querySelector(`[data-yte-action="${id}"]`);
+        if (!button) return;
+        button.classList.toggle("is-active", active);
+        button.setAttribute("aria-pressed", String(active));
+        if (PLAYER_ICON_STATES[id] && button.dataset.iconState !== String(active)) {
+          button.dataset.iconState = String(active);
+          button.innerHTML = playerIcon(id, active);
+        }
+      };
       const speed = controls.querySelector('[data-yte-action="speed"]');
       if (speed && video) {
         const label = formatPlaybackRate(video.playbackRate);
         if (speed.textContent !== label) speed.textContent = label;
-        speed.classList.toggle("is-active", Math.abs(video.playbackRate - 1) > 1e-3 && !adState.liveRateApplied);
+        const liveBoost = (adState.liveRateApplied || 1) > 1.005 && video.playbackRate > 1.005;
+        speed.classList.toggle("is-active", Math.abs(video.playbackRate - 1) > 1e-3 && !liveBoost);
+        speed.classList.toggle("is-live-boost", liveBoost);
+        const tip = liveBoost ? "Acelerando sozinho para tirar o atraso da live" : SPEED_BUTTON_TIP;
+        if (speed.dataset.tip !== tip) speed.dataset.tip = tip;
       }
       set("loop", !!video?.loop || adState.loopEnabled && adState.loopVideoKey === key);
       set("filters", shouldUseVideoFilters());
@@ -4671,9 +4704,9 @@ ${customCss}
     function slidePanels(outgoing, incoming, direction) {
       if (direction === "none") return;
       const sign = direction === "forward" ? 1 : -1;
-      const easing = "cubic-bezier(0.4, 0, 0.2, 1)";
+      const easing = "cubic-bezier(0, 0, 0.2, 1)";
       incoming.animate(
-        [{ transform: `translateX(${sign * 40}%)`, opacity: 0 }, { transform: "translateX(0)", opacity: 1 }],
+        [{ transform: `translateX(${sign * 100}%)` }, { transform: "translateX(0)" }],
         { duration: SUBMENU_ANIM_MS, easing }
       );
     }
@@ -4688,14 +4721,13 @@ ${customCss}
     }
     function morphPanelFrom(panel, fromWidth, fromHeight) {
       const to = panel.getBoundingClientRect();
-      const dx = Math.max(0, to.width - fromWidth);
-      const dy = Math.max(0, to.height - fromHeight);
-      if (dx < 1 && dy < 1) return;
-      const leftAnchored = panel.id === "yte-live-panel";
-      const start = leftAnchored ? `inset(${dy}px ${dx}px 0 0 round 12px)` : `inset(${dy}px 0 0 ${dx}px round 12px)`;
+      if (Math.abs(to.width - fromWidth) < 1 && Math.abs(to.height - fromHeight) < 1) return;
       panel.animate(
-        [{ clipPath: start }, { clipPath: "inset(0 0 0 0 round 12px)" }],
-        { duration: SUBMENU_ANIM_MS, easing: "cubic-bezier(0.4, 0, 0.2, 1)" }
+        [
+          { width: fromWidth + "px", height: fromHeight + "px" },
+          { width: to.width + "px", height: to.height + "px" }
+        ],
+        { duration: SUBMENU_ANIM_MS, easing: "cubic-bezier(0, 0, 0.2, 1)" }
       );
     }
     function syncFilterPanel() {
@@ -5070,12 +5102,38 @@ ${customCss}
         return;
       }
       const stats = getLiveStats();
+      if (stats && adState.liveDvrKey === key && Number.isFinite(stats.behind) && stats.behind < 8) {
+        adState.liveDvrKey = "";
+        stats.atLiveHead = true;
+      }
       if (!stats || !stats.atLiveHead) {
-        if (applied !== 1) setLiveRate(1);
+        if (applied !== 1) restoreLiveRate();
+        return;
+      }
+      if (adState.liveRateBlockedKey !== key && applied > 1.001 && Math.abs(video.playbackRate - applied) > 0.02 && !hasRecentPlaybackIntent(3e3)) {
+        adState.liveBlockStrikes = (adState.liveBlockStrikes || 0) + 1;
+        if (adState.liveBlockStrikes >= 3) {
+          adState.liveRateBlockedKey = key;
+          adState.liveRateApplied = 1;
+          adState.livePreRate = 0;
+          recordPlaybackEvent("live-rate-blocked", "live-catch-up", Number(video.currentTime || 0));
+        }
+      } else if (Math.abs(video.playbackRate - applied) <= 0.02) {
+        adState.liveBlockStrikes = 0;
+      }
+      if (adState.liveRateBlockedKey === key) {
+        const cushion = LIVE_MODES[normalizeLiveMode(config.liveCatchUpMode)].cushion;
+        const gap = Number.isFinite(stats.behind) ? stats.behind : stats.latency;
+        if (gap > cushion + 8 && stats.health > 1.5 && Date.now() - (adState.liveLastJumpAt || 0) > 2e4) {
+          adState.liveLastJumpAt = Date.now();
+          postMainWorldMessage({ source: MAIN_PLAYER_COMMAND, command: "seekToLiveHead" });
+          recordPlaybackEvent("live-jump", "live-rate-blocked", Number(video.currentTime || 0));
+        }
         return;
       }
       const decision = decideLiveRate({
         latency: stats.latency,
+        behind: stats.behind,
         bufferHealth: stats.health,
         mode: normalizeLiveMode(config.liveCatchUpMode),
         maxRate: Number(config.liveCatchUpMaxRate) || 1.25,
@@ -5092,6 +5150,7 @@ ${customCss}
         if (applied === 1 && decision.rate > 1) adState.livePreRate = video.playbackRate || 1;
         setLiveRate(decision.rate);
         if (decision.rate === 1) adState.livePreRate = 0;
+        refreshPlayerControlStates();
       }
     }
     function jumpToLiveEdge() {
@@ -5126,11 +5185,14 @@ ${customCss}
         badge.insertAdjacentElement("afterend", button);
       }
       const stats = getLiveStats();
-      const catching = (adState.liveRateApplied || 1) > 1.005;
+      const video = getActiveVideo();
+      const realRate = video?.playbackRate || 1;
+      const blocked = adState.liveRateBlockedKey === getCurrentVideoKey();
+      const catching = !blocked && (adState.liveRateApplied || 1) > 1.005 && realRate > 1.005;
       const text = stats && stats.atLiveHead ? formatSeconds(stats.latency) : stats ? "DVR" : "…";
       if (button.textContent !== text) button.textContent = text;
       button.dataset.state = !config.liveCatchUpEnabled ? "off" : catching ? "catching" : "on";
-      button.title = config.liveCatchUpEnabled ? (catching ? "Acelerando " + (adState.liveRateApplied || 1).toFixed(2) + "x para tirar o atraso" : "Atraso até o ao vivo") + " · clique para configurar" : 'Atraso até o ao vivo · clique para ativar o "tirar atraso"';
+      button.title = !config.liveCatchUpEnabled ? 'Atraso até o ao vivo · clique para ativar o "tirar atraso"' : blocked ? "Esta live não deixa mudar a velocidade · a extensão pula para o ao vivo quando atrasar · clique para configurar" : (catching ? "Acelerando " + realRate.toFixed(2) + "x para tirar o atraso" : "Atraso até o ao vivo") + " · clique para configurar";
     }
     function renderLivePanel(panel, direction = "none") {
       const panelEl = document.createElement("div");
@@ -5222,7 +5284,7 @@ ${customCss}
           closeLivePanel();
         });
         menu.appendChild(now);
-        for (const [key, label] of [["latency", "Atraso"], ["health", "Buffer"], ["rate", "Velocidade agora"]]) {
+        for (const [key, label] of [["latency", "Atraso"], ["behind", "Atrás do ao vivo"], ["health", "Buffer"], ["rate", "Velocidade agora"]]) {
           const info = createMenuItem({ role: "menuitem", label, content: "—" });
           info.classList.add("yte-menuitem--info");
           info.dataset.liveInfo = key;
@@ -5251,8 +5313,10 @@ ${customCss}
         if (content && content.textContent !== value) content.textContent = value;
       };
       set("latency", stats ? stats.atLiveHead ? formatSeconds(stats.latency) : "assistindo atrás (DVR)" : "—");
+      set("behind", stats && Number.isFinite(stats.behind) ? formatSeconds(stats.behind) : "—");
       set("health", stats ? formatSeconds(stats.health) : "—");
-      set("rate", (getActiveVideo()?.playbackRate || 1).toFixed(2).replace(".", ",") + "x");
+      const blockedHere = adState.liveRateBlockedKey === getCurrentVideoKey();
+      set("rate", (getActiveVideo()?.playbackRate || 1).toFixed(2).replace(".", ",") + "x" + (blockedHere ? " (live não permite acelerar; pula para o ao vivo)" : ""));
     }
     function closeLivePanel() {
       const panel = document.getElementById(LIVE_PANEL_ID);
