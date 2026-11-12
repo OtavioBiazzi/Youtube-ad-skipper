@@ -54,7 +54,11 @@ export function buildPlayerUiCss() {
       top: 50%;
       left: 0;
       right: 0;
+      display: block;
+      bottom: auto;
+      width: auto;
       height: 32px;
+      opacity: 1;
       transform: translateY(-50%);
       border-radius: 40px;
       background-color: transparent;
@@ -110,6 +114,10 @@ export function buildPlayerUiCss() {
 
     #${PLAYER_CONTROLS_ID} .yte-btn[data-tip]:hover::before {
       content: attr(data-tip);
+      display: block;
+      width: max-content;
+      height: auto;
+      opacity: 1;
       position: absolute;
       bottom: calc(100% + 12px);
       left: 50%;
@@ -244,11 +252,15 @@ export function buildPlayerUiCss() {
     }
 
     #${FILTER_PANEL_ID} .ytp-panel { overflow-y: auto; overflow-x: hidden; }
+    #${FILTER_PANEL_ID} .yte-gear-snapshot { overflow: hidden !important; }
+    #${FILTER_PANEL_ID} .yte-gear-snapshot .ytp-panel-menu { height: 100% !important; overflow: hidden !important; padding: 8px 0 !important; }
     /* Same air as YouTube's settings menu around the rows. */
     #${FILTER_PANEL_ID} .ytp-panel-menu,
-    #yte-live-panel .ytp-panel-menu { padding: 8px 0 !important; }
+    #yte-live-panel .ytp-panel-menu { padding: 12px 8px !important; }
     #${FILTER_PANEL_ID} .ytp-menuitem-content,
     #yte-live-panel .ytp-menuitem-content { padding-right: 16px !important; }
+    #${FILTER_PANEL_ID} .ytp-panel-header,
+    #yte-live-panel .ytp-panel-header { padding-left: 8px !important; padding-right: 8px !important; }
     #${FILTER_PANEL_ID} .ytp-menuitem-icon,
     #yte-live-panel .ytp-menuitem-icon { padding-left: 12px !important; }
 

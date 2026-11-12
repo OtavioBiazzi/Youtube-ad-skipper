@@ -2,6 +2,15 @@
 
 Todas as mudancas relevantes deste projeto serao registradas aqui.
 
+## 5.3.4 — Live, hover e monitores
+
+### Corrigido
+- **Tirar atraso:** algumas lives dizem "0 s atrás do ao vivo" mesmo com 20 s de vídeo já baixado. Agora o que já está baixado também conta, e a live acelera (ex.: 27 s de atraso e 21 s de buffer → velocidade máxima). A linha do painel virou "Dá para adiantar".
+- **Hover do Boost:** o YouTube tem uma regra própria para botões liga/desliga (a do sublinhado vermelho da legenda) que escondia o nosso fundo branco. Agora aparece igual aos outros.
+- **Voltar dos Filtros para a engrenagem:** a animação de voltar aparece de verdade (a cópia do menu não carrega mais os tamanhos e deslocamentos que o YouTube deixa nele).
+- **Trocar de monitor:** depois de usar o miniplayer, o player não se ajustava ao mover o navegador para outra tela e cortava os menus. Agora acompanha o tamanho da janela.
+- **Menus de filtro e da live:** mais espaço nas bordas, como os menus do YouTube.
+
 ## 5.3.3 — Animação da engrenagem
 
 ### Corrigido

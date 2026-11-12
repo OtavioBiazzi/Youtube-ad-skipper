@@ -489,6 +489,7 @@
           const rect = host?.getBoundingClientRect();
           if (rect && rect.width > 0 && rect.height > 0 && typeof player.setInternalSize === "function") {
             player.setInternalSize(Math.round(rect.width), Math.round(rect.height));
+            internalSizePinned = true;
           }
         } catch (err) {
         }
@@ -496,6 +497,24 @@
       requestAnimationFrame(notify);
       window.setTimeout(notify, 220);
     }
+    let internalSizePinned = false;
+    let internalSizeTimer = 0;
+    const followPlayerSlot = () => {
+      if (!internalSizePinned) return;
+      window.clearTimeout(internalSizeTimer);
+      internalSizeTimer = window.setTimeout(() => {
+        const player = getPlayer();
+        if (!player || typeof player.setInternalSize !== "function") return;
+        if (document.documentElement.classList.contains("tube-shield-miniplayer-active")) return;
+        try {
+          const rect = player.parentElement?.getBoundingClientRect();
+          if (rect && rect.width > 0 && rect.height > 0) player.setInternalSize(Math.round(rect.width), Math.round(rect.height));
+        } catch (err) {
+        }
+      }, 150);
+    };
+    window.addEventListener("resize", followPlayerSlot);
+    document.addEventListener("fullscreenchange", followPlayerSlot);
     function isAuthorizedBridgeMessage(data) {
       return isBridgeMessage(data) && !!bridgeSessionToken && data.token === bridgeSessionToken;
     }

@@ -68,7 +68,14 @@ export function decideLiveRate(input: LiveRateInput): LiveRateDecision {
   const cushion = LIVE_MODES[normalizeLiveMode(input.mode)].cushion;
   const rest = (engaged: boolean, jumpToLive = false): LiveRateDecision => ({ rate: 1, engaged, jumpToLive });
 
-  const gap = Number.isFinite(behind) && behind >= 0 ? behind : latency;
+  // Spendable delay: what sits behind the newest segment, or what is
+  // already downloaded ahead (some lives report seekableEnd == current while
+  // holding 20 s of buffer). Whichever is larger can be played faster.
+  const behindOk = Number.isFinite(behind) && behind >= 0 ? behind : Number.NaN;
+  const healthOk = Number.isFinite(health) ? health : Number.NaN;
+  const gap = Number.isFinite(behindOk) || Number.isFinite(healthOk)
+    ? Math.max(Number.isFinite(behindOk) ? behindOk : 0, Number.isFinite(healthOk) ? healthOk : 0)
+    : latency;
   if (!Number.isFinite(gap) || !Number.isFinite(health)) return rest(false);
   if (input.jumpEnabled && gap >= LIVE_JUMP_SECONDS) return rest(false, true);
 

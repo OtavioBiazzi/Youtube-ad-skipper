@@ -4030,7 +4030,7 @@ declare global {
     const player = getYouTubePlayer();
     const panelEl = panel.querySelector(".ytp-panel") as HTMLElement | null;
     if (!player || !panelEl) return;
-    const width = Math.min(360, Math.max(260, player.clientWidth - 24));
+    const width = Math.min(380, Math.max(260, player.clientWidth - 24));
     const offset = getPanelBottomOffset(player, width);
     panel.style.bottom = offset.bottom + "px";
     panel.style.width = width + "px";
@@ -4139,13 +4139,33 @@ declare global {
     }, SUBMENU_ANIM_MS);
   }
 
+  // A static copy of YouTube's main view: no inline sizes/transforms from its
+  // own animations, no ids, not focusable.
+  function cleanSnapshot(view: HTMLElement) {
+    const copy = view.cloneNode(true) as HTMLElement;
+    for (const el of [copy, ...Array.from(copy.querySelectorAll<HTMLElement>("*"))]) {
+      el.removeAttribute("id");
+      el.style.removeProperty("width");
+      el.style.removeProperty("height");
+      el.style.removeProperty("transform");
+      el.style.removeProperty("left");
+      el.style.removeProperty("right");
+      el.style.removeProperty("opacity");
+      el.style.removeProperty("display");
+      if (el.hasAttribute("tabindex")) el.setAttribute("tabindex", "-1");
+    }
+    copy.setAttribute("aria-hidden", "true");
+    copy.classList.add("yte-gear-snapshot");
+    return copy;
+  }
+
   function openGearFilterSubmenu() {
     const player = getYouTubePlayer();
     const menu = player?.querySelector(".ytp-settings-menu") as HTMLElement | null;
     const visible = !!menu && getComputedStyle(menu).display !== "none";
     const from = visible ? menu!.getBoundingClientRect() : null;
     const view = visible ? menu!.querySelector(".ytp-popup-content > .ytp-panel") as HTMLElement | null : null;
-    gearSnapshot = view && from ? { view: view.cloneNode(true) as HTMLElement, width: from.width, height: from.height } : null;
+    gearSnapshot = view && from ? { view: cleanSnapshot(view), width: from.width, height: from.height } : null;
     closeYouTubeSettingsMenu();
     const panel = openFilterPanel("none");
     if (!panel || !gearSnapshot) return;
@@ -4687,7 +4707,7 @@ declare global {
     }
     if (adState.liveRateBlockedKey === key) {
       const cushion = LIVE_MODES[normalizeLiveMode(config.liveCatchUpMode)].cushion;
-      const gap = Number.isFinite(stats.behind) ? stats.behind : stats.latency;
+      const gap = Math.max(Number.isFinite(stats.behind) ? stats.behind : 0, Number.isFinite(stats.health) ? stats.health : 0);
       if (gap > cushion + 8 && stats.health > 1.5 && Date.now() - (adState.liveLastJumpAt || 0) > 20000) {
         adState.liveLastJumpAt = Date.now();
         postMainWorldMessage({ source: MAIN_PLAYER_COMMAND, command: "seekToLiveHead" });
@@ -4853,7 +4873,7 @@ declare global {
       onMenuActivate(now, () => { jumpToLiveEdge(); closeLivePanel(); });
       menu.appendChild(now);
 
-      for (const [key, label] of [["latency", "Atraso"], ["behind", "Atrás do ao vivo"], ["health", "Buffer"], ["rate", "Velocidade agora"]]) {
+      for (const [key, label] of [["latency", "Atraso"], ["behind", "Dá para adiantar"], ["health", "Buffer"], ["rate", "Velocidade agora"]]) {
         const info = createMenuItem({ role: "menuitem", label, content: "—" });
         info.classList.add("yte-menuitem--info");
         info.dataset.liveInfo = key;
@@ -4886,7 +4906,8 @@ declare global {
       if (content && content.textContent !== value) content.textContent = value;
     };
     set("latency", stats ? (stats.atLiveHead ? formatSeconds(stats.latency) : "assistindo atrás (DVR)") : "—");
-    set("behind", stats && Number.isFinite(stats.behind) ? formatSeconds(stats.behind) : "—");
+    const spendable = stats ? Math.max(Number.isFinite(stats.behind) ? stats.behind : 0, Number.isFinite(stats.health) ? stats.health : 0) : Number.NaN;
+    set("behind", formatSeconds(spendable));
     set("health", stats ? formatSeconds(stats.health) : "—");
     const blockedHere = adState.liveRateBlockedKey === getCurrentVideoKey();
     set("rate", (getActiveVideo()?.playbackRate || 1).toFixed(2).replace(".", ",") + "x" + (blockedHere ? " (live não permite acelerar; pula para o ao vivo)" : ""));

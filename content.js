@@ -602,7 +602,11 @@
       top: 50%;
       left: 0;
       right: 0;
+      display: block;
+      bottom: auto;
+      width: auto;
       height: 32px;
+      opacity: 1;
       transform: translateY(-50%);
       border-radius: 40px;
       background-color: transparent;
@@ -658,6 +662,10 @@
 
     #${PLAYER_CONTROLS_ID} .yte-btn[data-tip]:hover::before {
       content: attr(data-tip);
+      display: block;
+      width: max-content;
+      height: auto;
+      opacity: 1;
       position: absolute;
       bottom: calc(100% + 12px);
       left: 50%;
@@ -792,11 +800,15 @@
     }
 
     #${FILTER_PANEL_ID} .ytp-panel { overflow-y: auto; overflow-x: hidden; }
+    #${FILTER_PANEL_ID} .yte-gear-snapshot { overflow: hidden !important; }
+    #${FILTER_PANEL_ID} .yte-gear-snapshot .ytp-panel-menu { height: 100% !important; overflow: hidden !important; padding: 8px 0 !important; }
     /* Same air as YouTube's settings menu around the rows. */
     #${FILTER_PANEL_ID} .ytp-panel-menu,
-    #yte-live-panel .ytp-panel-menu { padding: 8px 0 !important; }
+    #yte-live-panel .ytp-panel-menu { padding: 12px 8px !important; }
     #${FILTER_PANEL_ID} .ytp-menuitem-content,
     #yte-live-panel .ytp-menuitem-content { padding-right: 16px !important; }
+    #${FILTER_PANEL_ID} .ytp-panel-header,
+    #yte-live-panel .ytp-panel-header { padding-left: 8px !important; padding-right: 8px !important; }
     #${FILTER_PANEL_ID} .ytp-menuitem-icon,
     #yte-live-panel .ytp-menuitem-icon { padding-left: 12px !important; }
 
@@ -1218,7 +1230,9 @@ ${customCss}
     const maxRate = Math.min(2, Math.max(1.05, Number(input.maxRate) || 1.25));
     const cushion = LIVE_MODES[normalizeLiveMode(input.mode)].cushion;
     const rest = (engaged2, jumpToLive = false) => ({ rate: 1, engaged: engaged2, jumpToLive });
-    const gap = Number.isFinite(behind) && behind >= 0 ? behind : latency;
+    const behindOk = Number.isFinite(behind) && behind >= 0 ? behind : Number.NaN;
+    const healthOk = Number.isFinite(health) ? health : Number.NaN;
+    const gap = Number.isFinite(behindOk) || Number.isFinite(healthOk) ? Math.max(Number.isFinite(behindOk) ? behindOk : 0, Number.isFinite(healthOk) ? healthOk : 0) : latency;
     if (!Number.isFinite(gap) || !Number.isFinite(health)) return rest(false);
     if (input.jumpEnabled && gap >= LIVE_JUMP_SECONDS) return rest(false, true);
     const excess = gap - cushion;
@@ -4667,7 +4681,7 @@ ${customCss}
       const player = getYouTubePlayer();
       const panelEl = panel.querySelector(".ytp-panel");
       if (!player || !panelEl) return;
-      const width = Math.min(360, Math.max(260, player.clientWidth - 24));
+      const width = Math.min(380, Math.max(260, player.clientWidth - 24));
       const offset = getPanelBottomOffset(player, width);
       panel.style.bottom = offset.bottom + "px";
       panel.style.width = width + "px";
@@ -4755,13 +4769,30 @@ ${customCss}
         done?.();
       }, SUBMENU_ANIM_MS);
     }
+    function cleanSnapshot(view) {
+      const copy = view.cloneNode(true);
+      for (const el of [copy, ...Array.from(copy.querySelectorAll("*"))]) {
+        el.removeAttribute("id");
+        el.style.removeProperty("width");
+        el.style.removeProperty("height");
+        el.style.removeProperty("transform");
+        el.style.removeProperty("left");
+        el.style.removeProperty("right");
+        el.style.removeProperty("opacity");
+        el.style.removeProperty("display");
+        if (el.hasAttribute("tabindex")) el.setAttribute("tabindex", "-1");
+      }
+      copy.setAttribute("aria-hidden", "true");
+      copy.classList.add("yte-gear-snapshot");
+      return copy;
+    }
     function openGearFilterSubmenu() {
       const player = getYouTubePlayer();
       const menu = player?.querySelector(".ytp-settings-menu");
       const visible = !!menu && getComputedStyle(menu).display !== "none";
       const from = visible ? menu.getBoundingClientRect() : null;
       const view = visible ? menu.querySelector(".ytp-popup-content > .ytp-panel") : null;
-      gearSnapshot = view && from ? { view: view.cloneNode(true), width: from.width, height: from.height } : null;
+      gearSnapshot = view && from ? { view: cleanSnapshot(view), width: from.width, height: from.height } : null;
       closeYouTubeSettingsMenu();
       const panel = openFilterPanel("none");
       if (!panel || !gearSnapshot) return;
@@ -5199,7 +5230,7 @@ ${customCss}
       }
       if (adState.liveRateBlockedKey === key) {
         const cushion = LIVE_MODES[normalizeLiveMode(config.liveCatchUpMode)].cushion;
-        const gap = Number.isFinite(stats.behind) ? stats.behind : stats.latency;
+        const gap = Math.max(Number.isFinite(stats.behind) ? stats.behind : 0, Number.isFinite(stats.health) ? stats.health : 0);
         if (gap > cushion + 8 && stats.health > 1.5 && Date.now() - (adState.liveLastJumpAt || 0) > 2e4) {
           adState.liveLastJumpAt = Date.now();
           postMainWorldMessage({ source: MAIN_PLAYER_COMMAND, command: "seekToLiveHead" });
@@ -5360,7 +5391,7 @@ ${customCss}
           closeLivePanel();
         });
         menu.appendChild(now);
-        for (const [key, label] of [["latency", "Atraso"], ["behind", "Atrás do ao vivo"], ["health", "Buffer"], ["rate", "Velocidade agora"]]) {
+        for (const [key, label] of [["latency", "Atraso"], ["behind", "Dá para adiantar"], ["health", "Buffer"], ["rate", "Velocidade agora"]]) {
           const info = createMenuItem({ role: "menuitem", label, content: "—" });
           info.classList.add("yte-menuitem--info");
           info.dataset.liveInfo = key;
@@ -5389,7 +5420,8 @@ ${customCss}
         if (content && content.textContent !== value) content.textContent = value;
       };
       set("latency", stats ? stats.atLiveHead ? formatSeconds(stats.latency) : "assistindo atrás (DVR)" : "—");
-      set("behind", stats && Number.isFinite(stats.behind) ? formatSeconds(stats.behind) : "—");
+      const spendable = stats ? Math.max(Number.isFinite(stats.behind) ? stats.behind : 0, Number.isFinite(stats.health) ? stats.health : 0) : Number.NaN;
+      set("behind", formatSeconds(spendable));
       set("health", stats ? formatSeconds(stats.health) : "—");
       const blockedHere = adState.liveRateBlockedKey === getCurrentVideoKey();
       set("rate", (getActiveVideo()?.playbackRate || 1).toFixed(2).replace(".", ",") + "x" + (blockedHere ? " (live não permite acelerar; pula para o ao vivo)" : ""));
