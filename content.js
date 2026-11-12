@@ -4935,7 +4935,6 @@
     };
     let gearObserver = null;
     let gearObservedMenu = null;
-    let gearRaf = 0;
     function gearIcon(name) {
       return '<svg height="24" viewBox="0 0 24 24" width="24" aria-hidden="true"><path fill="#fff" d="' + (GEAR_ICONS[name] || "") + '"/></svg>';
     }
@@ -5016,7 +5015,7 @@
       });
       return row;
     }
-    function fitGearMenu(player, menu, panel, list) {
+    function fitGearMenu(player, menu, panel, list, animate = false) {
       const current = parseFloat(list.style.height);
       if (!Number.isFinite(current)) return;
       const listStyle = getComputedStyle(list);
@@ -5024,17 +5023,26 @@
       const rowsHeight = padding + Array.from(list.children).reduce((sum, row) => sum + row.getBoundingClientRect().height, 0);
       const max = Math.max(200, player.clientHeight - 80);
       const target = Math.min(max, Math.ceil(rowsHeight));
+      if (animate && Math.abs((parseFloat(menu.style.height) || 0) - target) >= 1) {
+        const easing = "cubic-bezier(0.4, 0, 0.2, 1)";
+        for (const el of [menu, panel]) {
+          el.style.transition = `height 200ms ${easing}`;
+          window.setTimeout(() => {
+            el.style.transition = "";
+          }, 230);
+        }
+      }
       for (const el of [list, panel, menu]) {
         const height = parseFloat(el.style.height);
         if (Number.isFinite(height) && Math.abs(height - target) >= 1) el.style.height = target + "px";
       }
     }
     function injectGearItems() {
-      gearRaf = 0;
       const player = getYouTubePlayer();
       const menu = player?.querySelector(".ytp-settings-menu");
       if (menu && config.enabled) syncSpeedPanel(menu);
-      if (!player || !menu || menu.style.display === "none" || !shouldAddGearItems()) return;
+      if (!player || !menu || !shouldAddGearItems()) return;
+      const hidden = menu.style.display === "none" || getComputedStyle(menu).display === "none";
       if (gearSubmenu || menu.querySelector(".ytp-panel .ytp-panel-header")) return;
       const panels = Array.from(menu.querySelectorAll(".ytp-panel"));
       const panel = panels[panels.length - 1];
@@ -5042,14 +5050,14 @@
       if (!panel || !list) return;
       if (list.querySelector(`[${GEAR_ITEM_ATTR}]`)) {
         refreshGearItems();
-        fitGearMenu(player, menu, panel, list);
+        if (!hidden) fitGearMenu(player, menu, panel, list);
         return;
       }
       const rows = getGearItems().map(buildGearRow);
       const toggles = Array.from(list.querySelectorAll(':scope > .ytp-menuitem[role="menuitemcheckbox"]'));
       const anchor = toggles.length ? toggles[toggles.length - 1].nextElementSibling : list.querySelector(':scope > .ytp-menuitem[aria-haspopup="true"]');
       for (const row of rows) list.insertBefore(row, anchor);
-      fitGearMenu(player, menu, panel, list);
+      if (!hidden) fitGearMenu(player, menu, panel, list, true);
     }
     const SPEED_PANEL_MAX = 10;
     const SPEED_PANEL_STEP_ABOVE_API = 0.25;
@@ -5117,9 +5125,14 @@
         applyPanelRate(Math.max(YOUTUBE_API_MAX_RATE, rate - SPEED_PANEL_STEP_ABOVE_API));
       }
     }, true);
+    let gearQueued = false;
     function scheduleGearInjection() {
-      if (gearRaf) return;
-      gearRaf = requestAnimationFrame(injectGearItems);
+      if (gearQueued) return;
+      gearQueued = true;
+      queueMicrotask(() => {
+        gearQueued = false;
+        injectGearItems();
+      });
     }
     function bindGearMenu() {
       if (!shouldAddGearItems()) return;

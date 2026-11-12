@@ -4918,7 +4918,6 @@ declare global {
   };
   let gearObserver: MutationObserver | null = null;
   let gearObservedMenu: HTMLElement | null = null;
-  let gearRaf = 0;
 
   function gearIcon(name: string) {
     return '<svg height="24" viewBox="0 0 24 24" width="24" aria-hidden="true"><path fill="#fff" d="' + (GEAR_ICONS[name] || "") + '"/></svg>';
@@ -5019,7 +5018,7 @@ declare global {
   // Make YouTube's inline heights fit the rows actually in the list (ours
   // included). Runs on every rebuild: going back from a sub-menu makes
   // YouTube recompute heights without our rows.
-  function fitGearMenu(player: HTMLElement, menu: HTMLElement, panel: HTMLElement, list: HTMLElement) {
+  function fitGearMenu(player: HTMLElement, menu: HTMLElement, panel: HTMLElement, list: HTMLElement, animate = false) {
     const current = parseFloat(list.style.height);
     if (!Number.isFinite(current)) return;
     const listStyle = getComputedStyle(list);
@@ -5027,6 +5026,15 @@ declare global {
     const rowsHeight = padding + Array.from(list.children).reduce((sum, row) => sum + (row as HTMLElement).getBoundingClientRect().height, 0);
     const max = Math.max(200, player.clientHeight - 80);
     const target = Math.min(max, Math.ceil(rowsHeight));
+    // If YouTube measured before our rows existed (first open), grow with the
+    // same easing as its own resizes instead of jumping.
+    if (animate && Math.abs((parseFloat(menu.style.height) || 0) - target) >= 1) {
+      const easing = "cubic-bezier(0.4, 0, 0.2, 1)";
+      for (const el of [menu, panel]) {
+        el.style.transition = `height 200ms ${easing}`;
+        window.setTimeout(() => { el.style.transition = ""; }, 230);
+      }
+    }
     // On the main panel YouTube keeps menu = panel = list height.
     for (const el of [list, panel, menu]) {
       const height = parseFloat(el.style.height);
@@ -5035,11 +5043,13 @@ declare global {
   }
 
   function injectGearItems() {
-    gearRaf = 0;
     const player = getYouTubePlayer();
     const menu = player?.querySelector(".ytp-settings-menu") as HTMLElement | null;
     if (menu && config.enabled) syncSpeedPanel(menu);
-    if (!player || !menu || menu.style.display === "none" || !shouldAddGearItems()) return;
+    if (!player || !menu || !shouldAddGearItems()) return;
+    // Rows are also added while the menu is closed, so YouTube already
+    // measures them when it opens (no size jump in its open animation).
+    const hidden = menu.style.display === "none" || getComputedStyle(menu).display === "none";
 
     // Main panel = the one without a sub-menu header.
     // While a sub-menu (Legendas, Qualidade, Timer…) is open, leave YouTube's
@@ -5051,7 +5061,7 @@ declare global {
     if (!panel || !list) return;
     if (list.querySelector(`[${GEAR_ITEM_ATTR}]`)) {
       refreshGearItems();
-      fitGearMenu(player, menu, panel, list);
+      if (!hidden) fitGearMenu(player, menu, panel, list);
       return;
     }
 
@@ -5062,7 +5072,7 @@ declare global {
     const anchor = toggles.length ? toggles[toggles.length - 1].nextElementSibling : list.querySelector(':scope > .ytp-menuitem[aria-haspopup="true"]');
     for (const row of rows) list.insertBefore(row, anchor);
 
-    fitGearMenu(player, menu, panel, list);
+    if (!hidden) fitGearMenu(player, menu, panel, list, true);
   }
 
   // ── YouTube's speed panel up to 10x ──
@@ -5145,9 +5155,15 @@ declare global {
     }
   }, true);
 
+  // Microtask, not rAF: rows land before the browser paints the opening menu.
+  let gearQueued = false;
   function scheduleGearInjection() {
-    if (gearRaf) return;
-    gearRaf = requestAnimationFrame(injectGearItems);
+    if (gearQueued) return;
+    gearQueued = true;
+    queueMicrotask(() => {
+      gearQueued = false;
+      injectGearItems();
+    });
   }
 
   // Watch YouTube's settings menu: it is created lazily and its panels are
