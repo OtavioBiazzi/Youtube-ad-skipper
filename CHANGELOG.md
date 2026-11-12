@@ -2,6 +2,11 @@
 
 Todas as mudancas relevantes deste projeto serao registradas aqui.
 
+## 5.2.4
+
+- Números legíveis: versão, contadores e tempos usam uma fonte normal; a fonte pixel fica só nos títulos.
+- A extensão não briga mais com o YouTube pela altura do menu da engrenagem. A leve "piscada" que ainda aparece ao ligar/desligar uma opção é do próprio YouTube e acontece mesmo sem a extensão.
+
 ## 5.2.3
 
 - Contagem de anúncios pulados corrigida: um mesmo anúncio podia ser contado duas vezes (quando o anúncio terminava, o vídeo voltava ao início enquanto o YouTube ainda marcava o player como em anúncio). Agora cada contagem exige um anúncio de pelo menos 0,8 s (ou um clique real no Pular) e 1,2 s entre contagens.

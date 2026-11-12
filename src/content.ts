@@ -4987,8 +4987,13 @@ declare global {
     if (!menu || menu === gearObservedMenu) return;
     gearObserver?.disconnect();
     gearObservedMenu = menu;
+    // Only react to YouTube rebuilding panels (childList). Reacting to its
+    // style writes made us fight its resize animation: the menu height
+    // flipped back and forth (the "blink" when toggling an option).
     gearObserver = new MutationObserver(scheduleGearInjection);
-    gearObserver.observe(menu, { childList: true, subtree: true, attributes: true, attributeFilter: ["style"] });
+    gearObserver.observe(menu, { childList: true, subtree: true });
+    // After YouTube re-measures (e.g. a toggle), fit once when it settles.
+    menu.addEventListener("click", () => window.setTimeout(scheduleGearInjection, 260));
     scheduleGearInjection();
   }
 

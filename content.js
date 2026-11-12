@@ -4988,7 +4988,8 @@
       gearObserver?.disconnect();
       gearObservedMenu = menu;
       gearObserver = new MutationObserver(scheduleGearInjection);
-      gearObserver.observe(menu, { childList: true, subtree: true, attributes: true, attributeFilter: ["style"] });
+      gearObserver.observe(menu, { childList: true, subtree: true });
+      menu.addEventListener("click", () => window.setTimeout(scheduleGearInjection, 260));
       scheduleGearInjection();
     }
     document.addEventListener("click", (event) => {

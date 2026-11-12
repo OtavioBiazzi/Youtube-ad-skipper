@@ -609,3 +609,18 @@ body.theme-light { font-size: 15px; }
 .opt-row:has([id^="opt-cinema"]),
 .field-row:has([data-setting^="cinema"]),
 .field-row:has([id^="opt-cinema"]) { display: none !important; }
+
+
+/* Numbers in a readable face; the pixel font stays on titles only. */
+.header-version,
+.stat-value,
+.delay-value,
+#version-tag {
+  font-family: var(--font-mono) !important;
+  font-weight: 500 !important;
+  letter-spacing: 0 !important;
+}
+
+.stat-value { font-size: 32px; }
+.delay-value { font-size: 48px; }
+.header-version { font-size: 13px; color: var(--text-dim); }
