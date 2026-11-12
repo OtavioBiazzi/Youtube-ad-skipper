@@ -127,14 +127,15 @@ try {
     const panelOpen = await page.isVisible("#yte-filter-panel");
     check("filter panel opens inside the player", panelOpen);
     if (panelOpen) {
-      await page.click('#yte-filter-panel [data-preset="night"]');
+      await page.click('#yte-filter-panel [aria-haspopup="true"]');
+      await page.click('#yte-filter-panel .ytp-menuitem:has-text("Noite")');
       await page.waitForTimeout(300);
       const filter = await page.evaluate(() => getComputedStyle(document.querySelector("#movie_player video.html5-main-video")).filter);
       check("preset applies a CSS filter to the video", /sepia|hue-rotate|brightness/.test(filter), filter);
       const pausedAfterPanel = await page.evaluate(() => document.querySelector("#movie_player video").paused);
       check("clicking inside the panel does not pause the video", !pausedAfterPanel);
       await page.screenshot({ path: join(screenshotDir, "e2e-filters.png") });
-      await page.click('#yte-filter-panel .yte-fp-foot button');
+      await page.click('#yte-filter-panel .ytp-menuitem:has-text("Restaurar padrão")');
       await page.keyboard.press("Escape");
       await page.mouse.click(5, 300);
     }

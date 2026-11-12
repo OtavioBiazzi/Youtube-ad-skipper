@@ -311,7 +311,10 @@ import { getAdSeekTarget } from "./shared/adStrategy";
   // playing the real content, so every destructive action re-checks this.
   function isAdShowing() {
     const player = getPlayer();
-    return !!player && (player.classList.contains("ad-showing") || player.classList.contains("ad-interrupting"));
+    if (!player) return false;
+    if (player.classList.contains("ad-showing") || player.classList.contains("ad-interrupting")) return true;
+    const survey = player.querySelector(".ytp-ad-survey, .ytp-ad-survey-interstitial, .ytp-ad-survey-question") as HTMLElement | null;
+    return !!survey && (survey.offsetWidth > 0 || survey.offsetHeight > 0);
   }
 
   function clickSkipButton() {
@@ -329,6 +332,9 @@ import { getAdSeekTarget } from "./shared/adStrategy";
       '[title*="Skip" i]',
       '[title*="Pular" i]',
       '[class*="skip"][class*="ad" i]',
+      ".ytp-ad-survey .ytp-ad-skip-button-modern",
+      '.ytp-ad-survey [class*="skip"] button',
+      '.ytp-ad-survey-interstitial [class*="skip"] button',
     ];
 
     for (const selector of selectors) {

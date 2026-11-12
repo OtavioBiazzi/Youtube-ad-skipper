@@ -188,6 +188,7 @@ export {};
 const POPUP_SETTING_MESSAGES: Record<string, [string, string]> = {
   miniplayerEnabled: ["Miniplayer ativado.", "Miniplayer desativado."],
   resumePlaybackEnabled: ["Vídeos vão continuar de onde pararam.", "Continuar de onde parou desativado."],
+  liveCatchUpEnabled: ["Lives sem atraso: acelera de leve quando atrasar.", "Lives no ritmo normal."],
 };
 
 const popupSettingInputs = Array.from(document.querySelectorAll<HTMLInputElement>("[data-popup-setting]"));
@@ -205,5 +206,30 @@ popupSettingInputs.forEach((input) => {
     chrome.storage.local.set({ [key]: input.checked });
     const [on, off] = POPUP_SETTING_MESSAGES[key] || ["Configuração aplicada.", "Configuração aplicada."];
     announceChange(input.checked ? on : off);
+  });
+});
+
+// ── Where the player buttons live (segmented: Dentro / Fora / Off) ──────────
+
+const placementButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-placement]"));
+
+function renderPlacement(inside: boolean, below: boolean) {
+  const current = inside ? "inside" : below ? "below" : "off";
+  placementButtons.forEach((button) => button.setAttribute("aria-checked", String(button.dataset.placement === current)));
+}
+
+chrome.storage.local.get(DEFAULT_SETTINGS, (settings: Record<string, unknown>) => {
+  const migrated = migrateSettings(settings) as Record<string, unknown>;
+  renderPlacement(migrated.playerControlsEnabled !== false, migrated.toolbarEnabled !== false);
+});
+
+placementButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    const value = button.dataset.placement;
+    const inside = value === "inside";
+    const below = value === "below";
+    chrome.storage.local.set({ playerControlsEnabled: inside, toolbarEnabled: below });
+    renderPlacement(inside, below);
+    announceChange(inside ? "Botões dentro do player." : below ? "Botões numa barra abaixo do vídeo." : "Botões escondidos.");
   });
 });

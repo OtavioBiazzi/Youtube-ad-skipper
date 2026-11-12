@@ -118,8 +118,13 @@
     '[title*="Skip" i]',
     '[title*="Pular" i]',
     '[class*="skip"][class*="ad" i]',
-    ".ytp-ad-overlay-close-button"
+    ".ytp-ad-overlay-close-button",
+    // Survey ads ("Pular pesquisa") use their own containers.
+    ".ytp-ad-survey .ytp-ad-skip-button-modern",
+    '.ytp-ad-survey [class*="skip"] button',
+    '.ytp-ad-survey-interstitial [class*="skip"] button'
   ];
+  const AD_SURVEY_SELECTORS = ".ytp-ad-survey, .ytp-ad-survey-interstitial, .ytp-ad-survey-question";
   function getYouTubePlayer(doc = document) {
     return doc.getElementById("movie_player") || doc.querySelector(".html5-video-player");
   }
@@ -153,6 +158,8 @@
       return true;
     }
     const root = player || doc;
+    const survey = root.querySelector(AD_SURVEY_SELECTORS);
+    if (survey && (survey.offsetWidth > 0 || survey.offsetHeight > 0)) return true;
     const badges = root.querySelectorAll(
       ".ytp-ad-badge, .ytp-ad-visit-advertiser-button, .ytp-visit-advertiser-link"
     );
@@ -3522,84 +3529,110 @@
       style.textContent = `
       #${OVERLAY_ID} {
         position: absolute;
-        top: 24px;
-        right: 24px;
-        z-index: 99999;
-        background: rgba(0, 0, 0, 0.65);
-        border: 1px solid rgba(255, 255, 255, 0.15);
-        border-radius: 4px;
-        padding: 8px 12px;
+        top: 12px;
+        right: 12px;
+        z-index: 60;
         display: flex;
-        flex-direction: column;
-        gap: 3px;
-        font-family: "Roboto", "Arial", sans-serif;
+        align-items: center;
+        gap: 4px;
+        padding: 4px 4px 4px 14px;
+        border-radius: 18px;
+        background: rgba(0, 0, 0, 0.6);
         color: #fff;
-        min-width: 140px;
+        font: 500 13px/1 Roboto, Arial, sans-serif;
         pointer-events: auto;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+        text-shadow: none;
       }
 
-      #${OVERLAY_ID} .ytp-ad-text {
-        font-size: 13px; font-weight: 500; text-align: center;
-        opacity: 0.9; margin-bottom: 2px;
+      #${OVERLAY_ID} .yte-ad-text {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        white-space: nowrap;
+        font-variant-numeric: tabular-nums;
       }
 
-      #${OVERLAY_ID} .ytp-ad-timer-text {
-        font-size: 16px; font-weight: 600; text-align: center;
+      #${OVERLAY_ID} .yte-ad-text::before {
+        content: "";
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #fc0;
       }
+
+      #${OVERLAY_ID}[data-state="waiting"] .yte-ad-text::before { background: rgba(255, 255, 255, 0.6); }
+      #${OVERLAY_ID}[data-state="skipping"] .yte-ad-text::before { background: #3ea6ff; }
 
       #${OVERLAY_ID} button {
-        border: none; border-radius: 4px; padding: 6px 12px;
-        font-size: 12px; font-weight: 500; cursor: pointer;
-        font-family: inherit; width: 100%;
-        background: rgba(255,255,255,0.15); color: #fff;
-        transition: background 0.2s;
+        height: 28px;
+        padding: 0 12px;
+        border: 0;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.15);
+        color: #fff;
+        font: 500 12px Roboto, Arial, sans-serif;
+        cursor: pointer;
+        transition: background 0.15s ease;
       }
 
-      #${OVERLAY_ID} button:hover {
-        background: rgba(255,255,255,0.25);
-      }
+      #${OVERLAY_ID} button:hover { background: rgba(255, 255, 255, 0.28); }
     `;
-      document.head.appendChild(style);
+      (document.head || document.documentElement).appendChild(style);
+    }
+    function getOverlayState() {
+      const remaining = adState.skipTargetTime ? Math.max(0, Math.ceil((adState.skipTargetTime - Date.now()) / 1e3)) : 0;
+      const skipButton = !!findSkipAdButton();
+      if (remaining > 0) {
+        return { state: "counting", text: "Pulando em " + remaining + "s" };
+      }
+      if (skipButton) return { state: "skipping", text: "Pulando…" };
+      if (!config.aggressiveSkip) {
+        return { state: "waiting", text: "Esperando o botão Pular" };
+      }
+      return { state: "skipping", text: "Acelerando o anúncio…" };
+    }
+    function renderOverlayState() {
+      const overlay = document.getElementById(OVERLAY_ID);
+      const label = document.getElementById(TIMER_ID);
+      if (!overlay || !label) return;
+      const { state, text } = getOverlayState();
+      if (overlay.dataset.state !== state) overlay.dataset.state = state;
+      if (label.textContent !== text) label.textContent = text;
     }
     function createOverlay() {
       removeOverlay();
       injectStyles();
-      const player = document.querySelector("#movie_player") || document.querySelector(".html5-video-player");
+      const player = getYouTubePlayer();
       if (!player) return;
       const overlay = document.createElement("div");
       overlay.id = OVERLAY_ID;
-      const delay = getEffectiveDelay();
-      const initialRemaining = adState.skipTargetTime ? Math.max(0, Math.ceil((adState.skipTargetTime - Date.now()) / 1e3)) : delay;
-      overlay.innerHTML = `
-      <div class="ytp-ad-text">Auto Pular Anuncio</div>
-      <div class="ytp-ad-timer-text" id="${TIMER_ID}">${initialRemaining}s</div>
-      <button class="ytp-ad-watch">Assistir Anuncio</button>
-    `;
-      player.style.position = "relative";
+      overlay.setAttribute("role", "status");
+      const label = document.createElement("span");
+      label.className = "yte-ad-text";
+      label.id = TIMER_ID;
+      const watchBtn = document.createElement("button");
+      watchBtn.type = "button";
+      watchBtn.className = "ytp-ad-watch";
+      watchBtn.textContent = "Assistir";
+      watchBtn.title = "Assistir este anúncio até o fim";
+      overlay.append(label, watchBtn);
+      for (const type of ["click", "mousedown", "pointerdown", "dblclick"]) {
+        overlay.addEventListener(type, (event) => event.stopPropagation());
+      }
       player.appendChild(overlay);
       adState.overlayEl = overlay;
-      const watchBtn = overlay.querySelector(".ytp-ad-watch");
-      if (watchBtn) {
-        watchBtn.addEventListener("click", () => {
-          adState.watching = true;
-          stopForceSkipBurst();
-          stopSpeedThrough();
-          clearSkipTimeout();
-          clearInterval(adState.countdownInterval);
-          removeOverlay();
-          unmuteVideo();
-          resetPlaybackRate();
-        });
-      }
-      adState.countdownInterval = setInterval(() => {
-        if (!adState.skipTargetTime) return;
-        let remaining = Math.ceil((adState.skipTargetTime - Date.now()) / 1e3);
-        if (remaining < 0) remaining = 0;
-        const timerEl = document.getElementById(TIMER_ID);
-        if (timerEl) timerEl.textContent = remaining + "s";
-        if (remaining <= 0) clearInterval(adState.countdownInterval);
-      }, 200);
+      renderOverlayState();
+      watchBtn.addEventListener("click", () => {
+        adState.watching = true;
+        stopForceSkipBurst();
+        stopSpeedThrough();
+        clearSkipTimeout();
+        clearInterval(adState.countdownInterval);
+        removeOverlay();
+        unmuteVideo();
+        resetPlaybackRate();
+      });
+      adState.countdownInterval = setInterval(renderOverlayState, 200);
     }
     function removeOverlay() {
       document.querySelectorAll("#" + OVERLAY_ID).forEach((el) => el.remove());
@@ -3672,14 +3705,14 @@
         style.id = "ytp-toast-style";
         style.textContent = `
         #ytp-skipper-toast {
-          position: fixed; bottom: 24px; right: 24px;
-          padding: 10px 20px; background: rgba(0, 0, 0, 0.85);
-          color: #fff; font-family: 'Roboto', 'Arial', sans-serif;
-          font-size: 13px; font-weight: 500; border-radius: 8px;
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          z-index: 999999; opacity: 0; transform: translateY(10px);
-          transition: opacity 0.3s ease, transform 0.3s ease;
-          pointer-events: none; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+          position: fixed; left: 24px; bottom: 24px;
+          padding: 12px 16px; border-radius: 8px;
+          background: var(--yt-spec-inverted-background, #f1f1f1);
+          color: var(--yt-spec-text-primary-inverse, #0f0f0f);
+          font: 500 14px/1.2 Roboto, Arial, sans-serif;
+          z-index: 2200; opacity: 0; transform: translateY(8px);
+          transition: opacity 0.2s ease, transform 0.2s ease;
+          pointer-events: none; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
         }
         #ytp-skipper-toast.show { opacity: 1; transform: translateY(0); }
       `;
@@ -3687,7 +3720,7 @@
       }
       const toast = document.createElement("div");
       toast.id = "ytp-skipper-toast";
-      toast.textContent = "Anúncio pulado ✓";
+      toast.textContent = "Anúncio pulado";
       document.body.appendChild(toast);
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
@@ -3907,120 +3940,80 @@
         white-space: nowrap;
       }
 
+      /* The panel uses YouTube's .ytp-popup/.ytp-menuitem styles; these are
+         only placement and fallbacks (zero specificity via :where). */
       #${FILTER_PANEL_ID} {
         position: absolute;
         right: 12px;
         bottom: 62px;
-        z-index: 75;
-        width: 290px;
-        max-height: calc(100% - 84px);
-        overflow-y: auto;
-        padding: 12px 14px 10px;
+        z-index: 70;
+      }
+
+      #${FILTER_PANEL_ID}[hidden] { display: none !important; }
+
+      :where(#${FILTER_PANEL_ID}) {
         border-radius: 12px;
-        background: rgba(24, 24, 24, 0.94);
+        background: rgba(0, 0, 0, 0.6);
+        overflow: hidden;
         color: #eee;
-        font: 400 13px/1.3 Roboto, Arial, sans-serif;
-        text-shadow: none;
-        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
-        backdrop-filter: blur(10px);
       }
 
-      #${FILTER_PANEL_ID}[hidden] { display: none; }
+      #${FILTER_PANEL_ID} .ytp-panel { overflow-y: auto; overflow-x: hidden; }
 
-      #${FILTER_PANEL_ID} .yte-fp-head {
-        display: flex;
+      #${FILTER_PANEL_ID} .yte-menuitem--slider { cursor: default; }
+
+      #${FILTER_PANEL_ID} .yte-menu-slider {
+        display: inline-flex;
         align-items: center;
-        justify-content: space-between;
-        margin-bottom: 10px;
-        font-weight: 500;
-        font-size: 14px;
+        gap: 10px;
+        width: 150px;
       }
 
-      #${FILTER_PANEL_ID} .yte-fp-toggle {
-        position: relative;
-        width: 36px;
-        height: 14px;
-        border: 0;
-        border-radius: 7px;
-        background: rgba(255, 255, 255, 0.3);
-        cursor: pointer;
-      }
-
-      #${FILTER_PANEL_ID} .yte-fp-toggle::after {
-        content: "";
-        position: absolute;
-        top: -3px;
-        left: -2px;
-        width: 20px;
-        height: 20px;
-        border-radius: 50%;
-        background: #f1f1f1;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
-        transition: transform 0.15s ease, background 0.15s ease;
-      }
-
-      #${FILTER_PANEL_ID} .yte-fp-toggle[aria-checked="true"] { background: rgba(255, 78, 69, 0.5); }
-      #${FILTER_PANEL_ID} .yte-fp-toggle[aria-checked="true"]::after { transform: translateX(20px); background: #ff4e45; }
-
-      #${FILTER_PANEL_ID} .yte-fp-presets {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 6px;
-        margin-bottom: 12px;
-      }
-
-      #${FILTER_PANEL_ID} .yte-fp-presets button {
-        height: 28px;
-        border: 0;
-        border-radius: 6px;
-        background: rgba(255, 255, 255, 0.1);
-        color: #eee;
-        font: 500 12px Roboto, Arial, sans-serif;
-        cursor: pointer;
-      }
-
-      #${FILTER_PANEL_ID} .yte-fp-presets button:hover { background: rgba(255, 255, 255, 0.18); }
-      #${FILTER_PANEL_ID} .yte-fp-presets button.is-current { background: #eee; color: #111; }
-
-      #${FILTER_PANEL_ID} label {
-        display: grid;
-        grid-template-columns: 92px 1fr 44px;
-        align-items: center;
-        gap: 8px;
-        min-height: 28px;
-      }
-
-      #${FILTER_PANEL_ID} output {
+      #${FILTER_PANEL_ID} .yte-menu-slider output {
+        min-width: 38px;
         text-align: right;
-        color: rgba(255, 255, 255, 0.7);
         font-variant-numeric: tabular-nums;
       }
 
-      #${FILTER_PANEL_ID} input[type="range"] {
-        width: 100%;
-        height: 3px;
+      #${FILTER_PANEL_ID} .yte-menu-slider input[type="range"] {
+        flex: 1;
+        min-width: 0;
+        height: 16px;
         margin: 0;
-        accent-color: #ff4e45;
+        background: transparent;
+        -webkit-appearance: none;
+        appearance: none;
         cursor: pointer;
       }
 
-      #${FILTER_PANEL_ID} .yte-fp-foot {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-top: 8px;
-        padding-top: 8px;
-        border-top: 1px solid rgba(255, 255, 255, 0.1);
-        color: rgba(255, 255, 255, 0.55);
-        font-size: 12px;
+      #${FILTER_PANEL_ID} .yte-menu-slider input[type="range"]::-webkit-slider-runnable-track {
+        height: 3px;
+        border-radius: 2px;
+        background: rgba(255, 255, 255, 0.3);
       }
 
-      #${FILTER_PANEL_ID} .yte-fp-foot button {
-        border: 0;
-        background: none;
-        color: #3ea6ff;
-        font: 500 12px Roboto, Arial, sans-serif;
-        cursor: pointer;
+      #${FILTER_PANEL_ID} .yte-menu-slider input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 12px;
+        height: 12px;
+        margin-top: -4.5px;
+        border-radius: 50%;
+        background: #fff;
+      }
+
+      #${FILTER_PANEL_ID} .yte-menu-slider input[type="range"]:focus-visible { outline: none; }
+      #${FILTER_PANEL_ID} .yte-menu-slider input[type="range"]:focus-visible::-webkit-slider-thumb {
+        box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.35);
+      }
+
+      /* Divider between our buttons and YouTube's own. */
+      #${PLAYER_CONTROLS_ID}::after {
+        content: "";
+        align-self: center;
+        width: 1px;
+        height: 20px;
+        margin: 0 6px 0 4px;
+        background: rgba(255, 255, 255, 0.28);
       }
     `;
     }
@@ -4247,6 +4240,17 @@
       const text = "· termina " + end.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
       if (label.textContent !== text) label.textContent = text;
     }
+    const FILTER_ROW_ICONS = {
+      toggle: "M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z",
+      presets: "M19 9l1.25-2.75L23 5l-2.75-1.25L19 1l-1.25 2.75L15 5l2.75 1.25L19 9zm-7.5.5L9 4 6.5 9.5 1 12l5.5 2.5L9 20l2.5-5.5L17 12l-5.5-2.5zM19 15l-1.25 2.75L15 19l2.75 1.25L19 23l1.25-2.75L23 19l-2.75-1.25L19 15z",
+      brightness: "M20 15.31 23.31 12 20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69zM12 18V6c3.31 0 6 2.69 6 6s-2.69 6-6 6z",
+      contrast: "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.94-.49-7-3.85-7-7.93s3.05-7.44 7-7.93v15.86z",
+      saturate: "M12 3a9 9 0 0 0 0 18c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8zm-5.5 9a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm3-4a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm3 4a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z",
+      hue: "M17.66 7.93 12 2.27 6.34 7.93c-3.12 3.12-3.12 8.19 0 11.31A7.98 7.98 0 0 0 12 21.58c2.05 0 4.1-.78 5.66-2.34 3.12-3.12 3.12-8.19 0-11.31zM12 19.59c-1.6 0-3.11-.62-4.24-1.76A5.95 5.95 0 0 1 6 13.59c0-1.6.62-3.11 1.76-4.24L12 5.1v14.49z",
+      sepia: "M6.76 4.84l-1.8-1.79-1.41 1.41 1.79 1.79 1.42-1.41zM4 10.5H1v2h3v-2zm9-9.95h-2V3.5h2V.55zm7.45 3.91-1.41-1.41-1.79 1.79 1.41 1.41 1.79-1.79zm-3.21 13.7 1.79 1.8 1.41-1.41-1.8-1.79-1.4 1.4zM20 10.5v2h3v-2h-3zm-8-5c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6zm-1 16.95h2V19.5h-2v2.95zm-7.45-3.91 1.41 1.41 1.79-1.8-1.41-1.41-1.79 1.8z",
+      grayscale: "M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16-7-8v8H5l7-8V5h7v14z",
+      reset: "M12 5V2L8 6l4 4V7c3.31 0 6 2.69 6 6 0 2.97-2.17 5.43-5 5.91v2.02c3.95-.49 7-3.85 7-7.93 0-4.42-3.58-8-8-8zm-6 8c0-1.65.67-3.15 1.76-4.24L6.34 7.34A7.95 7.95 0 0 0 4 13c0 4.08 3.05 7.44 7 7.93v-2.02c-2.83-.48-5-2.94-5-5.91z"
+    };
     function getVideoFilterValues() {
       return normalizeVideoFilters({
         brightness: config.videoFilterBrightness,
@@ -4284,89 +4288,177 @@
         }
       }, 250);
     }
+    let filterPanelView = "main";
+    function menuIcon(name) {
+      return '<svg height="24" viewBox="0 0 24 24" width="24" aria-hidden="true"><path fill="#fff" d="' + (FILTER_ROW_ICONS[name] || "") + '"/></svg>';
+    }
+    function createMenuItem(options) {
+      const item = document.createElement("div");
+      item.className = "ytp-menuitem";
+      item.setAttribute("role", options.role);
+      item.tabIndex = 0;
+      if (options.submenu) item.setAttribute("aria-haspopup", "true");
+      if (typeof options.checked === "boolean") item.setAttribute("aria-checked", String(options.checked));
+      const icon = document.createElement("div");
+      icon.className = "ytp-menuitem-icon";
+      if (options.icon) icon.innerHTML = menuIcon(options.icon);
+      const label = document.createElement("div");
+      label.className = "ytp-menuitem-label";
+      label.textContent = options.label;
+      const content = document.createElement("div");
+      content.className = "ytp-menuitem-content";
+      if (typeof options.content === "string") content.textContent = options.content;
+      else if (options.content) content.appendChild(options.content);
+      item.append(icon, label, content);
+      return item;
+    }
+    function onMenuActivate(item, handler) {
+      item.addEventListener("click", handler);
+      item.addEventListener("keydown", (event) => {
+        const key = event.key;
+        if (key === "Enter" || key === " ") {
+          event.preventDefault();
+          handler();
+        }
+      });
+    }
+    function renderFilterPanel(panel) {
+      const values = getVideoFilterValues();
+      const presetId = findPresetId(values);
+      const panelEl = document.createElement("div");
+      panelEl.className = "ytp-panel";
+      const menu = document.createElement("div");
+      menu.className = "ytp-panel-menu";
+      menu.setAttribute("role", "menu");
+      if (filterPanelView === "presets") {
+        const header = document.createElement("div");
+        header.className = "ytp-panel-header";
+        const back = document.createElement("button");
+        back.className = "ytp-button ytp-panel-back-button";
+        back.setAttribute("aria-label", "Voltar");
+        back.addEventListener("click", () => {
+          filterPanelView = "main";
+          renderFilterPanel(panel);
+        });
+        const title = document.createElement("span");
+        title.className = "ytp-panel-title";
+        title.textContent = "Predefinição";
+        header.append(back, title);
+        panelEl.appendChild(header);
+        for (const preset of VIDEO_FILTER_PRESETS) {
+          const item = createMenuItem({ role: "menuitemradio", label: preset.label, checked: preset.id === presetId });
+          onMenuActivate(item, () => {
+            setVideoFilterValues({ ...preset.values }, preset.id !== "normal" || !!config.videoFiltersEnabled);
+            filterPanelView = "main";
+            renderFilterPanel(panel);
+          });
+          menu.appendChild(item);
+        }
+      } else {
+        const toggle = createMenuItem({ role: "menuitemcheckbox", icon: "toggle", label: "Filtros de imagem", checked: !!config.videoFiltersEnabled });
+        const toggleBox = document.createElement("div");
+        toggleBox.className = "ytp-menuitem-toggle-checkbox";
+        toggle.querySelector(".ytp-menuitem-content").appendChild(toggleBox);
+        toggle.dataset.yteToggle = "1";
+        onMenuActivate(toggle, () => {
+          config.videoFiltersEnabled = !config.videoFiltersEnabled;
+          setVideoFilterValues(getVideoFilterValues(), false);
+        });
+        menu.appendChild(toggle);
+        const presetLabel = VIDEO_FILTER_PRESETS.find((preset) => preset.id === presetId)?.label || "Personalizado";
+        const presets = createMenuItem({ role: "menuitem", icon: "presets", label: "Predefinição", content: presetLabel, submenu: true });
+        onMenuActivate(presets, () => {
+          filterPanelView = "presets";
+          renderFilterPanel(panel);
+        });
+        menu.appendChild(presets);
+        for (const key of Object.keys(VIDEO_FILTER_LIMITS)) {
+          const limits = VIDEO_FILTER_LIMITS[key];
+          const wrap = document.createElement("span");
+          wrap.className = "yte-menu-slider";
+          const input = document.createElement("input");
+          input.type = "range";
+          input.min = String(limits.min);
+          input.max = String(limits.max);
+          input.step = String(limits.step);
+          input.value = String(values[key]);
+          input.dataset.filter = key;
+          input.setAttribute("aria-label", limits.label);
+          const output = document.createElement("output");
+          output.textContent = values[key] + limits.unit;
+          wrap.append(input, output);
+          input.addEventListener("input", () => {
+            const next = getVideoFilterValues();
+            next[key] = Number(input.value);
+            setVideoFilterValues(normalizeVideoFilters(next));
+          });
+          input.addEventListener("dblclick", () => {
+            const next = getVideoFilterValues();
+            next[key] = VIDEO_FILTER_DEFAULTS[key];
+            setVideoFilterValues(next);
+          });
+          const item = createMenuItem({ role: "menuitem", icon: key, label: limits.label, content: wrap });
+          item.classList.add("yte-menuitem--slider");
+          menu.appendChild(item);
+        }
+        const reset = createMenuItem({ role: "menuitem", icon: "reset", label: "Restaurar padrão" });
+        onMenuActivate(reset, () => setVideoFilterValues({ ...VIDEO_FILTER_DEFAULTS }, false));
+        menu.appendChild(reset);
+      }
+      panelEl.appendChild(menu);
+      const content = panel.querySelector(".ytp-popup-content");
+      content.replaceChildren(panelEl);
+      sizeFilterPanel(panel);
+    }
+    function sizeFilterPanel(panel) {
+      const player = getYouTubePlayer();
+      const panelEl = panel.querySelector(".ytp-panel");
+      if (!player || !panelEl) return;
+      const width = Math.min(360, Math.max(260, player.clientWidth - 24));
+      panel.style.width = width + "px";
+      panelEl.style.width = width + "px";
+      panel.style.height = "auto";
+      panelEl.style.height = "auto";
+      panelEl.style.position = "static";
+      const natural = panelEl.scrollHeight;
+      const maxHeight = Math.max(160, player.clientHeight - 84);
+      const height = Math.min(natural, maxHeight);
+      panelEl.style.position = "";
+      panel.style.height = height + "px";
+      panelEl.style.height = height + "px";
+    }
     function buildFilterPanel() {
       const panel = document.createElement("div");
       panel.id = FILTER_PANEL_ID;
+      panel.className = "ytp-popup";
       panel.hidden = true;
       panel.setAttribute("role", "dialog");
       panel.setAttribute("aria-label", "Filtros de imagem");
-      const head = document.createElement("div");
-      head.className = "yte-fp-head";
-      const title = document.createElement("span");
-      title.textContent = "Filtros de imagem";
-      const toggle = document.createElement("button");
-      toggle.type = "button";
-      toggle.className = "yte-fp-toggle";
-      toggle.setAttribute("role", "switch");
-      toggle.setAttribute("aria-label", "Ativar filtros");
-      toggle.addEventListener("click", () => {
-        config.videoFiltersEnabled = !config.videoFiltersEnabled;
-        setVideoFilterValues(getVideoFilterValues(), false);
-      });
-      head.append(title, toggle);
-      const presets = document.createElement("div");
-      presets.className = "yte-fp-presets";
-      for (const preset of VIDEO_FILTER_PRESETS) {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.dataset.preset = preset.id;
-        button.textContent = preset.label;
-        button.addEventListener("click", () => setVideoFilterValues({ ...preset.values }, preset.id !== "normal" || !!config.videoFiltersEnabled));
-        presets.appendChild(button);
-      }
-      panel.append(head, presets);
-      for (const key of Object.keys(VIDEO_FILTER_LIMITS)) {
-        const limits = VIDEO_FILTER_LIMITS[key];
-        const row = document.createElement("label");
-        const name = document.createElement("span");
-        name.textContent = limits.label;
-        const input = document.createElement("input");
-        input.type = "range";
-        input.min = String(limits.min);
-        input.max = String(limits.max);
-        input.step = String(limits.step);
-        input.dataset.filter = key;
-        const output = document.createElement("output");
-        input.addEventListener("input", () => {
-          const values = getVideoFilterValues();
-          values[key] = Number(input.value);
-          setVideoFilterValues(normalizeVideoFilters(values));
-        });
-        input.addEventListener("dblclick", () => {
-          const values = getVideoFilterValues();
-          values[key] = VIDEO_FILTER_DEFAULTS[key];
-          setVideoFilterValues(values);
-        });
-        row.append(name, input, output);
-        panel.appendChild(row);
-      }
-      const foot = document.createElement("div");
-      foot.className = "yte-fp-foot";
-      const hint = document.createElement("span");
-      hint.textContent = "Vale para todos os vídeos";
-      const reset = document.createElement("button");
-      reset.type = "button";
-      reset.textContent = "Restaurar";
-      reset.addEventListener("click", () => setVideoFilterValues({ ...VIDEO_FILTER_DEFAULTS }, false));
-      foot.append(hint, reset);
-      panel.appendChild(foot);
+      const content = document.createElement("div");
+      content.className = "ytp-popup-content";
+      panel.appendChild(content);
       for (const type of ["click", "dblclick", "mousedown", "mouseup", "pointerdown", "pointerup", "keydown", "keyup", "wheel", "contextmenu"]) {
         panel.addEventListener(type, stopPlayerEvent);
       }
       panel.addEventListener("keydown", (event) => {
-        if (event.key === "Escape") closeFilterPanel();
+        if (event.key !== "Escape") return;
+        if (filterPanelView === "presets") {
+          filterPanelView = "main";
+          renderFilterPanel(panel);
+        } else {
+          closeFilterPanel();
+        }
       });
       return panel;
     }
     function syncFilterPanel() {
       const panel = document.getElementById(FILTER_PANEL_ID);
-      if (!panel) return;
+      if (!panel || panel.hidden || filterPanelView !== "main") return;
       const values = getVideoFilterValues();
-      panel.querySelector(".yte-fp-toggle")?.setAttribute("aria-checked", String(!!config.videoFiltersEnabled));
+      panel.querySelector("[data-yte-toggle]")?.setAttribute("aria-checked", String(!!config.videoFiltersEnabled));
       const presetId = findPresetId(values);
-      panel.querySelectorAll("[data-preset]").forEach((button) => {
-        button.classList.toggle("is-current", button.dataset.preset === presetId && (!!config.videoFiltersEnabled || presetId === "normal"));
-      });
+      const presetRow = panel.querySelector('[aria-haspopup="true"] .ytp-menuitem-content');
+      if (presetRow) presetRow.textContent = VIDEO_FILTER_PRESETS.find((preset) => preset.id === presetId)?.label || "Personalizado";
       panel.querySelectorAll("input[data-filter]").forEach((input) => {
         const key = input.dataset.filter;
         if (document.activeElement !== input) input.value = String(values[key]);
@@ -4397,8 +4489,9 @@
         closeFilterPanel();
         return;
       }
-      syncFilterPanel();
+      filterPanelView = "main";
       panel.hidden = false;
+      renderFilterPanel(panel);
       document.addEventListener("pointerdown", handleOutsideFilterPanel, true);
     }
     function getLiveTarget() {

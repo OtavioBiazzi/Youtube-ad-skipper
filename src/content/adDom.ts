@@ -21,7 +21,14 @@ const SKIP_BUTTON_SELECTORS = [
   '[title*="Pular" i]',
   '[class*="skip"][class*="ad" i]',
   ".ytp-ad-overlay-close-button",
+  // Survey ads ("Pular pesquisa") use their own containers.
+  ".ytp-ad-survey .ytp-ad-skip-button-modern",
+  ".ytp-ad-survey [class*=\"skip\"] button",
+  ".ytp-ad-survey-interstitial [class*=\"skip\"] button",
 ];
+
+// Survey ads sometimes play without the player's ad-showing class.
+const AD_SURVEY_SELECTORS = ".ytp-ad-survey, .ytp-ad-survey-interstitial, .ytp-ad-survey-question";
 
 export function getYouTubePlayer(doc: Document = document): HTMLElement | null {
   return (doc.getElementById("movie_player") || doc.querySelector(".html5-video-player")) as HTMLElement | null;
@@ -67,6 +74,8 @@ export function getAdPlaying(doc: Document = document): boolean {
   }
 
   const root: ParentNode = player || doc;
+  const survey = root.querySelector<HTMLElement>(AD_SURVEY_SELECTORS);
+  if (survey && (survey.offsetWidth > 0 || survey.offsetHeight > 0)) return true;
   const badges = root.querySelectorAll<HTMLElement>(
     ".ytp-ad-badge, .ytp-ad-visit-advertiser-button, .ytp-visit-advertiser-link",
   );

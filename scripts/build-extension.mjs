@@ -19,6 +19,7 @@ const staticFiles = [
   "manifest.json",
   "popup.html",
   "popup.css",
+  "fonts.css",
   "options.html",
   "options.css",
   "icon16.png",
