@@ -19,7 +19,7 @@ Todas as mudancas relevantes deste projeto serao registradas aqui.
 ### Adicionado
 
 - Botões dentro da barra do próprio player (velocidade, repetir, filtros, frame, boost, cinema, janela, PiP), com ícones no padrão do YouTube e uma divisória separando dos botões nativos. Opção de deixá-los dentro do player, numa barra abaixo do vídeo, nos dois ou escondidos.
-- Itens dentro do menu de configurações (engrenagem) do próprio YouTube: Filtros de imagem, Repetir vídeo, Volume boost, Modo cinema e, em lives, Tirar atraso. Com isso, a barra fica só com ações rápidas.
+- Itens dentro do menu de configurações (engrenagem) do próprio YouTube: Filtros de imagem, Repetir vídeo, Modo cinema e, em lives, Tirar atraso. A barra fica com as ações rápidas: velocidade, frame, volume boost, janela e PiP.
 - "Termina às" ao lado do tempo do vídeo (opcional), considerando a velocidade.
 - Painel de filtros dentro do player, com o mesmo visual do menu de configurações do YouTube: predefinições (Vívido, Cinema, Noite, Clarear, P&B), brilho, contraste, saturação, tom, quente e preto e branco. Os filtros agora valem para todos os vídeos.
 - Lives sem atraso: acelera de leve (até 1,25x) enquanto houver atraso acumulado e mostra o atraso no botão "AO VIVO".

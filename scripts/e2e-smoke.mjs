@@ -122,8 +122,16 @@ try {
     check("right click resets speed to 1x", Math.abs(rateAfterReset - 1) < 0.01, `rate=${rateAfterReset}`);
 
     // Filter panel: open, apply a preset, make sure the video keeps playing.
+    // Filters live in YouTube's gear menu (bar button only when that's off).
     await page.hover("#movie_player");
-    await page.click('#yte-controls [data-yte-action="filters"]');
+    if (await page.locator('#yte-controls [data-yte-action="filters"]').count()) {
+      await page.click('#yte-controls [data-yte-action="filters"]');
+    } else {
+      await page.click("#movie_player .ytp-settings-button");
+      await page.waitForTimeout(500);
+      await page.click('.ytp-settings-menu [data-yte-gear="filters"]');
+    }
+    await page.waitForTimeout(400);
     const panelOpen = await page.isVisible("#yte-filter-panel");
     check("filter panel opens inside the player", panelOpen);
     if (panelOpen) {
@@ -156,7 +164,7 @@ try {
       const capped = !!box && !!player && box.height >= player.clientHeight - 81;
       return { ours: menu ? menu.querySelectorAll("[data-yte-gear]").length : 0, fits: (!!last && !!box && last.bottom <= box.bottom + 1) || capped };
     });
-    check("our items appear in YouTube's settings menu", gear.ours >= 3, `items=${gear.ours}`);
+    check("our items appear in YouTube's settings menu", gear.ours >= 2, `items=${gear.ours}`);
     check("settings menu grows to fit them", gear.fits);
     await page.keyboard.press("Escape");
     await page.click("#movie_player .ytp-settings-button").catch(() => {});

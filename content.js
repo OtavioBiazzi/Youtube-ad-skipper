@@ -4074,9 +4074,9 @@
       }
       const inGear = config.settingsMenuItemsEnabled !== false;
       if (config.toolbarLoop !== false && !inGear) items.push({ id: "loop", tip: "Repetir vídeo", icon: "loop", priority: "mid" });
-      if (config.toolbarFilters !== false) items.push({ id: "filters", tip: "Filtros de imagem", icon: "filters", priority: "mid" });
+      if (config.toolbarFilters !== false && !inGear) items.push({ id: "filters", tip: "Filtros de imagem", icon: "filters", priority: "mid" });
       if (config.toolbarScreenshot !== false) items.push({ id: "screenshot", tip: "Salvar frame (PNG)", icon: "camera", priority: "low" });
-      if (config.toolbarVolumeBoost !== false && !inGear) items.push({ id: "boost", tip: "Volume boost", icon: "boost", priority: "low" });
+      if (config.toolbarVolumeBoost !== false) items.push({ id: "boost", tip: "Volume boost", icon: "boost", priority: "low" });
       if (!inGear) items.push({ id: "cinema", tip: "Modo cinema", icon: "cinema", priority: "low" });
       if (config.toolbarPopup !== false && config.playerPopupEnabled !== false) items.push({ id: "popup", tip: "Abrir em janela", icon: "popup", priority: "low" });
       if (config.toolbarPip !== false && document.pictureInPictureEnabled) items.push({ id: "pip", tip: "Picture-in-picture", icon: "pip", priority: "mid" });
@@ -4088,7 +4088,7 @@
     function getPlayerControlsSignature() {
       return getPlayerControlsStyle() + ":" + getPlayerControlItems().map((item) => item.id).join(",");
     }
-    const FIT_HIDE_ORDER = ["popup", "boost", "cinema", "screenshot", "pip", "loop", "filters"];
+    const FIT_HIDE_ORDER = ["popup", "cinema", "screenshot", "boost", "pip", "loop", "filters"];
     function fitPlayerControls(player) {
       const controls = document.getElementById(PLAYER_CONTROLS_ID);
       const left = player.querySelector(".ytp-left-controls");
@@ -4627,8 +4627,7 @@
       const video = getActiveVideo();
       const items = [
         { id: "filters", label: "Filtros de imagem", value: shouldUseVideoFilters() ? "Ativados" : "Desativados" },
-        { id: "loop", label: "Repetir vídeo", checked: !!video?.loop || adState.loopEnabled && adState.loopVideoKey === key },
-        { id: "boost", label: "Volume boost", checked: shouldUseVolumeBoost() }
+        { id: "loop", label: "Repetir vídeo", checked: !!video?.loop || adState.loopEnabled && adState.loopVideoKey === key }
       ];
       if (!document.fullscreenElement) items.push({ id: "cinema", label: "Modo cinema", checked: !!adState.cinemaActive });
       if (isLiveStream()) items.push({ id: "live", label: "Tirar atraso da live", checked: config.liveCatchUpEnabled !== false });

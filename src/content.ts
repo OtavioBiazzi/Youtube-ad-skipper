@@ -3951,13 +3951,13 @@ declare global {
     if (config.toolbarSpeed !== false && config.playerSpeedButtonsEnabled !== false) {
       items.push({ id: "speed", tip: "Velocidade · clique para alternar, role para ajustar, botão direito volta a 1x", text: "1x", priority: "high", className: "yte-btn--text" });
     }
-    // On/off items live in YouTube's gear menu when that integration is on,
-    // keeping the bar to quick actions only.
+    // With the gear integration on, set-and-forget items (filters, loop,
+    // cinema) live in YouTube's settings menu; the bar keeps quick actions.
     const inGear = config.settingsMenuItemsEnabled !== false;
     if (config.toolbarLoop !== false && !inGear) items.push({ id: "loop", tip: "Repetir vídeo", icon: "loop", priority: "mid" });
-    if (config.toolbarFilters !== false) items.push({ id: "filters", tip: "Filtros de imagem", icon: "filters", priority: "mid" });
+    if (config.toolbarFilters !== false && !inGear) items.push({ id: "filters", tip: "Filtros de imagem", icon: "filters", priority: "mid" });
     if (config.toolbarScreenshot !== false) items.push({ id: "screenshot", tip: "Salvar frame (PNG)", icon: "camera", priority: "low" });
-    if (config.toolbarVolumeBoost !== false && !inGear) items.push({ id: "boost", tip: "Volume boost", icon: "boost", priority: "low" });
+    if (config.toolbarVolumeBoost !== false) items.push({ id: "boost", tip: "Volume boost", icon: "boost", priority: "low" });
     if (!inGear) items.push({ id: "cinema", tip: "Modo cinema", icon: "cinema", priority: "low" });
     if (config.toolbarPopup !== false && config.playerPopupEnabled !== false) items.push({ id: "popup", tip: "Abrir em janela", icon: "popup", priority: "low" });
     if (config.toolbarPip !== false && document.pictureInPictureEnabled) items.push({ id: "pip", tip: "Picture-in-picture", icon: "pip", priority: "mid" });
@@ -3975,7 +3975,7 @@ declare global {
   // Hide our lower-priority buttons (then the end-time clock) only while the
   // left side of YouTube's bar (play, volume, time) would be squeezed.
   // Order in which our buttons give up their place when space is short.
-  const FIT_HIDE_ORDER = ["popup", "boost", "cinema", "screenshot", "pip", "loop", "filters"];
+  const FIT_HIDE_ORDER = ["popup", "cinema", "screenshot", "boost", "pip", "loop", "filters"];
 
   function fitPlayerControls(player: HTMLElement) {
     const controls = document.getElementById(PLAYER_CONTROLS_ID);
@@ -4591,7 +4591,6 @@ declare global {
     const items: Array<{ id: string; label: string; checked?: boolean; value?: string }> = [
       { id: "filters", label: "Filtros de imagem", value: shouldUseVideoFilters() ? "Ativados" : "Desativados" },
       { id: "loop", label: "Repetir vídeo", checked: !!video?.loop || (adState.loopEnabled && adState.loopVideoKey === key) },
-      { id: "boost", label: "Volume boost", checked: shouldUseVolumeBoost() },
     ];
     if (!document.fullscreenElement) items.push({ id: "cinema", label: "Modo cinema", checked: !!adState.cinemaActive });
     if (isLiveStream()) items.push({ id: "live", label: "Tirar atraso da live", checked: config.liveCatchUpEnabled !== false });
