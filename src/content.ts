@@ -3794,7 +3794,7 @@ declare global {
   // as YouTube's own control bar, so the buttons read as native.
   const PLAYER_ICON_PATHS: Record<string, string> = {
     loop: "M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z",
-    camera: "M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4zM9 2 7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z",
+    camera: "M12 17.5a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9zm0-2a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5zM4 21a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h3.15L9 3h6l1.85 2H20a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4zm0-2h16V7h-4.05l-1.82-2H9.88L8.05 7H4v12z",
     filters: "M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z",
     pip: "M19 11h-8v6h8v-6zm4 8V4.98C23 3.88 22.1 3 21 3H3c-1.1 0-2 .88-2 1.98V19c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2zm-2 .02H3V4.97h18v14.05z",
     popup: "M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z",
@@ -3934,6 +3934,17 @@ declare global {
       }
 
       #${FILTER_PANEL_ID}[hidden], #yte-live-panel[hidden] { display: none !important; }
+
+      @keyframes yte-popup-in {
+        from { opacity: 0; transform: translateY(6px) scale(0.98); }
+        to { opacity: 1; transform: none; }
+      }
+
+      #${FILTER_PANEL_ID}:not([hidden]),
+      #yte-live-panel:not([hidden]) {
+        animation: yte-popup-in 0.16s cubic-bezier(0.05, 0, 0, 1);
+        transform-origin: bottom right;
+      }
 
       #yte-live-panel {
         position: absolute;
@@ -4103,7 +4114,6 @@ declare global {
     if (config.toolbarFilters !== false && !inGear) items.push({ id: "filters", tip: "Filtros de imagem", icon: "filters", priority: "mid" });
     if (config.toolbarScreenshot !== false) items.push({ id: "screenshot", tip: "Salvar frame (PNG)", icon: "camera", priority: "low" });
     if (config.toolbarVolumeBoost !== false) items.push({ id: "boost", tip: "Volume boost", icon: "boost", priority: "low" });
-    if (!inGear) items.push({ id: "cinema", tip: "Modo cinema", icon: "cinema", priority: "low" });
     if (config.toolbarPopup !== false && config.playerPopupEnabled !== false) items.push({ id: "popup", tip: "Abrir em janela", icon: "popup", priority: "low" });
     if (config.toolbarPip !== false && document.pictureInPictureEnabled) items.push({ id: "pip", tip: "Picture-in-picture", icon: "pip", priority: "mid" });
     return items;
@@ -4500,7 +4510,25 @@ declare global {
         menu.appendChild(item);
       }
     } else {
-      const toggle = createMenuItem({ role: "menuitemcheckbox", icon: "toggle", label: "Filtros de imagem", checked: !!config.videoFiltersEnabled });
+      // Same header as YouTube's sub-menus: "<  Filtros de imagem" goes back
+      // to the settings (gear) menu this panel was opened from.
+      const header = document.createElement("div");
+      header.className = "ytp-panel-header";
+      const back = document.createElement("button");
+      back.className = "ytp-button ytp-panel-back-button";
+      back.setAttribute("aria-label", "Voltar ao menu anterior");
+      back.addEventListener("click", () => {
+        closeFilterPanel();
+        const gear = getYouTubePlayer()?.querySelector(".ytp-settings-button") as HTMLElement | null;
+        window.setTimeout(() => gear?.click(), 0);
+      });
+      const title = document.createElement("span");
+      title.className = "ytp-panel-title";
+      title.textContent = "Filtros de imagem";
+      header.append(back, title);
+      panelEl.appendChild(header);
+
+      const toggle = createMenuItem({ role: "menuitemcheckbox", icon: "toggle", label: "Ativar filtros", checked: !!config.videoFiltersEnabled });
       const toggleBox = document.createElement("div");
       toggleBox.className = "ytp-menuitem-toggle-checkbox";
       toggle.querySelector(".ytp-menuitem-content")!.appendChild(toggleBox);
@@ -4722,7 +4750,6 @@ declare global {
     const items: Array<{ id: string; label: string; checked?: boolean; value?: string }> = [
       { id: "loop", label: "Repetir vídeo", checked: !!video?.loop || (adState.loopEnabled && adState.loopVideoKey === key) },
     ];
-    if (!document.fullscreenElement) items.push({ id: "cinema", label: "Modo cinema", checked: !!adState.cinemaActive });
     items.push({ id: "filters", label: "Filtros de imagem", value: shouldUseVideoFilters() ? "Ativados" : "Desativados" });
     return items;
   }
@@ -4833,7 +4860,10 @@ declare global {
     if (!player || !menu || menu.style.display === "none" || !shouldAddGearItems()) return;
 
     // Main panel = the one without a sub-menu header.
-    const panels = Array.from(menu.querySelectorAll<HTMLElement>(".ytp-panel")).filter((panel) => !panel.querySelector(".ytp-panel-header"));
+    // While a sub-menu (Legendas, Qualidade, Timer…) is open, leave YouTube's
+    // sizes alone: forcing the main list height there left a big empty gap.
+    if (menu.querySelector(".ytp-panel .ytp-panel-header")) return;
+    const panels = Array.from(menu.querySelectorAll<HTMLElement>(".ytp-panel"));
     const panel = panels[panels.length - 1];
     const list = panel?.querySelector(".ytp-panel-menu") as HTMLElement | null;
     if (!panel || !list) return;
@@ -4844,9 +4874,11 @@ declare global {
     }
 
     const rows = getGearItems().map(buildGearRow);
-    // Toggles after YouTube's toggles, before its sub-menus (Legendas, Velocidade…).
-    const firstSubmenu = list.querySelector(':scope > .ytp-menuitem[aria-haspopup="true"]');
-    for (const row of rows) list.insertBefore(row, firstSubmenu);
+    // Right after YouTube's last toggle (e.g. "Iluminação cinematográfica"),
+    // so ours continue that group instead of landing after the sub-menus.
+    const toggles = Array.from(list.querySelectorAll<HTMLElement>(':scope > .ytp-menuitem[role="menuitemcheckbox"]'));
+    const anchor = toggles.length ? toggles[toggles.length - 1].nextElementSibling : list.querySelector(':scope > .ytp-menuitem[aria-haspopup="true"]');
+    for (const row of rows) list.insertBefore(row, anchor);
 
     fitGearMenu(player, menu, panel, list);
   }
@@ -4968,6 +5000,8 @@ declare global {
     setUserPlaybackRate(rate, getActiveVideo());
     showPlayerFeedback("speed", formatPlaybackRate(rate));
     refreshPlayerControlStates();
+    window.setTimeout(() => syncSpeedPanel(), 0);
+    window.setTimeout(() => syncSpeedPanel(), 300);
   }, true);
 
   // ── Live: tirar o atraso ──

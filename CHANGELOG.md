@@ -2,6 +2,15 @@
 
 Todas as mudancas relevantes deste projeto serao registradas aqui.
 
+## 5.2.2
+
+- Menus do YouTube (Legendas, Qualidade, Timer…) não ficam mais com um espaço vazio no topo.
+- Engrenagem: Repetir vídeo e Filtros de imagem logo abaixo dos liga/desliga do YouTube.
+- Modo cinema removido do player e da engrenagem; a prévia desenhada no Control Center também saiu.
+- Painel de filtros com o mesmo cabeçalho "‹ voltar" e a mesma animação dos menus do YouTube; o voltar reabre a engrenagem.
+- Ícone de salvar frame no estilo contornado, como os do YouTube.
+- Ao escolher 3x no menu de velocidade, o número no topo do painel também muda.
+
 ## 5.2.1
 
 - Botão "Nova versão disponível" no popup: aparece quando há uma release mais nova no GitHub e leva direto ao download.
