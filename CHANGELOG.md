@@ -2,6 +2,22 @@
 
 Todas as mudancas relevantes deste projeto serao registradas aqui.
 
+## 5.3.1 — Lives, ícones e player
+
+### Corrigido
+- **Tirar atraso da live refeito:**
+  - mede quanto você está atrás do trecho mais novo da live (antes usava o atraso total, que inclui o atraso de quem transmite);
+  - acelera de verdade: chega na velocidade máxima com 4 s de sobra, em vez de ficar em 1,05x;
+  - 30 s ou mais de atraso não é mais confundido com "voltar no vídeo" (DVR). DVR agora é só quando você volta de propósito;
+  - quando a live não deixa mudar a velocidade, a extensão percebe e pula para o ao vivo.
+- **Velocidade visível:** quando a live está sendo acelerada, o botão de velocidade mostra a velocidade real em laranja. O painel da live mostra "Atrás do ao vivo" e a velocidade de agora.
+- **Player pequeno depois do miniplayer:** ao descer até os comentários e voltar, o vídeo e os controles voltam a ocupar o player inteiro.
+- **Animação dos filtros:** a transição da engrenagem para os filtros volta a animar nos dois sentidos (crescendo e encolhendo), com o deslize do YouTube.
+- **Destaque ao passar o mouse:** agora é idêntico ao do YouTube (lados retos e pontas redondas). Antes as pontas ficavam ovais e parecia uma bola.
+
+### Mudado
+- **Ícone do Boost:** mostra se está ligado ou desligado pelo próprio ícone (raio cheio ou vazado), como o YouTube faz. A linha vermelha embaixo saiu.
+
 ## 5.3.0 — Revisão geral
 
 ### Corrigido

@@ -246,6 +246,7 @@
       let latency = Number.NaN;
       let health = Number.NaN;
       let atLiveHead = true;
+      let behind = Number.NaN;
       try {
         const stats = typeof player.getStatsForNerds === "function" ? player.getStatsForNerds() : null;
         if (stats) {
@@ -257,9 +258,12 @@
       try {
         const progress = typeof player.getProgressState === "function" ? player.getProgressState() : null;
         if (progress && typeof progress.isAtLiveHead === "boolean") atLiveHead = progress.isAtLiveHead;
+        const end = Number(progress?.seekableEnd);
+        const current = Number(progress?.current);
+        if (Number.isFinite(end) && Number.isFinite(current) && end > 0) behind = Math.max(0, end - current);
       } catch (err) {
       }
-      window.postMessage({ source: MAIN_LIVE_STATS, token: bridgeSessionToken, latency, health, atLiveHead }, "*");
+      window.postMessage({ source: MAIN_LIVE_STATS, token: bridgeSessionToken, latency, health, atLiveHead, behind }, "*");
     }
     function runPlayerCommand(command, value) {
       const player = document.getElementById("movie_player") || document.querySelector(".html5-video-player");
@@ -478,13 +482,13 @@
       const player = getPlayer();
       if (!player) return;
       const notify = () => {
-        if (!floating) {
-          window.dispatchEvent(new Event("resize"));
-          return;
-        }
+        window.dispatchEvent(new Event("resize"));
+        if (floating) return;
         try {
-          if (width > 0 && height > 0 && typeof player.setInternalSize === "function") {
-            player.setInternalSize(Math.round(width), Math.round(height));
+          const host = player.parentElement;
+          const rect = host?.getBoundingClientRect();
+          if (rect && rect.width > 0 && rect.height > 0 && typeof player.setInternalSize === "function") {
+            player.setInternalSize(Math.round(rect.width), Math.round(rect.height));
           }
         } catch (err) {
         }

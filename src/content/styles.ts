@@ -40,21 +40,36 @@ export function buildPlayerUiCss() {
       opacity: 1;
     }
 
-    /* Same hover as YouTube's own buttons: a soft white pill (10%). */
+    /* Same hover as YouTube's own buttons: a 48x32 pill (radius 16, straight
+       sides) drawn by a pseudo-element, exactly like .ytp-button::before. A
+       clipped background gave elliptical corners and looked like a ball. */
     #${PLAYER_CONTROLS_ID} .yte-btn {
-      border-radius: 40px;
-      /* YouTube's pill is 48x32 inside the 40px-tall button: 4px of air above
-         and below. Vertical padding + content-box background reproduces it. */
-      padding-top: 4px;
-      padding-bottom: 4px;
-      background-clip: content-box;
-      transition: background-color 0.1s cubic-bezier(0.4, 0, 1, 1);
+      isolation: isolate;
     }
 
-    #${PLAYER_CONTROLS_ID} .yte-btn:hover,
-    #${PLAYER_CONTROLS_ID} .yte-btn:focus-visible {
+    #${PLAYER_CONTROLS_ID} .yte-btn::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 0;
+      right: 0;
+      height: 32px;
+      transform: translateY(-50%);
+      border-radius: 40px;
+      background-color: transparent;
+      transition: background-color 0.1s cubic-bezier(0.4, 0, 1, 1);
+      pointer-events: none;
+      z-index: -1;
+    }
+
+    #${PLAYER_CONTROLS_ID} .yte-btn:hover::after,
+    #${PLAYER_CONTROLS_ID} .yte-btn:focus-visible::after {
       background-color: rgba(255, 255, 255, 0.1);
       transition-timing-function: cubic-bezier(0, 0, 0.2, 1);
+    }
+
+    #${PLAYER_CONTROLS_ID} .yte-btn.is-live-boost {
+      color: #ffb020;
     }
 
     #${PLAYER_CONTROLS_ID} .yte-btn svg {
@@ -65,26 +80,13 @@ export function buildPlayerUiCss() {
       filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.35));
     }
 
-    #${PLAYER_CONTROLS_ID} .yte-btn.is-active::after {
-      content: "";
-      position: absolute;
-      left: 50%;
-      bottom: 7px;
-      width: 20px;
-      height: 3px;
-      margin-left: -10px;
-      border-radius: 2px;
-      background: #f03;
-    }
 
     #${PLAYER_CONTROLS_ID} .yte-btn--text {
       width: auto;
       min-width: 48px;
       font-size: 17px;
       font-weight: 400;
-      /* Same 4px vertical air as the icon buttons; no side padding so the
-         hover pill keeps YouTube's full button width. */
-      padding: 4px 0;
+      padding: 0;
       font-variant-numeric: tabular-nums;
     }
 
@@ -159,6 +161,8 @@ export function buildPlayerUiCss() {
     }
 
     #${FILTER_PANEL_ID}.yte-from-gear:not([hidden]) { animation: none; }
+    /* Size animations only lay out the panel itself; the slide is clipped. */
+    #${FILTER_PANEL_ID}, #yte-live-panel { contain: layout paint; will-change: width, height; }
 
     /* YouTube's main settings panel briefly overflows while it animates into
        a sub-menu (it holds our extra rows); hide that transient scrollbar. */

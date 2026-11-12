@@ -1556,6 +1556,8 @@
     "skip-click": "Anúncio contado: botão Pular",
     "ad-sequence": "Anúncio contado: próximo anúncio em sequência",
     "ad-end": "Anúncio contado: anúncio terminou",
+    "live-catch-up": "Live: pulou para o ao vivo (atraso grande)",
+    "live-rate-blocked": "Live: esta live não permite mudar a velocidade",
     "resume-playback": "Retomado de onde você parou",
     "adblock-warning-removed": "Vídeo retomado após aviso de bloqueador"
   };

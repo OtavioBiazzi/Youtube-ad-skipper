@@ -264,6 +264,14 @@ try {
   await page.waitForTimeout(800);
   const docked = await page.evaluate(() => !document.documentElement.classList.contains("tube-shield-miniplayer-active"));
   check("miniplayer docks when scrolling back up", docked);
+  await page.waitForTimeout(600);
+  const sizes = await page.evaluate(() => {
+    const p = document.getElementById("movie_player").getBoundingClientRect();
+    const v = document.querySelector("#movie_player video").getBoundingClientRect();
+    const bar = document.querySelector("#movie_player .ytp-chrome-bottom")?.getBoundingClientRect();
+    return { player: Math.round(p.width), video: Math.round(v.width), bar: bar ? Math.round(bar.width) : 0 };
+  });
+  check("after docking, video and controls fill the player again", sizes.video >= sizes.player - 4 && sizes.bar >= sizes.player - 60, JSON.stringify(sizes));
   await page.screenshot({ path: join(screenshotDir, "e2e-docked.png") });
 
   // ── Live delay chip (optional second page) ──
