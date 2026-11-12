@@ -591,6 +591,11 @@
     /* Same hover as YouTube's own buttons: a soft white pill (10%). */
     #${PLAYER_CONTROLS_ID} .yte-btn {
       border-radius: 40px;
+      /* YouTube's pill is 48x32 inside the 40px-tall button: 4px of air above
+         and below. Vertical padding + content-box background reproduces it. */
+      padding-top: 4px;
+      padding-bottom: 4px;
+      background-clip: content-box;
       transition: background-color 0.1s cubic-bezier(0.4, 0, 1, 1);
     }
 
@@ -625,7 +630,9 @@
       min-width: 48px;
       font-size: 17px;
       font-weight: 400;
-      padding: 0 6px;
+      /* Same 4px vertical air as the icon buttons; no side padding so the
+         hover pill keeps YouTube's full button width. */
+      padding: 4px 0;
       font-variant-numeric: tabular-nums;
     }
 

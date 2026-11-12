@@ -12,6 +12,7 @@ Todas as mudancas relevantes deste projeto serao registradas aqui.
   - desligar o "tirar atraso" volta para a velocidade de antes;
   - o YouTube arredondar a velocidade não é mais confundido com escolha sua;
   - o botão não alterna mais entre "DVR" e segundos.
+- **Destaque ao passar o mouse:** o dos nossos botões tem o mesmo tamanho da bolinha do YouTube (48×32, com folga em cima e embaixo).
 - **Temas refeitos:**
   - usam as cores do próprio YouTube e ligam o modo escuro dele por baixo, então nunca mais há texto escuro em fundo escuro;
   - não pintam mais a barra de progresso inteira nem as durações;
