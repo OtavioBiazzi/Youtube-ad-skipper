@@ -599,3 +599,13 @@ body.theme-light { font-size: 15px; }
     grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
   }
 }
+
+
+/* Cinema mode was removed from the player UI; keep only ultrawide here. */
+.cinema-preview,
+.cinema-preview-shell,
+.preview-label,
+.opt-row:has([data-setting^="cinema"]),
+.opt-row:has([id^="opt-cinema"]),
+.field-row:has([data-setting^="cinema"]),
+.field-row:has([id^="opt-cinema"]) { display: none !important; }
