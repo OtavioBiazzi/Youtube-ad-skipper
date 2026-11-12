@@ -20,7 +20,12 @@ describe("live catch-up", () => {
   });
 
   it("does nothing when already close to the newest segment", () => {
-    expect(decideLiveRate({ ...base, behind: 4.5 }).rate).toBe(1);
+    expect(decideLiveRate({ ...base, behind: 4.5, bufferHealth: 4 }).rate).toBe(1);
+  });
+
+  it("uses the buffer when the seek range says 0 s behind", () => {
+    // Real case: 27 s latency, behind 0, 21 s buffered -> must speed up.
+    expect(decideLiveRate({ ...base, latency: 27, behind: 0, bufferHealth: 21, jumpEnabled: false }).rate).toBe(1.25);
   });
 
   it("falls back to latency when the player has no seek range", () => {
@@ -34,14 +39,14 @@ describe("live catch-up", () => {
   });
 
   it("uses a hysteresis band around the cushion", () => {
-    expect(decideLiveRate({ ...base, behind: 5 }).rate).toBe(1);
-    expect(decideLiveRate({ ...base, behind: 5, engaged: true }).rate).toBeGreaterThan(1);
-    expect(decideLiveRate({ ...base, behind: 4.2, engaged: true }).engaged).toBe(false);
+    expect(decideLiveRate({ ...base, behind: 5, bufferHealth: 3 }).rate).toBe(1);
+    expect(decideLiveRate({ ...base, behind: 5, bufferHealth: 3, engaged: true }).rate).toBeGreaterThan(1);
+    expect(decideLiveRate({ ...base, behind: 4.2, bufferHealth: 3, engaged: true }).engaged).toBe(false);
   });
 
   it("closer modes keep a smaller cushion", () => {
-    expect(decideLiveRate({ ...base, behind: 4, mode: "extreme" }).rate).toBeGreaterThan(1);
-    expect(decideLiveRate({ ...base, behind: 4, mode: "balanced" }).rate).toBe(1);
+    expect(decideLiveRate({ ...base, behind: 4, bufferHealth: 3, mode: "extreme" }).rate).toBeGreaterThan(1);
+    expect(decideLiveRate({ ...base, behind: 4, bufferHealth: 3, mode: "balanced" }).rate).toBe(1);
   });
 
   it("jumps to live when far behind, only if enabled", () => {
@@ -50,7 +55,7 @@ describe("live catch-up", () => {
   });
 
   it("ignores missing stats", () => {
-    expect(decideLiveRate({ ...base, latency: Number.NaN, behind: Number.NaN })).toEqual({ rate: 1, engaged: false, jumpToLive: false });
+    expect(decideLiveRate({ ...base, latency: Number.NaN, behind: Number.NaN, bufferHealth: Number.NaN })).toEqual({ rate: 1, engaged: false, jumpToLive: false });
   });
 
   it("normalizes unknown modes", () => {
