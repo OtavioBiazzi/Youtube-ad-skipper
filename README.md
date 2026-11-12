@@ -7,8 +7,8 @@ Uma extensão experimental de navegador para reunir **skipper inteligente, contr
 <br>
 
 <div align="center">
-  <a href="https://github.com/OtavioBiazzi/Youtube-ad-skipper/releases/download/v5.2.3/youtube-extension-v5.2.3.zip">
-    <img src="https://img.shields.io/badge/Baixar_Vers%C3%A3o_5.2.3_(.ZIP)-000000?style=for-the-badge&logo=github&logoColor=white" alt="Baixar YouTube Extension 5.2.3" />
+  <a href="https://github.com/OtavioBiazzi/Youtube-ad-skipper/releases/download/v5.2.5/youtube-extension-v5.2.5.zip">
+    <img src="https://img.shields.io/badge/Baixar_Vers%C3%A3o_5.2.5_(.ZIP)-000000?style=for-the-badge&logo=github&logoColor=white" alt="Baixar YouTube Extension 5.2.5" />
   </a>
   <br><br>
   <a href="https://github.com/OtavioBiazzi/Youtube-ad-skipper/releases">Ver todas as versões</a>
@@ -43,8 +43,8 @@ Quando um anúncio aparece no YouTube:
 
 ### Chrome / Opera GX / Edge / Brave
 
-1. **[Baixe o pacote pronto da versão 5.2.3](https://github.com/OtavioBiazzi/Youtube-ad-skipper/releases/download/v5.2.3/youtube-extension-v5.2.3.zip)**.
-2. **Extraia (descompacte)** o arquivo `youtube-extension-v5.2.3.zip` em uma pasta permanente no seu computador.
+1. **[Baixe o pacote pronto da versão 5.2.5](https://github.com/OtavioBiazzi/Youtube-ad-skipper/releases/download/v5.2.5/youtube-extension-v5.2.5.zip)**.
+2. **Extraia (descompacte)** o arquivo `youtube-extension-v5.2.5.zip` em uma pasta permanente no seu computador.
 3. Abra o seu navegador e vá para a página de extensões:
    - Chrome: `chrome://extensions/`
    - Opera GX: `opera://extensions/`

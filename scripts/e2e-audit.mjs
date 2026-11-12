@@ -66,7 +66,7 @@ await page.waitForTimeout(500);
 await page.click('.ytp-settings-menu [data-yte-gear="filters"]');
 await page.waitForTimeout(400);
 const before = await page.evaluate(() => document.getElementById("movie_player").getVolume?.());
-const panelBox = await page.locator("#yte-filter-panel").boundingBox();
+const panelBox = await page.locator(":is(#yte-filter-panel, .yte-gear-subpanel)").first().boundingBox();
 if (panelBox) {
   await page.mouse.move(panelBox.x + 40, panelBox.y + 60);
   await page.mouse.wheel(0, -200);
@@ -76,7 +76,13 @@ const after = await page.evaluate(() => document.getElementById("movie_player").
 check("wheel inside the filter panel does not change volume", before === after, `${before} -> ${after}`);
 
 // YouTube's own speed panel goes past 2x through the extension.
+// Make sure the settings menu is closed first, then open it fresh.
 await page.keyboard.press("Escape");
+await page.waitForTimeout(300);
+if (await page.locator(".ytp-settings-menu").isVisible().catch(() => false)) {
+  await page.click("#movie_player .ytp-settings-button").catch(() => {});
+  await page.waitForTimeout(300);
+}
 await page.hover("#movie_player");
 await page.click("#movie_player .ytp-settings-button").catch(() => {});
 await page.waitForTimeout(500);

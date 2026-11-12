@@ -2,6 +2,22 @@
 
 Todas as mudancas relevantes deste projeto serao registradas aqui.
 
+## 5.2.5
+
+- Filtros de imagem abrem como submenu dentro da própria engrenagem do YouTube: a caixa redimensiona e o conteúdo desliza como nos submenus dele, e o "voltar" faz o caminho inverso. Os menus da live e de filtros avulsos também deslizam entre telas.
+- Corrigido: filtros acima de 100% (como o "Vívido") voltavam para 100% logo depois de salvos.
+- Botão de atraso da live aparece também quando você já está no ao vivo (o YouTube desativa o próprio botão "AO VIVO" nesse momento e a extensão achava que não era live).
+- Novo ícone do volume boost (alto-falante com raio).
+- Os botões da extensão no player ganham o mesmo hover dos botões do YouTube.
+- A verificação de nova versão guarda o resultado por 6 horas em vez de consultar o GitHub a cada abertura do popup.
+- Textos pequenos (como o botão "Control Center") saem da fonte pixel para ficarem legíveis.
+- Control Center: Backup e Diagnóstico de reprodução lado a lado, e a seção "Sobre" usando a largura toda.
+
+## 5.2.4
+
+- Números legíveis: versão, contadores e tempos usam uma fonte normal; a fonte pixel fica só nos títulos.
+- A extensão não briga mais com o YouTube pela altura do menu da engrenagem. A leve "piscada" que ainda aparece ao ligar/desligar uma opção é do próprio YouTube e acontece mesmo sem a extensão.
+
 ## 5.2.3
 
 - Contagem de anúncios pulados corrigida: um mesmo anúncio podia ser contado duas vezes (quando o anúncio terminava, o vídeo voltava ao início enquanto o YouTube ainda marcava o player como em anúncio). Agora cada contagem exige um anúncio de pelo menos 0,8 s (ou um clique real no Pular) e 1,2 s entre contagens.

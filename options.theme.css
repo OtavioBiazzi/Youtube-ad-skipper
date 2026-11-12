@@ -405,7 +405,7 @@ input[type="range"] {
   border-radius: var(--radius-sm);
   background: var(--text);
   color: var(--bg);
-  font: 500 13px var(--font-display);
+  font: 600 13px var(--font-body);
   box-shadow: 3px 3px 0 var(--accent);
   transition: transform 0.1s ease, box-shadow 0.1s ease;
 }
@@ -609,3 +609,49 @@ body.theme-light { font-size: 15px; }
 .opt-row:has([id^="opt-cinema"]),
 .field-row:has([data-setting^="cinema"]),
 .field-row:has([id^="opt-cinema"]) { display: none !important; }
+
+
+/* Numbers in a readable face; the pixel font stays on titles only. */
+.header-version,
+.stat-value,
+.delay-value,
+#version-tag {
+  font-family: var(--font-mono) !important;
+  font-weight: 500 !important;
+  letter-spacing: 0 !important;
+}
+
+.stat-value { font-size: 32px; }
+.delay-value { font-size: 48px; }
+.header-version { font-size: 13px; color: var(--text-dim); }
+
+
+/* Advanced: the tall toolbar card spans two rows; codecs and diagnostics
+   stack beside it, so there is no empty hole under codecs. */
+#advanced .section-grid:has(#playback-log) {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+  align-items: start;
+}
+
+#advanced .section-grid:has(#playback-log) > article:first-child { grid-row: span 2; }
+#advanced .section-grid:has(#playback-log) { grid-template-rows: auto 1fr; }
+
+.playback-log { max-height: 320px; }
+
+/* About: links spread over the full width. */
+.about-links,
+.about-links--wide {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  max-width: none;
+}
+
+.about-link { justify-content: center; min-height: 44px; }
+
+#about .section-heading p { max-width: none; }
+
+@media (max-width: 920px) {
+  #advanced .section-grid:has(#playback-log) { grid-template-columns: 1fr !important; }
+  #advanced .section-grid:has(#playback-log) > article:first-child { grid-row: auto; }
+}
