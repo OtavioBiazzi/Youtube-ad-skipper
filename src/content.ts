@@ -4095,19 +4095,6 @@ declare global {
   // settings popup like its own sub-menus: the popup resizes from the gear
   // size to the filter size while the panels slide, and "back" reverses it.
   const SUBMENU_ANIM_MS = 250;
-  let gearSubmenu: { menu: HTMLElement; ytPanel: HTMLElement; ours: HTMLElement | null; size: { w: number; h: number } } | null = null;
-
-  function measurePanel(panelEl: HTMLElement, width: number, container: HTMLElement) {
-    panelEl.style.position = "absolute";
-    panelEl.style.visibility = "hidden";
-    panelEl.style.width = width + "px";
-    panelEl.style.height = "auto";
-    container.appendChild(panelEl);
-    const height = panelEl.scrollHeight;
-    panelEl.remove();
-    panelEl.style.visibility = "";
-    return height;
-  }
 
   function slidePanels(outgoing: HTMLElement | null, incoming: HTMLElement, direction: "forward" | "back" | "none") {
     if (direction === "none") return;
@@ -4125,94 +4112,27 @@ declare global {
     }
   }
 
-  function resizeYouTubeMenu(menu: HTMLElement, panelEl: HTMLElement, width: number, height: number) {
-    const easing = "cubic-bezier(0.4, 0, 0.2, 1)";
-    menu.style.transition = `width ${SUBMENU_ANIM_MS}ms ${easing}, height ${SUBMENU_ANIM_MS}ms ${easing}`;
-    menu.style.width = width + "px";
-    menu.style.height = height + "px";
-    panelEl.style.width = width + "px";
-    panelEl.style.height = height + "px";
-    window.setTimeout(() => { menu.style.transition = ""; }, SUBMENU_ANIM_MS + 30);
-  }
-
-  function renderGearFilterSubmenu(direction: "forward" | "back" | "none") {
-    const state = gearSubmenu;
-    const player = getYouTubePlayer();
-    if (!state || !player) return;
-    const content = state.menu.querySelector(".ytp-popup-content") as HTMLElement | null;
-    if (!content) return;
-
-    const host: FilterHost = { render: renderGearFilterSubmenu, back: closeGearFilterSubmenu };
-    const panelEl = buildFilterPanelEl(host);
-    panelEl.classList.add("yte-gear-subpanel", "yte-filter-scope");
-    const width = Math.min(380, Math.max(300, player.clientWidth - 24));
-    const maxHeight = Math.max(200, player.clientHeight - 80);
-    const height = Math.min(maxHeight, measurePanel(panelEl, width, content));
-
-    const previous = state.ours || state.ytPanel;
-    panelEl.style.position = "absolute";
-    panelEl.style.bottom = "0";
-    panelEl.style.right = "0";
-    panelEl.style.overflowY = "auto";
-    content.appendChild(panelEl);
-    resizeYouTubeMenu(state.menu, panelEl, width, height);
-    slidePanels(previous, panelEl, direction);
-
-    const hideOld = () => {
-      if (previous === state.ytPanel) previous.style.display = "none";
-      else previous.remove();
-    };
-    if (direction === "none") hideOld();
-    else window.setTimeout(hideOld, SUBMENU_ANIM_MS);
-    state.ours = panelEl;
-  }
-
+  // Opened from the gear menu, the filter panel takes over exactly where the
+  // gear menu was: it starts at the gear menu's size and morphs to its own
+  // while the content slides in, like YouTube's sub-menus. YouTube's own
+  // popup is simply closed, never modified (modifying it broke when YouTube
+  // re-rendered its menu, e.g. quality/audio labels updating).
   function openGearFilterSubmenu() {
     const player = getYouTubePlayer();
     const menu = player?.querySelector(".ytp-settings-menu") as HTMLElement | null;
-    const ytPanel = menu?.querySelector(".ytp-popup-content > .ytp-panel") as HTMLElement | null;
-    if (!menu || !ytPanel) {
-      toggleFilterPanel();
-      return;
-    }
-    const rect = menu.getBoundingClientRect();
-    gearSubmenu = { menu, ytPanel, ours: null, size: { w: rect.width, h: rect.height } };
-    filterPanelView = "main";
-    renderGearFilterSubmenu("forward");
-    watchGearMenuClose(menu);
-  }
-
-  function closeGearFilterSubmenu() {
-    const state = gearSubmenu;
-    if (!state) return;
-    gearSubmenu = null;
-    const ours = state.ours;
-    state.ytPanel.style.display = "";
-    resizeYouTubeMenu(state.menu, state.ytPanel, state.size.w, state.size.h);
-    if (ours) {
-      slidePanels(ours, state.ytPanel, "back");
-      window.setTimeout(() => ours.remove(), SUBMENU_ANIM_MS);
-    }
-  }
-
-  // YouTube hides the popup (click outside, Esc): drop our sub-menu so the
-  // next open starts on YouTube's own main panel.
-  function watchGearMenuClose(menu: HTMLElement) {
-    const observer = new MutationObserver(() => {
-      if (menu.style.display !== "none" && menu.getAttribute("aria-hidden") !== "true") return;
-      observer.disconnect();
-      const state = gearSubmenu;
-      if (!state) return;
-      gearSubmenu = null;
-      state.ours?.remove();
-      state.ytPanel.style.display = "";
-    });
-    observer.observe(menu, { attributes: true, attributeFilter: ["style", "aria-hidden"] });
+    const from = menu && getComputedStyle(menu).display !== "none" ? menu.getBoundingClientRect() : null;
+    closeYouTubeSettingsMenu();
+    const panel = openFilterPanel("forward");
+    if (!panel || !from || from.width <= 0) return;
+    const to = panel.getBoundingClientRect();
+    panel.animate(
+      [{ width: from.width + "px", height: from.height + "px" }, { width: to.width + "px", height: to.height + "px" }],
+      { duration: SUBMENU_ANIM_MS, easing: "cubic-bezier(0.4, 0, 0.2, 1)" },
+    );
   }
 
   function syncFilterPanel() {
     if (filterPanelView !== "main") return;
-    if (gearSubmenu?.ours) syncFilterValues(gearSubmenu.ours);
     const panel = document.getElementById(FILTER_PANEL_ID);
     if (panel && !panel.hidden) syncFilterValues(panel);
   }
@@ -4240,28 +4160,41 @@ declare global {
 
   function handleOutsideFilterPanel(event: Event) {
     const target = event.target as Element;
-    if (target?.closest?.("#" + FILTER_PANEL_ID) || target?.closest?.('[data-yte-action="filters"]')) return;
+    if (target?.closest?.("#" + FILTER_PANEL_ID) || target?.closest?.('[data-yte-action="filters"]') || target?.closest?.('[data-yte-gear="filters"]')) return;
     closeFilterPanel();
   }
 
-  function toggleFilterPanel() {
+  function openFilterPanel(entry: "forward" | "none" = "none") {
     const player = getYouTubePlayer();
-    if (!player) return;
+    if (!player) return null;
     let panel = document.getElementById(FILTER_PANEL_ID);
     if (!panel || panel.parentElement !== player) {
       panel?.remove();
       panel = buildFilterPanel();
       player.appendChild(panel);
     }
-    if (!panel.hidden) {
+    filterPanelView = "main";
+    player.classList.add("yte-filter-panel-open");
+    // From the gear menu the morph replaces the generic pop-in.
+    panel.classList.toggle("yte-from-gear", entry === "forward");
+    panel.hidden = false;
+    renderFilterPanel(panel, "none");
+    if (entry === "forward") {
+      const panelEl = panel.querySelector(".ytp-panel") as HTMLElement | null;
+      if (panelEl) slidePanels(null, panelEl, "forward");
+    }
+    document.removeEventListener("pointerdown", handleOutsideFilterPanel, true);
+    document.addEventListener("pointerdown", handleOutsideFilterPanel, true);
+    return panel;
+  }
+
+  function toggleFilterPanel() {
+    const panel = document.getElementById(FILTER_PANEL_ID);
+    if (panel && !panel.hidden) {
       closeFilterPanel();
       return;
     }
-    filterPanelView = "main";
-    player.classList.add("yte-filter-panel-open");
-    panel.hidden = false;
-    renderFilterPanel(panel);
-    document.addEventListener("pointerdown", handleOutsideFilterPanel, true);
+    openFilterPanel("none");
   }
 
   // Re-place an open panel when the player changes size (fullscreen, theater).
@@ -4407,6 +4340,20 @@ declare global {
     }
   }
 
+  function placeGearRows(list: HTMLElement) {
+    const ours = Array.from(list.querySelectorAll<HTMLElement>(`:scope > [${GEAR_ITEM_ATTR}]`));
+    if (!ours.length) return;
+    const toggles = Array.from(list.querySelectorAll<HTMLElement>(':scope > .ytp-menuitem[role="menuitemcheckbox"]:not([' + GEAR_ITEM_ATTR + '])'));
+    const lastToggle = toggles[toggles.length - 1];
+    const expectedPrev = lastToggle || null;
+    // Already in place: first of ours sits right after YouTube's last toggle.
+    if (expectedPrev ? ours[0].previousElementSibling === expectedPrev : list.firstElementChild === ours[0]) {
+      if (ours.every((row, i) => i === 0 || row.previousElementSibling === ours[i - 1])) return;
+    }
+    const anchor = expectedPrev ? expectedPrev.nextElementSibling : list.firstElementChild;
+    for (const row of ours) list.insertBefore(row, anchor === row ? row.nextElementSibling : anchor);
+  }
+
   function injectGearItems() {
     const player = getYouTubePlayer();
     const menu = player?.querySelector(".ytp-settings-menu") as HTMLElement | null;
@@ -4419,12 +4366,13 @@ declare global {
     // Main panel = the one without a sub-menu header.
     // While a sub-menu (Legendas, Qualidade, Timer…) is open, leave YouTube's
     // sizes alone: forcing the main list height there left a big empty gap.
-    if (gearSubmenu || menu.querySelector(".ytp-panel .ytp-panel-header")) return;
+    if (menu.querySelector(".ytp-panel .ytp-panel-header")) return;
     const panels = Array.from(menu.querySelectorAll<HTMLElement>(".ytp-panel"));
     const panel = panels[panels.length - 1];
     const list = panel?.querySelector(".ytp-panel-menu") as HTMLElement | null;
     if (!panel || !list) return;
     if (list.querySelector(`[${GEAR_ITEM_ATTR}]`)) {
+      placeGearRows(list);
       refreshGearItems();
       if (!hidden) fitGearMenu(player, menu, panel, list);
       return;
@@ -4601,11 +4549,15 @@ declare global {
     adState.liveRateApplied = rate;
   }
 
+  // Back to the speed the viewer had before catch-up started. Unconditional:
+  // YouTube may round the live rate, so "still equal to what we applied"
+  // was not a reliable test and left lives stuck at e.g. 1.18x.
   function restoreLiveRate() {
     if (!adState.liveRateApplied || adState.liveRateApplied === 1) return;
-    const video = getActiveVideo();
-    if (video && Math.abs(video.playbackRate - adState.liveRateApplied) < 0.02) setLiveRate(1);
+    const previous = Number(adState.livePreRate) > 0 ? Number(adState.livePreRate) : 1;
+    setLiveRate(previous);
     adState.liveRateApplied = 1;
+    adState.livePreRate = 0;
     adState.liveEngaged = false;
   }
 
@@ -4628,8 +4580,10 @@ declare global {
     if (video.paused || adState.liveUserOverrideKey === key) return;
 
     const applied = adState.liveRateApplied || 1;
-    // The user picked a speed themselves: stop managing this live.
-    if (Math.abs(video.playbackRate - applied) > 0.02 && Math.abs(video.playbackRate - 1) > 0.02) {
+    // The user picked a speed themselves: stop managing this live. A change
+    // only counts as theirs right after a click/key (YouTube rounding the
+    // rate we applied used to look like a user choice and froze it).
+    if (Math.abs(video.playbackRate - applied) > 0.06 && Math.abs(video.playbackRate - 1) > 0.02 && hasRecentPlaybackIntent(3000)) {
       adState.liveUserOverrideKey = key;
       adState.liveRateApplied = 1;
       return;
@@ -4657,7 +4611,12 @@ declare global {
       postMainWorldMessage({ source: MAIN_PLAYER_COMMAND, command: "seekToLiveHead" });
       recordPlaybackEvent("live-jump", "live-catch-up", Number(video.currentTime || 0));
     }
-    if (Math.abs(decision.rate - applied) > 0.005) setLiveRate(decision.rate);
+    if (Math.abs(decision.rate - applied) > 0.005) {
+      // Remember the viewer's speed the first time we speed up.
+      if (applied === 1 && decision.rate > 1) adState.livePreRate = video.playbackRate || 1;
+      setLiveRate(decision.rate);
+      if (decision.rate === 1) adState.livePreRate = 0;
+    }
   }
 
   function jumpToLiveEdge() {

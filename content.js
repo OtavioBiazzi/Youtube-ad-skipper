@@ -699,6 +699,15 @@
       to { opacity: 1; transform: none; }
     }
 
+    #${FILTER_PANEL_ID}.yte-from-gear:not([hidden]) { animation: none; }
+
+    /* YouTube's main settings panel briefly overflows while it animates into
+       a sub-menu (it holds our extra rows); hide that transient scrollbar. */
+    .ytp-settings-menu .ytp-panel:has([data-yte-gear]),
+    .ytp-settings-menu .ytp-panel:has([data-yte-gear]) .ytp-panel-menu { scrollbar-width: none; }
+    .ytp-settings-menu .ytp-panel:has([data-yte-gear])::-webkit-scrollbar,
+    .ytp-settings-menu .ytp-panel:has([data-yte-gear]) .ytp-panel-menu::-webkit-scrollbar { display: none; }
+
     #${FILTER_PANEL_ID}:not([hidden]),
     #yte-live-panel:not([hidden]) {
       animation: yte-popup-in 0.16s cubic-bezier(0.05, 0, 0, 1);
@@ -4629,18 +4638,6 @@
       return panel;
     }
     const SUBMENU_ANIM_MS = 250;
-    let gearSubmenu = null;
-    function measurePanel(panelEl, width, container) {
-      panelEl.style.position = "absolute";
-      panelEl.style.visibility = "hidden";
-      panelEl.style.width = width + "px";
-      panelEl.style.height = "auto";
-      container.appendChild(panelEl);
-      const height = panelEl.scrollHeight;
-      panelEl.remove();
-      panelEl.style.visibility = "";
-      return height;
-    }
     function slidePanels(outgoing, incoming, direction) {
       if (direction === "none") return;
       const sign = direction === "forward" ? 1 : -1;
@@ -4649,93 +4646,22 @@
         [{ transform: `translateX(${sign * 40}%)`, opacity: 0 }, { transform: "translateX(0)", opacity: 1 }],
         { duration: SUBMENU_ANIM_MS, easing }
       );
-      if (outgoing) {
-        outgoing.animate(
-          [{ transform: "translateX(0)", opacity: 1 }, { transform: `translateX(${-sign * 40}%)`, opacity: 0 }],
-          { duration: SUBMENU_ANIM_MS, easing, fill: "forwards" }
-        );
-      }
-    }
-    function resizeYouTubeMenu(menu, panelEl, width, height) {
-      const easing = "cubic-bezier(0.4, 0, 0.2, 1)";
-      menu.style.transition = `width ${SUBMENU_ANIM_MS}ms ${easing}, height ${SUBMENU_ANIM_MS}ms ${easing}`;
-      menu.style.width = width + "px";
-      menu.style.height = height + "px";
-      panelEl.style.width = width + "px";
-      panelEl.style.height = height + "px";
-      window.setTimeout(() => {
-        menu.style.transition = "";
-      }, SUBMENU_ANIM_MS + 30);
-    }
-    function renderGearFilterSubmenu(direction) {
-      const state = gearSubmenu;
-      const player = getYouTubePlayer();
-      if (!state || !player) return;
-      const content = state.menu.querySelector(".ytp-popup-content");
-      if (!content) return;
-      const host = { render: renderGearFilterSubmenu, back: closeGearFilterSubmenu };
-      const panelEl = buildFilterPanelEl(host);
-      panelEl.classList.add("yte-gear-subpanel", "yte-filter-scope");
-      const width = Math.min(380, Math.max(300, player.clientWidth - 24));
-      const maxHeight = Math.max(200, player.clientHeight - 80);
-      const height = Math.min(maxHeight, measurePanel(panelEl, width, content));
-      const previous = state.ours || state.ytPanel;
-      panelEl.style.position = "absolute";
-      panelEl.style.bottom = "0";
-      panelEl.style.right = "0";
-      panelEl.style.overflowY = "auto";
-      content.appendChild(panelEl);
-      resizeYouTubeMenu(state.menu, panelEl, width, height);
-      slidePanels(previous, panelEl, direction);
-      const hideOld = () => {
-        if (previous === state.ytPanel) previous.style.display = "none";
-        else previous.remove();
-      };
-      if (direction === "none") hideOld();
-      else window.setTimeout(hideOld, SUBMENU_ANIM_MS);
-      state.ours = panelEl;
     }
     function openGearFilterSubmenu() {
       const player = getYouTubePlayer();
       const menu = player?.querySelector(".ytp-settings-menu");
-      const ytPanel = menu?.querySelector(".ytp-popup-content > .ytp-panel");
-      if (!menu || !ytPanel) {
-        toggleFilterPanel();
-        return;
-      }
-      const rect = menu.getBoundingClientRect();
-      gearSubmenu = { menu, ytPanel, ours: null, size: { w: rect.width, h: rect.height } };
-      filterPanelView = "main";
-      renderGearFilterSubmenu("forward");
-      watchGearMenuClose(menu);
-    }
-    function closeGearFilterSubmenu() {
-      const state = gearSubmenu;
-      if (!state) return;
-      gearSubmenu = null;
-      const ours = state.ours;
-      state.ytPanel.style.display = "";
-      resizeYouTubeMenu(state.menu, state.ytPanel, state.size.w, state.size.h);
-      if (ours) {
-        slidePanels(ours, state.ytPanel, "back");
-        window.setTimeout(() => ours.remove(), SUBMENU_ANIM_MS);
-      }
-    }
-    function watchGearMenuClose(menu) {
-      const observer = new MutationObserver(() => {
-        if (menu.style.display !== "none" && menu.getAttribute("aria-hidden") !== "true") return;
-        observer.disconnect();
-        const state = gearSubmenu;
-        if (!state) return;
-        gearSubmenu = null;
-        state.ours?.remove();
-        state.ytPanel.style.display = "";
-      });
-      observer.observe(menu, { attributes: true, attributeFilter: ["style", "aria-hidden"] });
+      const from = menu && getComputedStyle(menu).display !== "none" ? menu.getBoundingClientRect() : null;
+      closeYouTubeSettingsMenu();
+      const panel = openFilterPanel("forward");
+      if (!panel || !from || from.width <= 0) return;
+      const to = panel.getBoundingClientRect();
+      panel.animate(
+        [{ width: from.width + "px", height: from.height + "px" }, { width: to.width + "px", height: to.height + "px" }],
+        { duration: SUBMENU_ANIM_MS, easing: "cubic-bezier(0.4, 0, 0.2, 1)" }
+      );
     }
     function syncFilterPanel() {
       if (filterPanelView !== "main") return;
-      if (gearSubmenu?.ours) syncFilterValues(gearSubmenu.ours);
       const panel = document.getElementById(FILTER_PANEL_ID);
       if (panel && !panel.hidden) syncFilterValues(panel);
     }
@@ -4760,27 +4686,38 @@
     }
     function handleOutsideFilterPanel(event) {
       const target = event.target;
-      if (target?.closest?.("#" + FILTER_PANEL_ID) || target?.closest?.('[data-yte-action="filters"]')) return;
+      if (target?.closest?.("#" + FILTER_PANEL_ID) || target?.closest?.('[data-yte-action="filters"]') || target?.closest?.('[data-yte-gear="filters"]')) return;
       closeFilterPanel();
     }
-    function toggleFilterPanel() {
+    function openFilterPanel(entry = "none") {
       const player = getYouTubePlayer();
-      if (!player) return;
+      if (!player) return null;
       let panel = document.getElementById(FILTER_PANEL_ID);
       if (!panel || panel.parentElement !== player) {
         panel?.remove();
         panel = buildFilterPanel();
         player.appendChild(panel);
       }
-      if (!panel.hidden) {
+      filterPanelView = "main";
+      player.classList.add("yte-filter-panel-open");
+      panel.classList.toggle("yte-from-gear", entry === "forward");
+      panel.hidden = false;
+      renderFilterPanel(panel, "none");
+      if (entry === "forward") {
+        const panelEl = panel.querySelector(".ytp-panel");
+        if (panelEl) slidePanels(null, panelEl, "forward");
+      }
+      document.removeEventListener("pointerdown", handleOutsideFilterPanel, true);
+      document.addEventListener("pointerdown", handleOutsideFilterPanel, true);
+      return panel;
+    }
+    function toggleFilterPanel() {
+      const panel = document.getElementById(FILTER_PANEL_ID);
+      if (panel && !panel.hidden) {
         closeFilterPanel();
         return;
       }
-      filterPanelView = "main";
-      player.classList.add("yte-filter-panel-open");
-      panel.hidden = false;
-      renderFilterPanel(panel);
-      document.addEventListener("pointerdown", handleOutsideFilterPanel, true);
+      openFilterPanel("none");
     }
     const resizeOpenFilterPanel = () => {
       const panel = document.getElementById(FILTER_PANEL_ID);
@@ -4811,6 +4748,10 @@
       ];
       items.push({ id: "filters", label: "Filtros de imagem", value: shouldUseVideoFilters() ? "Ativados" : "Desativados" });
       return items;
+    }
+    function closeYouTubeSettingsMenu() {
+      const button = getYouTubePlayer()?.querySelector(".ytp-settings-button");
+      if (button?.getAttribute("aria-expanded") === "true") button.click();
     }
     function handleGearItem(id) {
       markUserPlaybackIntent("settings-menu");
@@ -4896,18 +4837,31 @@
         if (Number.isFinite(height) && Math.abs(height - target) >= 1) el.style.height = target + "px";
       }
     }
+    function placeGearRows(list) {
+      const ours = Array.from(list.querySelectorAll(`:scope > [${GEAR_ITEM_ATTR}]`));
+      if (!ours.length) return;
+      const toggles = Array.from(list.querySelectorAll(':scope > .ytp-menuitem[role="menuitemcheckbox"]:not([' + GEAR_ITEM_ATTR + "])"));
+      const lastToggle = toggles[toggles.length - 1];
+      const expectedPrev = lastToggle || null;
+      if (expectedPrev ? ours[0].previousElementSibling === expectedPrev : list.firstElementChild === ours[0]) {
+        if (ours.every((row, i) => i === 0 || row.previousElementSibling === ours[i - 1])) return;
+      }
+      const anchor = expectedPrev ? expectedPrev.nextElementSibling : list.firstElementChild;
+      for (const row of ours) list.insertBefore(row, anchor === row ? row.nextElementSibling : anchor);
+    }
     function injectGearItems() {
       const player = getYouTubePlayer();
       const menu = player?.querySelector(".ytp-settings-menu");
       if (menu && config.enabled) syncSpeedPanel(menu);
       if (!player || !menu || !shouldAddGearItems()) return;
       const hidden = menu.style.display === "none" || getComputedStyle(menu).display === "none";
-      if (gearSubmenu || menu.querySelector(".ytp-panel .ytp-panel-header")) return;
+      if (menu.querySelector(".ytp-panel .ytp-panel-header")) return;
       const panels = Array.from(menu.querySelectorAll(".ytp-panel"));
       const panel = panels[panels.length - 1];
       const list = panel?.querySelector(".ytp-panel-menu");
       if (!panel || !list) return;
       if (list.querySelector(`[${GEAR_ITEM_ATTR}]`)) {
+        placeGearRows(list);
         refreshGearItems();
         if (!hidden) fitGearMenu(player, menu, panel, list);
         return;
@@ -5050,9 +5004,10 @@
     }
     function restoreLiveRate() {
       if (!adState.liveRateApplied || adState.liveRateApplied === 1) return;
-      const video = getActiveVideo();
-      if (video && Math.abs(video.playbackRate - adState.liveRateApplied) < 0.02) setLiveRate(1);
+      const previous = Number(adState.livePreRate) > 0 ? Number(adState.livePreRate) : 1;
+      setLiveRate(previous);
       adState.liveRateApplied = 1;
+      adState.livePreRate = 0;
       adState.liveEngaged = false;
     }
     function runLiveCatchUp() {
@@ -5071,7 +5026,7 @@
       }
       if (video.paused || adState.liveUserOverrideKey === key) return;
       const applied = adState.liveRateApplied || 1;
-      if (Math.abs(video.playbackRate - applied) > 0.02 && Math.abs(video.playbackRate - 1) > 0.02) {
+      if (Math.abs(video.playbackRate - applied) > 0.06 && Math.abs(video.playbackRate - 1) > 0.02 && hasRecentPlaybackIntent(3e3)) {
         adState.liveUserOverrideKey = key;
         adState.liveRateApplied = 1;
         return;
@@ -5095,7 +5050,11 @@
         postMainWorldMessage({ source: MAIN_PLAYER_COMMAND, command: "seekToLiveHead" });
         recordPlaybackEvent("live-jump", "live-catch-up", Number(video.currentTime || 0));
       }
-      if (Math.abs(decision.rate - applied) > 5e-3) setLiveRate(decision.rate);
+      if (Math.abs(decision.rate - applied) > 5e-3) {
+        if (applied === 1 && decision.rate > 1) adState.livePreRate = video.playbackRate || 1;
+        setLiveRate(decision.rate);
+        if (decision.rate === 1) adState.livePreRate = 0;
+      }
     }
     function jumpToLiveEdge() {
       if (!isLiveStream()) return;

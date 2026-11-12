@@ -151,6 +151,15 @@ export function buildPlayerUiCss() {
       to { opacity: 1; transform: none; }
     }
 
+    #${FILTER_PANEL_ID}.yte-from-gear:not([hidden]) { animation: none; }
+
+    /* YouTube's main settings panel briefly overflows while it animates into
+       a sub-menu (it holds our extra rows); hide that transient scrollbar. */
+    .ytp-settings-menu .ytp-panel:has([data-yte-gear]),
+    .ytp-settings-menu .ytp-panel:has([data-yte-gear]) .ytp-panel-menu { scrollbar-width: none; }
+    .ytp-settings-menu .ytp-panel:has([data-yte-gear])::-webkit-scrollbar,
+    .ytp-settings-menu .ytp-panel:has([data-yte-gear]) .ytp-panel-menu::-webkit-scrollbar { display: none; }
+
     #${FILTER_PANEL_ID}:not([hidden]),
     #yte-live-panel:not([hidden]) {
       animation: yte-popup-in 0.16s cubic-bezier(0.05, 0, 0, 1);
