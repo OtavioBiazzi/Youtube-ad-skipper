@@ -43,8 +43,9 @@ export function buildPlayerUiCss() {
     /* Same hover as YouTube's own buttons: a 48x32 pill (radius 16, straight
        sides) drawn by a pseudo-element, exactly like .ytp-button::before. A
        clipped background gave elliptical corners and looked like a ball. */
-    #${PLAYER_CONTROLS_ID} .yte-btn {
-      isolation: isolate;
+    #${PLAYER_CONTROLS_ID} .yte-btn > * {
+      position: relative;
+      z-index: 1;
     }
 
     #${PLAYER_CONTROLS_ID} .yte-btn::after {
@@ -59,7 +60,7 @@ export function buildPlayerUiCss() {
       background-color: transparent;
       transition: background-color 0.1s cubic-bezier(0.4, 0, 1, 1);
       pointer-events: none;
-      z-index: -1;
+      z-index: 0;
     }
 
     #${PLAYER_CONTROLS_ID} .yte-btn:hover::after,
@@ -162,7 +163,7 @@ export function buildPlayerUiCss() {
 
     #${FILTER_PANEL_ID}.yte-from-gear:not([hidden]) { animation: none; }
     /* Size animations only lay out the panel itself; the slide is clipped. */
-    #${FILTER_PANEL_ID}, #yte-live-panel { contain: layout paint; will-change: width, height; }
+    
 
     /* YouTube's main settings panel briefly overflows while it animates into
        a sub-menu (it holds our extra rows); hide that transient scrollbar. */
@@ -243,6 +244,13 @@ export function buildPlayerUiCss() {
     }
 
     #${FILTER_PANEL_ID} .ytp-panel { overflow-y: auto; overflow-x: hidden; }
+    /* Same air as YouTube's settings menu around the rows. */
+    #${FILTER_PANEL_ID} .ytp-panel-menu,
+    #yte-live-panel .ytp-panel-menu { padding: 8px 0 !important; }
+    #${FILTER_PANEL_ID} .ytp-menuitem-content,
+    #yte-live-panel .ytp-menuitem-content { padding-right: 16px !important; }
+    #${FILTER_PANEL_ID} .ytp-menuitem-icon,
+    #yte-live-panel .ytp-menuitem-icon { padding-left: 12px !important; }
 
     .yte-gear-subpanel .ytp-menuitem-label { white-space: nowrap; }
     .yte-gear-subpanel { overflow-x: hidden; }

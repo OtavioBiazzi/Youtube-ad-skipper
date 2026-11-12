@@ -591,8 +591,9 @@
     /* Same hover as YouTube's own buttons: a 48x32 pill (radius 16, straight
        sides) drawn by a pseudo-element, exactly like .ytp-button::before. A
        clipped background gave elliptical corners and looked like a ball. */
-    #${PLAYER_CONTROLS_ID} .yte-btn {
-      isolation: isolate;
+    #${PLAYER_CONTROLS_ID} .yte-btn > * {
+      position: relative;
+      z-index: 1;
     }
 
     #${PLAYER_CONTROLS_ID} .yte-btn::after {
@@ -607,7 +608,7 @@
       background-color: transparent;
       transition: background-color 0.1s cubic-bezier(0.4, 0, 1, 1);
       pointer-events: none;
-      z-index: -1;
+      z-index: 0;
     }
 
     #${PLAYER_CONTROLS_ID} .yte-btn:hover::after,
@@ -710,7 +711,7 @@
 
     #${FILTER_PANEL_ID}.yte-from-gear:not([hidden]) { animation: none; }
     /* Size animations only lay out the panel itself; the slide is clipped. */
-    #${FILTER_PANEL_ID}, #yte-live-panel { contain: layout paint; will-change: width, height; }
+    
 
     /* YouTube's main settings panel briefly overflows while it animates into
        a sub-menu (it holds our extra rows); hide that transient scrollbar. */
@@ -791,6 +792,13 @@
     }
 
     #${FILTER_PANEL_ID} .ytp-panel { overflow-y: auto; overflow-x: hidden; }
+    /* Same air as YouTube's settings menu around the rows. */
+    #${FILTER_PANEL_ID} .ytp-panel-menu,
+    #yte-live-panel .ytp-panel-menu { padding: 8px 0 !important; }
+    #${FILTER_PANEL_ID} .ytp-menuitem-content,
+    #yte-live-panel .ytp-menuitem-content { padding-right: 16px !important; }
+    #${FILTER_PANEL_ID} .ytp-menuitem-icon,
+    #yte-live-panel .ytp-menuitem-icon { padding-left: 12px !important; }
 
     .yte-gear-subpanel .ytp-menuitem-label { white-space: nowrap; }
     .yte-gear-subpanel { overflow-x: hidden; }
@@ -4162,10 +4170,12 @@ ${customCss}
       popup: "M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z",
       boost: "M3 9v6h4l5 5V4L7 9H3zm15-5-4 8h3l-1 8 5-10h-3l2-6z"
     };
+    const BOOST_SPEAKER = "M3 9v6h4l5 5V4L7 9H3z";
+    const BOOST_BOLT = "M18 4l-4 8h3l-1 8 5-10h-3l2-6z";
     const PLAYER_ICON_STATES = {
       boost: {
-        on: '<path d="M3 9v6h4l5 5V4L7 9H3zm15-5-4 8h3l-1 8 5-10h-3l2-6z"/>',
-        off: '<path d="M3 9v6h4l5 5V4L7 9H3zm7-.17v6.34L7.83 13H5v-2h2.83L10 8.83z"/><path d="M18 4.6 15 11h3l-1 6.6L20.6 10h-3l1.6-5.4z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>'
+        on: `<path d="${BOOST_SPEAKER}"/><path d="${BOOST_BOLT}"/>`,
+        off: `<path d="${BOOST_SPEAKER}"/><path d="${BOOST_BOLT}" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>`
       }
     };
     function playerIcon(name, active = false) {
@@ -4529,9 +4539,20 @@ ${customCss}
       const host = {
         render: (dir) => renderFilterPanel(panel, dir),
         back: () => {
+          const from = panel.getBoundingClientRect();
           closeFilterPanel();
-          const gear = getYouTubePlayer()?.querySelector(".ytp-settings-button");
-          window.setTimeout(() => gear?.click(), 0);
+          const player = getYouTubePlayer();
+          const gear = player?.querySelector(".ytp-settings-button");
+          window.setTimeout(() => {
+            gear?.click();
+            requestAnimationFrame(() => {
+              const menu = player?.querySelector(".ytp-settings-menu");
+              if (!menu || getComputedStyle(menu).display === "none") return;
+              morphPanelFrom(menu, from.width, from.height);
+              const view = menu.querySelector(".ytp-panel");
+              if (view) slidePanels(null, view, "back");
+            });
+          }, 0);
         }
       };
       const panelEl = buildFilterPanelEl(host);
@@ -4704,9 +4725,9 @@ ${customCss}
     function slidePanels(outgoing, incoming, direction) {
       if (direction === "none") return;
       const sign = direction === "forward" ? 1 : -1;
-      const easing = "cubic-bezier(0, 0, 0.2, 1)";
+      const easing = "cubic-bezier(0.4, 0, 0.2, 1)";
       incoming.animate(
-        [{ transform: `translateX(${sign * 100}%)` }, { transform: "translateX(0)" }],
+        [{ transform: `translateX(${sign * 40}%)`, opacity: 0 }, { transform: "translateX(0)", opacity: 1 }],
         { duration: SUBMENU_ANIM_MS, easing }
       );
     }
@@ -4721,13 +4742,14 @@ ${customCss}
     }
     function morphPanelFrom(panel, fromWidth, fromHeight) {
       const to = panel.getBoundingClientRect();
-      if (Math.abs(to.width - fromWidth) < 1 && Math.abs(to.height - fromHeight) < 1) return;
+      const dx = Math.max(0, to.width - fromWidth);
+      const dy = Math.max(0, to.height - fromHeight);
+      if (dx < 1 && dy < 1) return;
+      const leftAnchored = panel.id === "yte-live-panel";
+      const start = leftAnchored ? `inset(${dy}px ${dx}px 0 0 round 12px)` : `inset(${dy}px 0 0 ${dx}px round 12px)`;
       panel.animate(
-        [
-          { width: fromWidth + "px", height: fromHeight + "px" },
-          { width: to.width + "px", height: to.height + "px" }
-        ],
-        { duration: SUBMENU_ANIM_MS, easing: "cubic-bezier(0, 0, 0.2, 1)" }
+        [{ clipPath: start }, { clipPath: "inset(0 0 0 0 round 12px)" }],
+        { duration: SUBMENU_ANIM_MS, easing: "cubic-bezier(0.4, 0, 0.2, 1)" }
       );
     }
     function syncFilterPanel() {

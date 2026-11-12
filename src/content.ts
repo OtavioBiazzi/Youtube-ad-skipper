@@ -3447,13 +3447,17 @@ declare global {
 
   // Icons whose look changes with the state, like YouTube's own buttons
   // (instead of an underline): hollow when off, filled when on.
+  const BOOST_SPEAKER = "M3 9v6h4l5 5V4L7 9H3z";
+  const BOOST_BOLT = "M18 4l-4 8h3l-1 8 5-10h-3l2-6z";
+  // Same shapes on and off (so the size never changes): on = filled bolt,
+  // off = outlined bolt, like YouTube's filled/outlined icon states.
   const PLAYER_ICON_STATES: Record<string, { on: string; off: string }> = {
     boost: {
-      on: '<path d="M3 9v6h4l5 5V4L7 9H3zm15-5-4 8h3l-1 8 5-10h-3l2-6z"/>',
-      off: '<path d="M3 9v6h4l5 5V4L7 9H3zm7-.17v6.34L7.83 13H5v-2h2.83L10 8.83z"/>'
-        + '<path d="M18 4.6 15 11h3l-1 6.6L20.6 10h-3l1.6-5.4z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>',
+      on: `<path d="${BOOST_SPEAKER}"/><path d="${BOOST_BOLT}"/>`,
+      off: `<path d="${BOOST_SPEAKER}"/><path d="${BOOST_BOLT}" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>`,
     },
   };
+
 
   function playerIcon(name: string, active = false) {
     const states = PLAYER_ICON_STATES[name];
@@ -3880,9 +3884,21 @@ declare global {
     const host: FilterHost = {
       render: (dir) => renderFilterPanel(panel, dir),
       back: () => {
+        const from = panel.getBoundingClientRect();
         closeFilterPanel();
-        const gear = getYouTubePlayer()?.querySelector(".ytp-settings-button") as HTMLElement | null;
-        window.setTimeout(() => gear?.click(), 0);
+        const player = getYouTubePlayer();
+        const gear = player?.querySelector(".ytp-settings-button") as HTMLElement | null;
+        window.setTimeout(() => {
+          gear?.click();
+          // Same morph + slide as going forward, so "voltar" animates too.
+          requestAnimationFrame(() => {
+            const menu = player?.querySelector(".ytp-settings-menu") as HTMLElement | null;
+            if (!menu || getComputedStyle(menu).display === "none") return;
+            morphPanelFrom(menu, from.width, from.height);
+            const view = menu.querySelector(".ytp-panel") as HTMLElement | null;
+            if (view) slidePanels(null, view, "back");
+          });
+        }, 0);
       },
     };
     const panelEl = buildFilterPanelEl(host);
@@ -4082,16 +4098,15 @@ declare global {
 
   function slidePanels(outgoing: HTMLElement | null, incoming: HTMLElement, direction: "forward" | "back" | "none") {
     if (direction === "none") return;
-    // YouTube's sub-menu slide: the new view comes all the way from the side.
     const sign = direction === "forward" ? 1 : -1;
-    const easing = "cubic-bezier(0, 0, 0.2, 1)";
+    const easing = "cubic-bezier(0.4, 0, 0.2, 1)";
     incoming.animate(
-      [{ transform: `translateX(${sign * 100}%)` }, { transform: "translateX(0)" }],
+      [{ transform: `translateX(${sign * 40}%)`, opacity: 0 }, { transform: "translateX(0)", opacity: 1 }],
       { duration: SUBMENU_ANIM_MS, easing },
     );
     if (outgoing) {
       outgoing.animate(
-        [{ transform: "translateX(0)" }, { transform: `translateX(${-sign * 100}%)` }],
+        [{ transform: "translateX(0)", opacity: 1 }, { transform: `translateX(${-sign * 40}%)`, opacity: 0 }],
         { duration: SUBMENU_ANIM_MS, easing, fill: "forwards" },
       );
     }
@@ -4117,15 +4132,17 @@ declare global {
   // has CSS containment, so only its own subtree is laid out per frame.
   function morphPanelFrom(panel: HTMLElement, fromWidth: number, fromHeight: number) {
     const to = panel.getBoundingClientRect();
-    if (Math.abs(to.width - fromWidth) < 1 && Math.abs(to.height - fromHeight) < 1) return;
+    const dx = Math.max(0, to.width - fromWidth);
+    const dy = Math.max(0, to.height - fromHeight);
+    if (dx < 1 && dy < 1) return;
+    const leftAnchored = panel.id === "yte-live-panel";
+    const start = leftAnchored ? `inset(${dy}px ${dx}px 0 0 round 12px)` : `inset(${dy}px 0 0 ${dx}px round 12px)`;
     panel.animate(
-      [
-        { width: fromWidth + "px", height: fromHeight + "px" },
-        { width: to.width + "px", height: to.height + "px" },
-      ],
-      { duration: SUBMENU_ANIM_MS, easing: "cubic-bezier(0, 0, 0.2, 1)" },
+      [{ clipPath: start }, { clipPath: "inset(0 0 0 0 round 12px)" }],
+      { duration: SUBMENU_ANIM_MS, easing: "cubic-bezier(0.4, 0, 0.2, 1)" },
     );
   }
+
 
   function syncFilterPanel() {
     if (filterPanelView !== "main") return;
