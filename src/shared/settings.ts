@@ -1,5 +1,5 @@
 export const SETTINGS_VERSION = 1;
-export const PLAYER_DEFAULTS_PROFILE_VERSION = 5;
+export const PLAYER_DEFAULTS_PROFILE_VERSION = 6;
 
 export type ListMode = "whitelist" | "blacklist";
 export type QualityLevel = "auto" | "medium" | "large" | "hd720" | "hd1080" | "hd1440" | "hd2160" | "highres";
@@ -12,7 +12,7 @@ export type StoredSettingValue = PlannedSettingValue | string[] | null;
 
 export const PLAYER_DEFAULTS_PROFILE: Record<string, PlannedSettingValue> = {
   playerSpeedEnabled: true,
-  playerSpeedStep: 0.02,
+  playerSpeedStep: 0.25,
   playerSpeedWheel: true,
   autoplayBlockBackground: false,
   autoplayAllowPlaylists: true,
@@ -181,8 +181,10 @@ export const DEFAULT_SETTINGS = {
   settingsMenuItemsEnabled: true,
   skipSurveysEnabled: true,
   playerEndTimeEnabled: false,
-  liveCatchUpEnabled: true,
+  liveCatchUpEnabled: false,
   liveCatchUpTarget: 3,
+  liveCatchUpMode: "balanced",
+  liveJumpEnabled: true,
   liveCatchUpMaxRate: 1.25,
   videoFilterHue: 0,
 };
@@ -241,6 +243,12 @@ export const SETTINGS_MIGRATIONS: Record<number, Record<string, PlannedSettingVa
   5: {
     playerEndTimeEnabled: false,
     playerControlsStyle: "pill",
+  },
+  // v6: live catch-up is opt-in (configured from the button next to
+  // YouTube's "AO VIVO"); Ctrl+wheel moves in YouTube-sized speed steps.
+  6: {
+    liveCatchUpEnabled: false,
+    playerSpeedStep: 0.25,
   },
 };
 

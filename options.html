@@ -29,7 +29,7 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17"/></svg>
           </button>
         </div>
-        <span class="header-version" id="version-tag">v5.1.0</span>
+        <span class="header-version" id="version-tag">v5.2.0</span>
         <button id="theme-toggle" class="theme-toggle" title="Alternar tema" aria-label="Alternar tema claro ou escuro">
           <svg class="sun-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
           <svg class="moon-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
@@ -357,9 +357,10 @@
           <article class="card card--module">
             <div class="card-header"><span>Lives</span></div>
             <div class="card-body control-stack">
-              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Tirar o atraso das lives</span><span class="opt-desc">Acelera de leve enquanto houver atraso acumulado, sem pular nada. Mostra o atraso no botão "AO VIVO" do player.</span></div><label class="switch"><input type="checkbox" data-setting="liveCatchUpEnabled" checked><span class="switch-track"></span></label></div>
-              <label class="field-row"><span>Atraso alvo</span><select class="control-input" data-setting="liveCatchUpTarget"><option value="1.5">1,5 s (agressivo)</option><option value="3" selected>3 s</option><option value="5">5 s</option><option value="8">8 s (conexão instável)</option></select></label>
-              <label class="field-row"><span>Velocidade máxima</span><select class="control-input" data-setting="liveCatchUpMaxRate"><option value="1.1">1,1x (imperceptível)</option><option value="1.25" selected>1,25x</option><option value="1.5">1,5x</option></select></label>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Tirar o atraso das lives</span><span class="opt-desc">Desligado por padrão. Quando ligado, acelera de leve enquanto houver atraso e buffer sobrando, sem pular nada. Também dá para configurar pelo botão de atraso ao lado do "AO VIVO" do player.</span></div><label class="switch"><input type="checkbox" data-setting="liveCatchUpEnabled"><span class="switch-track"></span></label></div>
+              <label class="field-row"><span>Modo</span><select class="control-input" data-setting="liveCatchUpMode"><option value="balanced" selected>Equilibrado (~4s de folga, qualquer conexão)</option><option value="close">Perto do ao vivo (~3s, conexão estável)</option><option value="extreme">Extremo (~2s, conexão rápida)</option></select></label>
+              <label class="field-row"><span>Velocidade máxima</span><select class="control-input" data-setting="liveCatchUpMaxRate"><option value="1.1">1,1x (imperceptível)</option><option value="1.25" selected>1,25x (recomendado)</option><option value="1.5">1,5x</option></select></label>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Pular para o ao vivo após 30 s de atraso</span><span class="opt-desc">Usa o "ir para o ao vivo" do próprio YouTube quando o atraso fica grande demais.</span></div><label class="switch"><input type="checkbox" data-setting="liveJumpEnabled" checked><span class="switch-track"></span></label></div>
             </div>
           </article>
           <article class="card card--module">

@@ -8,6 +8,8 @@
   const MAIN_QUALITY_MESSAGE = "youtube-extension:set-quality";
   const MAIN_QUALITY_RESULT = "youtube-extension:quality-result";
   const MAIN_PLAYER_COMMAND = "youtube-extension:player-command";
+  const MAIN_LIVE_QUERY = "youtube-extension:live-query";
+  const MAIN_LIVE_STATS = "youtube-extension:live-stats";
   const CODEC_SETTINGS_MESSAGE = "youtube-extension:codec-settings";
   const CODEC_SETTINGS_STORAGE_KEY = "youtubeExtensionCodecSettings";
   function isBridgeMessage(data) {
@@ -238,12 +240,34 @@
       }
       window.postMessage({ source: MAIN_QUALITY_RESULT, token: bridgeSessionToken, current, available, applied, query }, "*");
     }
+    function reportLiveStats() {
+      const player = document.getElementById("movie_player") || document.querySelector(".html5-video-player");
+      if (!player) return;
+      let latency = Number.NaN;
+      let health = Number.NaN;
+      let atLiveHead = true;
+      try {
+        const stats = typeof player.getStatsForNerds === "function" ? player.getStatsForNerds() : null;
+        if (stats) {
+          latency = Number.parseFloat(stats.live_latency_secs);
+          health = Number.parseFloat(stats.buffer_health_seconds);
+        }
+      } catch (err) {
+      }
+      try {
+        const progress = typeof player.getProgressState === "function" ? player.getProgressState() : null;
+        if (progress && typeof progress.isAtLiveHead === "boolean") atLiveHead = progress.isAtLiveHead;
+      } catch (err) {
+      }
+      window.postMessage({ source: MAIN_LIVE_STATS, token: bridgeSessionToken, latency, health, atLiveHead }, "*");
+    }
     function runPlayerCommand(command, value) {
       const player = document.getElementById("movie_player") || document.querySelector(".html5-video-player");
       if (!player) return;
       try {
         if (command === "setVolume" && typeof player.setVolume === "function") player.setVolume(Math.max(0, Math.min(100, Number(value) || 0)));
         else if (command === "unMute" && typeof player.unMute === "function") player.unMute();
+        else if (command === "seekToLiveHead" && typeof player.seekToLiveHead === "function") player.seekToLiveHead();
       } catch (err) {
       }
     }
@@ -498,6 +522,10 @@
       }
       if (data.source === MAIN_QUALITY_MESSAGE) {
         setPlayerQuality(data.level, data.query === true);
+        return;
+      }
+      if (data.source === MAIN_LIVE_QUERY) {
+        reportLiveStats();
         return;
       }
       if (data.source === MAIN_PLAYER_COMMAND) {

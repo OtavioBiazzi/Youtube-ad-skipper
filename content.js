@@ -207,6 +207,8 @@
   const MAIN_QUALITY_MESSAGE = "youtube-extension:set-quality";
   const MAIN_QUALITY_RESULT = "youtube-extension:quality-result";
   const MAIN_PLAYER_COMMAND = "youtube-extension:player-command";
+  const MAIN_LIVE_QUERY = "youtube-extension:live-query";
+  const MAIN_LIVE_STATS = "youtube-extension:live-stats";
   const CODEC_SETTINGS_MESSAGE = "youtube-extension:codec-settings";
   const CODEC_SETTINGS_STORAGE_KEY = "youtubeExtensionCodecSettings";
   function createBridgeSessionToken() {
@@ -266,10 +268,10 @@
     const wanted = normalizeShortcutCombo(combo);
     return !!wanted && eventToShortcutCombo(event) === wanted;
   }
-  const PLAYER_DEFAULTS_PROFILE_VERSION = 5;
+  const PLAYER_DEFAULTS_PROFILE_VERSION = 6;
   const PLAYER_DEFAULTS_PROFILE = {
     playerSpeedEnabled: true,
-    playerSpeedStep: 0.02,
+    playerSpeedStep: 0.25,
     playerSpeedWheel: true,
     autoplayBlockBackground: false,
     autoplayAllowPlaylists: true,
@@ -437,8 +439,10 @@
     settingsMenuItemsEnabled: true,
     skipSurveysEnabled: true,
     playerEndTimeEnabled: false,
-    liveCatchUpEnabled: true,
+    liveCatchUpEnabled: false,
     liveCatchUpTarget: 3,
+    liveCatchUpMode: "balanced",
+    liveJumpEnabled: true,
     liveCatchUpMaxRate: 1.25,
     videoFilterHue: 0
   };
@@ -483,6 +487,12 @@
     5: {
       playerEndTimeEnabled: false,
       playerControlsStyle: "pill"
+    },
+    // v6: live catch-up is opt-in (configured from the button next to
+    // YouTube's "AO VIVO"); Ctrl+wheel moves in YouTube-sized speed steps.
+    6: {
+      liveCatchUpEnabled: false,
+      playerSpeedStep: 0.25
     }
   };
   function getSettingsMigrationPatch(storedVersion) {
@@ -554,28 +564,39 @@
   function shouldResetMiniplayerDismissal(slotBottom, mastheadHeight) {
     return Number.isFinite(slotBottom) && slotBottom > mastheadHeight + MINIPLAYER_ENTER_MARGIN + MINIPLAYER_EXIT_MARGIN;
   }
-  const LIVE_JUMP_THRESHOLD_SECONDS = 30;
-  function decideLiveRate(input) {
-    const target = Math.max(0.5, Number(input.target) || 3);
-    const ahead = Number(input.bufferAhead);
-    const maxRate = Math.min(2, Math.max(1.05, Number(input.maxRate) || 1.25));
-    if (!Number.isFinite(ahead) || ahead <= 0) return { rate: 1, jumpBy: 0 };
-    if (ahead > LIVE_JUMP_THRESHOLD_SECONDS) {
-      return { rate: 1, jumpBy: Math.max(0, ahead - target) };
-    }
-    const excess = ahead - target;
-    const catchingUp = input.currentRate > 1.001;
-    if (excess <= (catchingUp ? 0 : 1)) return { rate: 1, jumpBy: 0 };
-    const rate = Math.min(maxRate, 1 + Math.max(0.05, excess * 0.04));
-    return { rate: Math.round(rate * 100) / 100, jumpBy: 0 };
+  const LIVE_MODES = {
+    balanced: { label: "Equilibrado", cushion: 4, hint: "~4s de folga · qualquer conexão" },
+    close: { label: "Perto do ao vivo", cushion: 3, hint: "~3s de folga · conexão estável" },
+    extreme: { label: "Extremo", cushion: 2, hint: "~2s de folga · conexão rápida" }
+  };
+  const LIVE_MAX_RATES = [1.1, 1.25, 1.5];
+  const LIVE_JUMP_SECONDS = 30;
+  const STALL_GUARD = 1.5;
+  const MIN_LATENCY = 2;
+  const FULL_DEMAND = 6;
+  const SURPLUS_RAMP = 2;
+  const ENGAGE_MARGIN = 1.5;
+  function normalizeLiveMode(value) {
+    return value === "close" || value === "extreme" ? value : "balanced";
   }
-  function getBufferAhead(video) {
-    const ranges = video.buffered;
-    const time = video.currentTime;
-    for (let i = ranges.length - 1; i >= 0; i -= 1) {
-      if (ranges.start(i) <= time + 0.5 && ranges.end(i) >= time) return ranges.end(i) - time;
-    }
-    return 0;
+  const clamp01 = (x) => x < 0 ? 0 : x > 1 ? 1 : x;
+  function decideLiveRate(input) {
+    const latency = Number(input.latency);
+    const health = Number(input.bufferHealth);
+    const maxRate = Math.min(2, Math.max(1.05, Number(input.maxRate) || 1.25));
+    const cushion = LIVE_MODES[normalizeLiveMode(input.mode)].cushion;
+    const rest = (engaged2, jumpToLive = false) => ({ rate: 1, engaged: engaged2, jumpToLive });
+    if (!Number.isFinite(latency) || !Number.isFinite(health)) return rest(false);
+    if (input.jumpEnabled && latency >= LIVE_JUMP_SECONDS) return rest(false, true);
+    if (latency < MIN_LATENCY || health < STALL_GUARD) return rest(input.engaged && health >= STALL_GUARD);
+    let engaged = input.engaged;
+    if (engaged && health <= cushion) engaged = false;
+    else if (!engaged && health > cushion + ENGAGE_MARGIN) engaged = true;
+    if (!engaged) return rest(false);
+    const demand = clamp01((latency - MIN_LATENCY) / FULL_DEMAND);
+    const headroom = clamp01((health - cushion) / SURPLUS_RAMP);
+    const rate = 1 + (maxRate - 1) * demand * headroom;
+    return { rate: Math.round(rate * 100) / 100, engaged, jumpToLive: false };
   }
   const VIDEO_FILTER_DEFAULTS = {
     brightness: 100,
@@ -924,8 +945,9 @@
       config.skipSurveysEnabled = s.skipSurveysEnabled !== false;
       setSurveySkipEnabled(config.skipSurveysEnabled);
       config.playerEndTimeEnabled = s.playerEndTimeEnabled === true;
-      config.liveCatchUpEnabled = s.liveCatchUpEnabled !== false;
-      config.liveCatchUpTarget = Number(s.liveCatchUpTarget) > 0 ? Number(s.liveCatchUpTarget) : 3;
+      config.liveCatchUpEnabled = s.liveCatchUpEnabled === true;
+      config.liveCatchUpMode = normalizeLiveMode(s.liveCatchUpMode);
+      config.liveJumpEnabled = s.liveJumpEnabled !== false;
       config.liveCatchUpMaxRate = Math.min(1.5, Math.max(1.05, Number(s.liveCatchUpMaxRate) || 1.25));
       config.videoFilterHue = Number(s.videoFilterHue) || 0;
       adState.warningCount = s.warningCount || 0;
@@ -1007,7 +1029,13 @@
           applyVideoFilters();
           syncFilterPanel();
         }
-        if (hasPrefix(settingChanges, "toolbar", "playerControls", "playerEndTime", "liveCatchUp", "settingsMenu") || has(settingChanges, "playerSpeedButtonsEnabled", "playerPopupEnabled")) {
+        if (hasPrefix(settingChanges, "liveCatchUp", "liveJump")) {
+          adState.liveEngaged = false;
+          if (!config.liveCatchUpEnabled) restoreLiveRate();
+          updateLiveButton();
+          syncLivePanel();
+        }
+        if (hasPrefix(settingChanges, "toolbar", "playerControls", "playerEndTime", "settingsMenu") || has(settingChanges, "playerSpeedButtonsEnabled", "playerPopupEnabled")) {
           updatePlayerControls();
         }
         if (hasPrefix(settingChanges, "miniplayer")) scheduleMiniplayerUpdate();
@@ -1023,6 +1051,15 @@
       if (event.source !== window) return;
       const data = event.data || {};
       if (!isBridgeMessage(data)) return;
+      if (data.source === MAIN_LIVE_STATS && data.token === mainWorldSessionToken) {
+        adState.liveStats = {
+          latency: Number(data.latency),
+          health: Number(data.health),
+          atLiveHead: data.atLiveHead !== false,
+          at: Date.now()
+        };
+        return;
+      }
       if (data.source === MAIN_QUALITY_RESULT && data.token === mainWorldSessionToken) {
         adState.qualityCurrent = typeof data.current === "string" ? data.current : "";
         if (Array.isArray(data.available)) adState.qualityAvailable = data.available.filter((level) => typeof level === "string");
@@ -1254,15 +1291,44 @@
         } catch (err) {
         }
       }
-      const player = getYouTubePlayer();
-      try {
-        if (player && typeof player.setPlaybackRate === "function") {
-          player.setPlaybackRate(targetRate);
-        }
-      } catch (err) {
+      if (targetRate <= YOUTUBE_API_MAX_RATE) {
+        adState.stickyRate = null;
+        requestMainWorldSpeedThrough(targetRate);
+      } else {
+        adState.stickyRate = { key: getCurrentVideoKey(), rate: targetRate };
+        bindStickyRate(video);
       }
-      if (targetRate <= MAX_PLAYBACK_RATE) requestMainWorldSpeedThrough(targetRate);
       return targetRate;
+    }
+    const YOUTUBE_API_MAX_RATE = 2;
+    let stickyRateVideo = null;
+    function bindStickyRate(video) {
+      if (!video || stickyRateVideo === video) return;
+      stickyRateVideo?.removeEventListener("ratechange", enforceStickyRate);
+      stickyRateVideo = video;
+      video.addEventListener("ratechange", enforceStickyRate);
+    }
+    function enforceStickyRate() {
+      const sticky = adState.stickyRate;
+      const video = getActiveVideo();
+      if (!sticky || !video || adState.active || getAdPlaying()) return;
+      if (sticky.key !== getCurrentVideoKey()) {
+        adState.stickyRate = null;
+        return;
+      }
+      if (Math.abs(video.playbackRate - sticky.rate) < 1e-3) return;
+      if (hasRecentPlaybackIntent(700)) {
+        adState.stickyRate = null;
+        return;
+      }
+      window.setTimeout(() => {
+        if (adState.stickyRate === sticky && Math.abs(video.playbackRate - sticky.rate) > 1e-3) {
+          try {
+            video.playbackRate = sticky.rate;
+          } catch (err) {
+          }
+        }
+      }, 0);
     }
     function setUserVolume(percent, unmute = false, video = getActiveVideo()) {
       const target = normalizeVolumePercent(percent);
@@ -3927,7 +3993,8 @@
       #${PLAYER_CONTROLS_ID} .yte-btn--text {
         width: auto;
         min-width: 48px;
-        font-size: 18px;
+        font-size: 17px;
+        font-weight: 400;
         padding: 0 6px;
         font-variant-numeric: tabular-nums;
       }
@@ -3969,6 +4036,10 @@
         display: none;
       }
 
+      /* Premium-only speed chips work through the extension: drop the upsell marks. */
+      #movie_player .ytp-variable-speed-panel-premium-upsell-icon,
+      #movie_player .ytp-variable-speed-panel-premium-badge { display: none !important; }
+
       /* Cinema only dims the page around the player: pointless in fullscreen. */
       #movie_player.ytp-fullscreen #${PLAYER_CONTROLS_ID} [data-yte-action="cinema"] {
         display: none;
@@ -3995,7 +4066,50 @@
         overflow: hidden !important;
       }
 
-      #${FILTER_PANEL_ID}[hidden] { display: none !important; }
+      #${FILTER_PANEL_ID}[hidden], #yte-live-panel[hidden] { display: none !important; }
+
+      #yte-live-panel {
+        position: absolute;
+        left: 12px;
+        bottom: 62px;
+        z-index: 70;
+        border-radius: 12px !important;
+        overflow: hidden !important;
+        transition: opacity 0.1s cubic-bezier(0.4, 0, 1, 1);
+      }
+
+      #movie_player.ytp-autohide #yte-live-panel { opacity: 0; pointer-events: none; }
+      #yte-live-panel .yte-menuitem--info { cursor: default; opacity: 0.75; }
+      #yte-live-panel .yte-menuitem--info:hover { background: transparent; }
+
+      #yte-live-latency {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        width: auto;
+        height: auto;
+        margin-left: 6px;
+        padding: 2px 8px;
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.12);
+        color: #fff;
+        font: 500 13px/1.4 Roboto, Arial, sans-serif;
+        font-variant-numeric: tabular-nums;
+        vertical-align: middle;
+        cursor: pointer;
+      }
+
+      #yte-live-latency::before {
+        content: "";
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.55);
+      }
+
+      #yte-live-latency[data-state="on"]::before { background: #2ba640; }
+      #yte-live-latency[data-state="catching"]::before { background: #ffb020; }
+      #yte-live-latency:hover { background: rgba(255, 255, 255, 0.22); }
 
       /* Fade out together with YouTube's controls when the mouse stops. */
       #${FILTER_PANEL_ID} { transition: opacity 0.1s cubic-bezier(0.4, 0, 1, 1); }
@@ -4109,7 +4223,6 @@
     }
     function getPlayerControlItems() {
       const items = [];
-      if (config.liveCatchUpEnabled !== false) items.push({ id: "live", tip: "Atraso da live", text: "AO VIVO", priority: "high", className: "yte-btn--text yte-live" });
       if (config.toolbarSpeed !== false && config.playerSpeedButtonsEnabled !== false) {
         items.push({ id: "speed", tip: "Velocidade · clique para alternar, role para ajustar, botão direito volta a 1x", text: "1x", priority: "high", className: "yte-btn--text" });
       }
@@ -4268,20 +4381,6 @@
       set("boost", shouldUseVolumeBoost());
       set("cinema", !!adState.cinemaActive);
       set("pip", !!document.pictureInPictureElement);
-      const live = controls.querySelector('[data-yte-action="live"]');
-      if (live) {
-        const isLive = isLiveStream();
-        live.hidden = !isLive;
-        if (isLive) {
-          const delay = adState.liveDelay || 0;
-          const catching = (adState.liveRateApplied || 1) > 1.001;
-          const text = delay > 0.05 ? "AO VIVO −" + delay.toFixed(1) + "s" : "AO VIVO";
-          if (live.textContent !== text) live.textContent = text;
-          live.classList.toggle("is-synced", delay <= Number(config.liveCatchUpTarget || 3) + 1);
-          live.classList.toggle("is-catching", catching);
-          live.dataset.tip = catching ? "Acelerando " + (adState.liveRateApplied || 1).toFixed(2) + "x para tirar o atraso · clique para ir ao vivo" : "Atraso ~" + delay.toFixed(1) + "s · clique para ir ao vivo";
-        }
-      }
     }
     function handlePlayerControlAction(action, event) {
       const video = getActiveVideo();
@@ -4324,9 +4423,6 @@
           break;
         case "pip":
           togglePictureInPicture(video).then(refreshPlayerControlStates);
-          break;
-        case "live":
-          jumpToLiveEdge();
           break;
       }
       refreshPlayerControlStates();
@@ -4374,6 +4470,9 @@
       hue: "M17.66 7.93 12 2.27 6.34 7.93c-3.12 3.12-3.12 8.19 0 11.31A7.98 7.98 0 0 0 12 21.58c2.05 0 4.1-.78 5.66-2.34 3.12-3.12 3.12-8.19 0-11.31zM12 19.59c-1.6 0-3.11-.62-4.24-1.76A5.95 5.95 0 0 1 6 13.59c0-1.6.62-3.11 1.76-4.24L12 5.1v14.49z",
       sepia: "M6.76 4.84l-1.8-1.79-1.41 1.41 1.79 1.79 1.42-1.41zM4 10.5H1v2h3v-2zm9-9.95h-2V3.5h2V.55zm7.45 3.91-1.41-1.41-1.79 1.79 1.41 1.41 1.79-1.79zm-3.21 13.7 1.79 1.8 1.41-1.41-1.8-1.79-1.4 1.4zM20 10.5v2h3v-2h-3zm-8-5c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6zm-1 16.95h2V19.5h-2v2.95zm-7.45-3.91 1.41 1.41 1.79-1.8-1.41-1.41-1.79 1.8z",
       grayscale: "M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16-7-8v8H5l7-8V5h7v14z",
+      live: "M7.76 16.24A5.98 5.98 0 0 1 6 12c0-1.66.67-3.16 1.76-4.24l1.42 1.42A3.99 3.99 0 0 0 8 12c0 1.1.45 2.1 1.17 2.83l-1.41 1.41zm8.48 0A5.98 5.98 0 0 0 18 12c0-1.66-.67-3.16-1.76-4.24l-1.42 1.42A3.99 3.99 0 0 1 16 12c0 1.1-.45 2.1-1.17 2.83l1.41 1.41zM12 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm8 2c0 2.21-.9 4.21-2.35 5.65l1.42 1.42A9.97 9.97 0 0 0 22 12c0-2.76-1.12-5.26-2.93-7.07l-1.42 1.42A7.95 7.95 0 0 1 20 12zM6.35 6.35 4.93 4.93A9.97 9.97 0 0 0 2 12c0 2.76 1.12 5.26 2.93 7.07l1.42-1.42A7.95 7.95 0 0 1 4 12c0-2.21.9-4.21 2.35-5.65z",
+      speed: "M20.38 8.57l-1.23 1.85a8 8 0 0 1-.22 7.58H5.07A8 8 0 0 1 15.58 6.85l1.85-1.23A10 10 0 0 0 3.35 19a2 2 0 0 0 1.72 1h13.85a2 2 0 0 0 1.74-1 10 10 0 0 0-.27-10.44zm-9.79 6.84a2 2 0 0 0 2.83 0l5.66-8.49-8.49 5.66a2 2 0 0 0 0 2.83z",
+      jump: "M4 18l8.5-6L4 6v12zm9-12v12l8.5-6L13 6z",
       reset: "M12 5V2L8 6l4 4V7c3.31 0 6 2.69 6 6 0 2.97-2.17 5.43-5 5.91v2.02c3.95-.49 7-3.85 7-7.93 0-4.42-3.58-8-8-8zm-6 8c0-1.65.67-3.15 1.76-4.24L6.34 7.34A7.95 7.95 0 0 0 4 13c0 4.08 3.05 7.44 7 7.93v-2.02c-2.83-.48-5-2.94-5-5.91z"
     };
     function getVideoFilterValues() {
@@ -4667,11 +4766,10 @@
       const key = getCurrentVideoKey();
       const video = getActiveVideo();
       const items = [
-        { id: "filters", label: "Filtros de imagem", value: shouldUseVideoFilters() ? "Ativados" : "Desativados" },
         { id: "loop", label: "Repetir vídeo", checked: !!video?.loop || adState.loopEnabled && adState.loopVideoKey === key }
       ];
       if (!document.fullscreenElement) items.push({ id: "cinema", label: "Modo cinema", checked: !!adState.cinemaActive });
-      if (isLiveStream()) items.push({ id: "live", label: "Tirar atraso da live", checked: config.liveCatchUpEnabled !== false });
+      items.push({ id: "filters", label: "Filtros de imagem", value: shouldUseVideoFilters() ? "Ativados" : "Desativados" });
       return items;
     }
     function closeYouTubeSettingsMenu() {
@@ -4696,14 +4794,6 @@
           break;
         case "cinema":
           toggleCinemaMode();
-          break;
-        case "live":
-          config.liveCatchUpEnabled = config.liveCatchUpEnabled === false;
-          try {
-            chrome.storage.local.set({ liveCatchUpEnabled: config.liveCatchUpEnabled });
-          } catch (err) {
-          }
-          if (!config.liveCatchUpEnabled) restoreLiveRate();
           break;
       }
       refreshGearItems();
@@ -4772,6 +4862,7 @@
       gearRaf = 0;
       const player = getYouTubePlayer();
       const menu = player?.querySelector(".ytp-settings-menu");
+      if (menu && config.enabled) syncSpeedPanel(menu);
       if (!player || !menu || menu.style.display === "none" || !shouldAddGearItems()) return;
       const panels = Array.from(menu.querySelectorAll(".ytp-panel")).filter((panel2) => !panel2.querySelector(".ytp-panel-header"));
       const panel = panels[panels.length - 1];
@@ -4787,6 +4878,72 @@
       for (const row of rows) list.insertBefore(row, firstSubmenu);
       fitGearMenu(player, menu, panel, list);
     }
+    const SPEED_PANEL_MAX = 10;
+    const SPEED_PANEL_STEP_ABOVE_API = 0.25;
+    function formatPanelRate(rate) {
+      return rate.toFixed(2) + "x";
+    }
+    function syncSpeedPanel(menu = document) {
+      const slider = menu.querySelector(".ytp-varispeed-input-slider");
+      if (!slider) return;
+      if (slider.max !== String(SPEED_PANEL_MAX)) {
+        slider.max = String(SPEED_PANEL_MAX);
+        slider.setAttribute("aria-valuemax", String(SPEED_PANEL_MAX));
+      }
+      const video = getActiveVideo();
+      if (!video) return;
+      const rate = video.playbackRate;
+      const min = Number(slider.min) || 0.25;
+      const percent = (Math.min(SPEED_PANEL_MAX, rate) - min) / (SPEED_PANEL_MAX - min) * 100;
+      slider.style.setProperty("--yt-slider-shape-gradient-percent", percent + "%");
+      if (rate > YOUTUBE_API_MAX_RATE + 1e-3) {
+        if (document.activeElement !== slider) slider.value = String(rate);
+        slider.setAttribute("aria-valuenow", String(rate));
+        const label = formatPanelRate(rate);
+        menu.querySelectorAll(".ytp-variable-speed-panel-display span, .ytp-speedslider-text").forEach((el) => {
+          if (el.textContent !== label) el.textContent = label;
+        });
+      }
+    }
+    function applyPanelRate(rate) {
+      const target = Math.min(SPEED_PANEL_MAX, Math.max(0.25, Math.round(rate * 100) / 100));
+      markUserPlaybackIntent("speed-panel");
+      setUserPlaybackRate(target, getActiveVideo());
+      syncSpeedPanel();
+      refreshPlayerControlStates();
+    }
+    document.addEventListener("input", (event) => {
+      const slider = event.target;
+      if (!config.enabled || !slider?.classList?.contains("ytp-varispeed-input-slider")) return;
+      const value = Number(slider.value);
+      if (!(value > YOUTUBE_API_MAX_RATE)) return;
+      event.stopImmediatePropagation();
+      applyPanelRate(value);
+    }, true);
+    document.addEventListener("change", (event) => {
+      const slider = event.target;
+      if (!config.enabled || !slider?.classList?.contains("ytp-varispeed-input-slider")) return;
+      if (Number(slider.value) > YOUTUBE_API_MAX_RATE) event.stopImmediatePropagation();
+    }, true);
+    document.addEventListener("click", (event) => {
+      if (!config.enabled) return;
+      const button = event.target?.closest?.(".ytp-variable-speed-panel-increment-button");
+      if (!button) return;
+      const video = getActiveVideo();
+      if (!video) return;
+      const label = (button.getAttribute("aria-label") || "").toLowerCase();
+      const up = label.includes("aument") || label.includes("increase") || button.textContent?.trim() === "+";
+      const rate = video.playbackRate;
+      if (up && rate >= YOUTUBE_API_MAX_RATE - 1e-3) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        applyPanelRate(rate + SPEED_PANEL_STEP_ABOVE_API);
+      } else if (!up && rate > YOUTUBE_API_MAX_RATE + 1e-3) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        applyPanelRate(Math.max(YOUTUBE_API_MAX_RATE, rate - SPEED_PANEL_STEP_ABOVE_API));
+      }
+    }, true);
     function scheduleGearInjection() {
       if (gearRaf) return;
       gearRaf = requestAnimationFrame(injectGearItems);
@@ -4808,72 +4965,275 @@
         scheduleGearInjection();
       }, 0);
     }, true);
-    function getLiveTarget() {
-      const n = Number(config.liveCatchUpTarget);
-      return Number.isFinite(n) && n > 0 ? n : 3;
+    document.addEventListener("click", (event) => {
+      if (!config.enabled) return;
+      const chip = event.target?.closest?.(".ytp-variable-speed-panel-preset-button");
+      if (!chip || !chip.querySelector(".ytp-variable-speed-panel-premium-upsell-icon")) return;
+      const rate = Number.parseFloat((chip.textContent || "").replace(",", "."));
+      if (!Number.isFinite(rate) || rate <= 0) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      markUserPlaybackIntent("speed-panel");
+      setUserPlaybackRate(rate, getActiveVideo());
+      showPlayerFeedback("speed", formatPlaybackRate(rate));
+      refreshPlayerControlStates();
+    }, true);
+    const LIVE_BUTTON_ID = "yte-live-latency";
+    const LIVE_PANEL_ID = "yte-live-panel";
+    let livePanelView = "main";
+    function requestLiveStats() {
+      postMainWorldMessage({ source: MAIN_LIVE_QUERY });
+    }
+    function getLiveStats() {
+      const stats = adState.liveStats;
+      if (!stats || Date.now() - stats.at > 3e3) return null;
+      return stats;
+    }
+    function setLiveRate(rate) {
+      const video = getActiveVideo();
+      if (video && Math.abs(video.playbackRate - rate) > 5e-3) {
+        try {
+          video.playbackRate = rate;
+        } catch (err) {
+        }
+      }
+      requestMainWorldSpeedThrough(rate);
+      adState.liveRateApplied = rate;
     }
     function restoreLiveRate() {
       if (!adState.liveRateApplied || adState.liveRateApplied === 1) return;
       const video = getActiveVideo();
-      if (video && Math.abs(video.playbackRate - adState.liveRateApplied) < 0.01) {
-        try {
-          video.playbackRate = 1;
-        } catch (err) {
-        }
-        requestMainWorldSpeedThrough(1);
-      }
+      if (video && Math.abs(video.playbackRate - adState.liveRateApplied) < 0.02) setLiveRate(1);
       adState.liveRateApplied = 1;
+      adState.liveEngaged = false;
     }
     function runLiveCatchUp() {
       const video = getActiveVideo();
       const key = getCurrentVideoKey();
-      if (!video || !config.enabled || config.liveCatchUpEnabled === false || !isLiveStream() || adState.active || getAdPlaying()) {
+      if (!video || !config.enabled || !isLiveStream() || adState.active || getAdPlaying()) {
         restoreLiveRate();
-        adState.liveDelay = 0;
         return;
       }
-      adState.liveDelay = getBufferAhead(video);
+      requestLiveStats();
+      updateLiveButton();
+      syncLivePanel();
+      if (!config.liveCatchUpEnabled) {
+        restoreLiveRate();
+        return;
+      }
       if (video.paused || adState.liveUserOverrideKey === key) return;
       const applied = adState.liveRateApplied || 1;
-      if (Math.abs(video.playbackRate - applied) > 0.01 && Math.abs(video.playbackRate - 1) > 0.01) {
+      if (Math.abs(video.playbackRate - applied) > 0.02 && Math.abs(video.playbackRate - 1) > 0.02) {
         adState.liveUserOverrideKey = key;
         adState.liveRateApplied = 1;
         return;
       }
+      const stats = getLiveStats();
+      if (!stats || !stats.atLiveHead) {
+        if (applied !== 1) setLiveRate(1);
+        return;
+      }
       const decision = decideLiveRate({
-        bufferAhead: adState.liveDelay,
-        target: getLiveTarget(),
-        currentRate: applied,
-        maxRate: Number(config.liveCatchUpMaxRate) || 1.25
+        latency: stats.latency,
+        bufferHealth: stats.health,
+        mode: normalizeLiveMode(config.liveCatchUpMode),
+        maxRate: Number(config.liveCatchUpMaxRate) || 1.25,
+        engaged: !!adState.liveEngaged,
+        jumpEnabled: config.liveJumpEnabled !== false
       });
-      if (decision.jumpBy > 0) {
-        try {
-          video.currentTime = video.currentTime + decision.jumpBy;
-        } catch (err) {
-        }
+      adState.liveEngaged = decision.engaged;
+      if (decision.jumpToLive && Date.now() - (adState.liveLastJumpAt || 0) > 1e4) {
+        adState.liveLastJumpAt = Date.now();
+        postMainWorldMessage({ source: MAIN_PLAYER_COMMAND, command: "seekToLiveHead" });
         recordPlaybackEvent("live-jump", "live-catch-up", Number(video.currentTime || 0));
       }
-      if (Math.abs(decision.rate - video.playbackRate) > 5e-3) {
-        try {
-          video.playbackRate = decision.rate;
-        } catch (err) {
-        }
-        requestMainWorldSpeedThrough(decision.rate);
-      }
-      adState.liveRateApplied = decision.rate;
+      if (Math.abs(decision.rate - applied) > 5e-3) setLiveRate(decision.rate);
     }
     function jumpToLiveEdge() {
-      const video = getActiveVideo();
-      if (!video || !isLiveStream()) return;
-      const ahead = getBufferAhead(video);
+      if (!isLiveStream()) return;
       adState.liveUserOverrideKey = "";
-      if (ahead > 1.5) {
+      adState.liveLastJumpAt = Date.now();
+      postMainWorldMessage({ source: MAIN_PLAYER_COMMAND, command: "seekToLiveHead" });
+      showPlayerFeedback("speed", "Ao vivo", "Indo para o ponto mais recente");
+    }
+    function formatSeconds(value) {
+      return Number.isFinite(value) ? value.toFixed(1).replace(".", ",") + " s" : "—";
+    }
+    function updateLiveButton() {
+      const player = getYouTubePlayer();
+      const badge = player?.querySelector(".ytp-live-badge");
+      let button = document.getElementById(LIVE_BUTTON_ID);
+      if (!player || !badge || !isLiveStream() || !config.enabled) {
+        button?.remove();
+        return;
+      }
+      if (!button || button.previousElementSibling !== badge) {
+        button?.remove();
+        button = document.createElement("button");
+        button.id = LIVE_BUTTON_ID;
+        button.type = "button";
+        button.className = "ytp-button";
+        button.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          toggleLivePanel();
+        });
+        badge.insertAdjacentElement("afterend", button);
+      }
+      const stats = getLiveStats();
+      const catching = (adState.liveRateApplied || 1) > 1.005;
+      const text = stats && stats.atLiveHead ? formatSeconds(stats.latency) : stats ? "DVR" : "…";
+      if (button.textContent !== text) button.textContent = text;
+      button.dataset.state = !config.liveCatchUpEnabled ? "off" : catching ? "catching" : "on";
+      button.title = config.liveCatchUpEnabled ? (catching ? "Acelerando " + (adState.liveRateApplied || 1).toFixed(2) + "x para tirar o atraso" : "Atraso até o ao vivo") + " · clique para configurar" : 'Atraso até o ao vivo · clique para ativar o "tirar atraso"';
+    }
+    function renderLivePanel(panel) {
+      const panelEl = document.createElement("div");
+      panelEl.className = "ytp-panel";
+      const menu = document.createElement("div");
+      menu.className = "ytp-panel-menu";
+      menu.setAttribute("role", "menu");
+      const header = (title) => {
+        const head = document.createElement("div");
+        head.className = "ytp-panel-header";
+        const back = document.createElement("button");
+        back.className = "ytp-button ytp-panel-back-button";
+        back.setAttribute("aria-label", "Voltar");
+        back.addEventListener("click", () => {
+          livePanelView = "main";
+          renderLivePanel(panel);
+        });
+        const label = document.createElement("span");
+        label.className = "ytp-panel-title";
+        label.textContent = title;
+        head.append(back, label);
+        panelEl.appendChild(head);
+      };
+      const save = (values) => {
+        Object.assign(config, values);
         try {
-          video.currentTime = video.currentTime + ahead - 1;
+          chrome.storage.local.set(values);
         } catch (err) {
         }
+      };
+      if (livePanelView === "mode") {
+        header("Modo");
+        const current = normalizeLiveMode(config.liveCatchUpMode);
+        for (const [id, mode] of Object.entries(LIVE_MODES)) {
+          const item = createMenuItem({ role: "menuitemradio", label: mode.label, content: mode.hint, checked: id === current });
+          onMenuActivate(item, () => {
+            save({ liveCatchUpMode: id });
+            adState.liveEngaged = false;
+            livePanelView = "main";
+            renderLivePanel(panel);
+          });
+          menu.appendChild(item);
+        }
+      } else if (livePanelView === "rate") {
+        header("Velocidade máxima");
+        for (const rate of LIVE_MAX_RATES) {
+          const label = rate.toString().replace(".", ",") + "x" + (rate === 1.1 ? " (imperceptível)" : rate === 1.25 ? " (recomendado)" : "");
+          const item = createMenuItem({ role: "menuitemradio", label, checked: Math.abs(rate - Number(config.liveCatchUpMaxRate || 1.25)) < 1e-3 });
+          onMenuActivate(item, () => {
+            save({ liveCatchUpMaxRate: rate });
+            livePanelView = "main";
+            renderLivePanel(panel);
+          });
+          menu.appendChild(item);
+        }
+      } else {
+        const toggle = createMenuItem({ role: "menuitemcheckbox", icon: "live", label: "Tirar atraso", checked: !!config.liveCatchUpEnabled });
+        toggle.querySelector(".ytp-menuitem-content").appendChild(Object.assign(document.createElement("div"), { className: "ytp-menuitem-toggle-checkbox" }));
+        onMenuActivate(toggle, () => {
+          save({ liveCatchUpEnabled: !config.liveCatchUpEnabled });
+          adState.liveUserOverrideKey = "";
+          if (!config.liveCatchUpEnabled) restoreLiveRate();
+          renderLivePanel(panel);
+          updateLiveButton();
+        });
+        menu.appendChild(toggle);
+        const mode = createMenuItem({ role: "menuitem", icon: "presets", label: "Modo", content: LIVE_MODES[normalizeLiveMode(config.liveCatchUpMode)].label, submenu: true });
+        onMenuActivate(mode, () => {
+          livePanelView = "mode";
+          renderLivePanel(panel);
+        });
+        menu.appendChild(mode);
+        const rate = createMenuItem({ role: "menuitem", icon: "speed", label: "Velocidade máxima", content: Number(config.liveCatchUpMaxRate || 1.25).toString().replace(".", ",") + "x", submenu: true });
+        onMenuActivate(rate, () => {
+          livePanelView = "rate";
+          renderLivePanel(panel);
+        });
+        menu.appendChild(rate);
+        const jump = createMenuItem({ role: "menuitemcheckbox", icon: "jump", label: "Pular para o ao vivo após 30 s", checked: config.liveJumpEnabled !== false });
+        jump.querySelector(".ytp-menuitem-content").appendChild(Object.assign(document.createElement("div"), { className: "ytp-menuitem-toggle-checkbox" }));
+        onMenuActivate(jump, () => {
+          save({ liveJumpEnabled: config.liveJumpEnabled === false });
+          renderLivePanel(panel);
+        });
+        menu.appendChild(jump);
+        const now = createMenuItem({ role: "menuitem", icon: "jump", label: "Ir para o ao vivo agora" });
+        onMenuActivate(now, () => {
+          jumpToLiveEdge();
+          closeLivePanel();
+        });
+        menu.appendChild(now);
+        for (const [key, label] of [["latency", "Atraso"], ["health", "Buffer"], ["rate", "Velocidade agora"]]) {
+          const info = createMenuItem({ role: "menuitem", label, content: "—" });
+          info.classList.add("yte-menuitem--info");
+          info.dataset.liveInfo = key;
+          info.tabIndex = -1;
+          menu.appendChild(info);
+        }
       }
-      showPlayerFeedback("speed", "Ao vivo", ahead > 1.5 ? "Pulou " + (ahead - 1).toFixed(1) + "s" : "Já está no ao vivo");
+      panelEl.appendChild(menu);
+      panel.querySelector(".ytp-popup-content").replaceChildren(panelEl);
+      sizeFilterPanel(panel);
+      syncLivePanel();
+    }
+    function syncLivePanel() {
+      const panel = document.getElementById(LIVE_PANEL_ID);
+      if (!panel || panel.hidden) return;
+      const stats = getLiveStats();
+      const set = (key, value) => {
+        const content = panel.querySelector(`[data-live-info="${key}"] .ytp-menuitem-content`);
+        if (content && content.textContent !== value) content.textContent = value;
+      };
+      set("latency", stats ? stats.atLiveHead ? formatSeconds(stats.latency) : "assistindo atrás (DVR)" : "—");
+      set("health", stats ? formatSeconds(stats.health) : "—");
+      set("rate", (getActiveVideo()?.playbackRate || 1).toFixed(2).replace(".", ",") + "x");
+    }
+    function closeLivePanel() {
+      const panel = document.getElementById(LIVE_PANEL_ID);
+      if (panel) panel.hidden = true;
+      getYouTubePlayer()?.classList.remove("yte-filter-panel-open");
+      document.removeEventListener("pointerdown", handleOutsideLivePanel, true);
+    }
+    function handleOutsideLivePanel(event) {
+      const target = event.target;
+      if (target?.closest?.("#" + LIVE_PANEL_ID) || target?.closest?.("#" + LIVE_BUTTON_ID)) return;
+      closeLivePanel();
+    }
+    function toggleLivePanel() {
+      const player = getYouTubePlayer();
+      if (!player) return;
+      let panel = document.getElementById(LIVE_PANEL_ID);
+      if (!panel || panel.parentElement !== player) {
+        panel?.remove();
+        panel = buildFilterPanel();
+        panel.id = LIVE_PANEL_ID;
+        panel.setAttribute("aria-label", "Atraso da live");
+        player.appendChild(panel);
+      }
+      if (!panel.hidden) {
+        closeLivePanel();
+        return;
+      }
+      closeFilterPanel();
+      livePanelView = "main";
+      player.classList.add("yte-filter-panel-open");
+      panel.hidden = false;
+      renderLivePanel(panel);
+      document.addEventListener("pointerdown", handleOutsideLivePanel, true);
     }
     function runPlayerUiTick() {
       runLiveCatchUp();

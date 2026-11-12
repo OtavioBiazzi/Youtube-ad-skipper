@@ -6,6 +6,8 @@ export const MAIN_PLAYER_RESIZE_MESSAGE = "youtube-extension:player-resize";
 export const MAIN_QUALITY_MESSAGE = "youtube-extension:set-quality";
 export const MAIN_QUALITY_RESULT = "youtube-extension:quality-result";
 export const MAIN_PLAYER_COMMAND = "youtube-extension:player-command";
+export const MAIN_LIVE_QUERY = "youtube-extension:live-query";
+export const MAIN_LIVE_STATS = "youtube-extension:live-stats";
 export const CODEC_SETTINGS_MESSAGE = "youtube-extension:codec-settings";
 export const CODEC_SETTINGS_STORAGE_KEY = "youtubeExtensionCodecSettings";
 
