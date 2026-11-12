@@ -2,6 +2,10 @@
 
 Todas as mudancas relevantes deste projeto serao registradas aqui.
 
+## 5.2.7
+
+- A engrenagem do YouTube abre já no tamanho certo, com a animação dele intacta: os itens da extensão são colocados no menu enquanto ele está fechado (antes, a primeira abertura começava no tamanho antigo e "pulava" para o novo).
+
 ## 5.2.6
 
 - Control Center → Sobre: área "Atualizações" com a versão instalada, botão "Verificar agora" e, quando houver versão nova, "Baixar nova versão". Usa o mesmo cache de 6 horas do popup.
