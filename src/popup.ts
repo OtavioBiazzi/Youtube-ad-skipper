@@ -1,4 +1,4 @@
-import { DEFAULT_SETTINGS, migrateSettings } from "./shared/settings";
+import { DEFAULT_SETTINGS, getSettingsMigrationPatch, migrateSettings } from "./shared/settings";
 
 function byId<T extends HTMLElement>(id: string): T {
   const element = document.getElementById(id);
@@ -100,7 +100,11 @@ try {
 }
 
 chrome.storage.local.get(DEFAULT_SETTINGS, (settings: PopupSettings) => {
-  settings = migrateSettings(settings) as unknown as PopupSettings;
+  // Persist the first-run/upgrade patch here too: otherwise a toggle changed
+  // in the popup before YouTube is opened would be overwritten by it later.
+  const migrationPatch = getSettingsMigrationPatch((settings as unknown as Record<string, unknown>).playerDefaultsProfileVersion);
+  if (migrationPatch) chrome.storage.local.set(migrationPatch);
+  settings = migrateSettings(settings as unknown as Record<string, unknown>) as unknown as PopupSettings;
   elements.enabled.checked = settings.enabled;
   elements.skipper.checked = settings.adSkipperEnabled !== false;
   elements.aggressive.checked = settings.aggressiveSkip;

@@ -286,6 +286,8 @@
     elements.version.textContent = "v-";
   }
   chrome.storage.local.get(DEFAULT_SETTINGS, (settings) => {
+    const migrationPatch = getSettingsMigrationPatch(settings.playerDefaultsProfileVersion);
+    if (migrationPatch) chrome.storage.local.set(migrationPatch);
     settings = migrateSettings(settings);
     elements.enabled.checked = settings.enabled;
     elements.skipper.checked = settings.adSkipperEnabled !== false;
