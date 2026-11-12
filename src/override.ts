@@ -277,7 +277,23 @@ import { getAdSeekTarget } from "./shared/adStrategy";
     ) || el;
   }
 
+  function getMainVideo(): HTMLVideoElement | null {
+    const player = getPlayer();
+    if (!player) return null;
+    return (player.querySelector("video.html5-main-video") || player.querySelector("video")) as HTMLVideoElement | null;
+  }
+
+  // Messages from the content script arrive asynchronously. By the time one is
+  // handled the ad may already be over and the same <video> element may be
+  // playing the real content, so every destructive action re-checks this.
+  function isAdShowing() {
+    const player = getPlayer();
+    return !!player && (player.classList.contains("ad-showing") || player.classList.contains("ad-interrupting"));
+  }
+
   function clickSkipButton() {
+    const root = getPlayer();
+    if (!root || !isAdShowing()) return false;
     const selectors = [
       ".ytp-skip-ad-button",
       ".ytp-ad-skip-button",
@@ -293,7 +309,7 @@ import { getAdSeekTarget } from "./shared/adStrategy";
     ];
 
     for (const selector of selectors) {
-      for (const el of document.querySelectorAll(selector)) {
+      for (const el of root.querySelectorAll(selector)) {
         const target = getClickTarget(el);
         if (!target || typeof target.click !== "function" || !isVisible(target)) continue;
         target.dispatchEvent(new MouseEvent("mouseover", { bubbles: true, cancelable: true, view: window }));
@@ -336,14 +352,18 @@ import { getAdSeekTarget } from "./shared/adStrategy";
     return document.getElementById("movie_player") || document.querySelector(".html5-video-player");
   }
 
-  function forceSkipFromMainWorld(rate = 3) {
+  function forceSkipFromMainWorld(rate = 3, adSrc = "") {
+    if (!isAdShowing()) return { ok: false, method: "no-ad" };
     const speedRate = normalizeAdRate(rate);
     if (clickSkipButton()) {
       return { ok: true, method: "click" };
     }
 
     const player: any = getPlayer();
-    const video = document.querySelector("video");
+    const video = getMainVideo();
+    if (video && adSrc && video.currentSrc && video.currentSrc !== adSrc) {
+      return { ok: false, method: "source-changed" };
+    }
     let attempted = false;
 
     if (video) {
@@ -388,9 +408,11 @@ import { getAdSeekTarget } from "./shared/adStrategy";
     return { ok: attempted, method: attempted ? "seek" : "none" };
   }
 
-  function setSpeedThrough(rate) {
+  function setSpeedThrough(rate, adOnly = false) {
+    // Ad speed-through (> normal rates) must never leak into the real video.
+    if (adOnly && !isAdShowing()) return false;
     const player: any = getPlayer();
-    const video = document.querySelector("video");
+    const video = getMainVideo();
     let attempted = false;
 
     if (video) {
@@ -429,12 +451,12 @@ import { getAdSeekTarget } from "./shared/adStrategy";
       return;
     }
     if (data.source === MAIN_FORCE_SKIP_MESSAGE) {
-      const result = forceSkipFromMainWorld(data.rate);
+      const result = forceSkipFromMainWorld(data.rate, typeof data.adSrc === "string" ? data.adSrc : "");
       window.postMessage({ source: MAIN_FORCE_SKIP_RESULT, token: bridgeSessionToken, ...result }, "*");
       return;
     }
     if (data.source === MAIN_SPEED_THROUGH_MESSAGE) {
-      setSpeedThrough(normalizePlaybackRate(data.rate));
+      setSpeedThrough(normalizePlaybackRate(data.rate), data.adOnly === true);
       return;
     }
     if (data.source === MAIN_QUALITY_MESSAGE) {

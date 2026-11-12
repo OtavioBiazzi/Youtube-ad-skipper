@@ -1,5 +1,5 @@
 export const SETTINGS_VERSION = 1;
-export const PLAYER_DEFAULTS_PROFILE_VERSION = 2;
+export const PLAYER_DEFAULTS_PROFILE_VERSION = 3;
 
 export type ListMode = "whitelist" | "blacklist";
 export type QualityLevel = "auto" | "medium" | "large" | "hd720" | "hd1080" | "hd1440" | "hd2160" | "highres";
@@ -14,7 +14,7 @@ export const PLAYER_DEFAULTS_PROFILE: Record<string, PlannedSettingValue> = {
   playerSpeedEnabled: true,
   playerSpeedStep: 0.02,
   playerSpeedWheel: true,
-  autoplayBlockBackground: true,
+  autoplayBlockBackground: false,
   autoplayAllowPlaylists: true,
   miniplayerEnabled: true,
   miniplayerSize: "480x270",
@@ -87,7 +87,7 @@ export const DEFAULT_SETTINGS = {
   volumeBoostLevel: 2,
   volumeBoostAuto: false,
   playerWheelInvert: false,
-  autoplayBlockBackground: true,
+  autoplayBlockBackground: false,
   autoplayBlockForeground: false,
   autoplayAllowPlaylists: true,
   pauseBackgroundTabs: false,
@@ -208,14 +208,36 @@ export function normalizeSettings(raw: Record<string, unknown> = {}) {
   return normalized;
 }
 
+/**
+ * Incremental migrations keyed by the profile version that introduced them.
+ * Version 2 applied the full player defaults profile; later versions only touch
+ * the keys they need so user choices are preserved.
+ */
+export const SETTINGS_MIGRATIONS: Record<number, Record<string, PlannedSettingValue>> = {
+  2: PLAYER_DEFAULTS_PROFILE,
+  // v3: stability overhaul. These defaults caused surprise pauses and comment
+  // menus opening on their own.
+  3: {
+    autoplayBlockBackground: false,
+    appearanceSortNewestComments: false,
+  },
+};
+
+export function getSettingsMigrationPatch(storedVersion: unknown): Record<string, PlannedSettingValue> | null {
+  const version = Number(storedVersion) || 0;
+  if (version >= PLAYER_DEFAULTS_PROFILE_VERSION) return null;
+
+  const patch: Record<string, PlannedSettingValue> = {};
+  for (let next = version + 1; next <= PLAYER_DEFAULTS_PROFILE_VERSION; next += 1) {
+    Object.assign(patch, SETTINGS_MIGRATIONS[next] || {});
+  }
+  patch.playerDefaultsProfileVersion = PLAYER_DEFAULTS_PROFILE_VERSION;
+  return patch;
+}
+
 export function migrateSettings(raw: Record<string, unknown> = {}) {
   const settings = normalizeSettings(raw);
-
-  if ((Number(settings.playerDefaultsProfileVersion) || 0) < PLAYER_DEFAULTS_PROFILE_VERSION) {
-    Object.assign(settings, PLAYER_DEFAULTS_PROFILE, {
-      playerDefaultsProfileVersion: PLAYER_DEFAULTS_PROFILE_VERSION,
-    });
-  }
-
+  const patch = getSettingsMigrationPatch(raw.playerDefaultsProfileVersion);
+  if (patch) Object.assign(settings, patch);
   return settings;
 }

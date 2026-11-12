@@ -27,6 +27,17 @@ export function getYouTubePlayer(doc: Document = document): HTMLElement | null {
   return (doc.getElementById("movie_player") || doc.querySelector(".html5-video-player")) as HTMLElement | null;
 }
 
+/**
+ * The main YouTube <video>. Never use document.querySelector("video"): hover
+ * previews (ytd-video-preview / #inline-player) also own <video> elements and
+ * often appear earlier in the DOM than the watch player.
+ */
+export function getMainVideo(doc: Document = document): HTMLVideoElement | null {
+  const player = getYouTubePlayer(doc);
+  if (!player) return null;
+  return (player.querySelector("video.html5-main-video") || player.querySelector("video")) as HTMLVideoElement | null;
+}
+
 function getClickableTarget(element: Element | null): HTMLElement | null {
   if (!element) return null;
   return (element.closest(

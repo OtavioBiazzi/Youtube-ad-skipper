@@ -4,6 +4,7 @@ import {
   PLAYER_DEFAULTS_PROFILE,
   PLAYER_DEFAULTS_PROFILE_VERSION,
   SETTINGS_EXPORT_KEYS,
+  getSettingsMigrationPatch,
   migrateSettings,
   normalizeSettings,
 } from "./settings";
@@ -55,6 +56,26 @@ describe("shared settings", () => {
     expect(settings.playerDefaultsProfileVersion).toBe(PLAYER_DEFAULTS_PROFILE_VERSION);
     expect(settings.toolbarEnabled).toBe(PLAYER_DEFAULTS_PROFILE.toolbarEnabled);
     expect(settings.miniplayerSize).toBe(PLAYER_DEFAULTS_PROFILE.miniplayerSize);
+  });
+
+  it("only applies the targeted stability patch for profile v2 users", () => {
+    const settings = migrateSettings({
+      playerDefaultsProfileVersion: 2,
+      toolbarEnabled: false,
+      autoplayBlockBackground: true,
+      appearanceSortNewestComments: true,
+    });
+
+    expect(settings.toolbarEnabled).toBe(false);
+    expect(settings.autoplayBlockBackground).toBe(false);
+    expect(settings.appearanceSortNewestComments).toBe(false);
+    expect(settings.playerDefaultsProfileVersion).toBe(PLAYER_DEFAULTS_PROFILE_VERSION);
+  });
+
+  it("does not migrate up-to-date storage", () => {
+    expect(getSettingsMigrationPatch(PLAYER_DEFAULTS_PROFILE_VERSION)).toBeNull();
+    const settings = migrateSettings({ playerDefaultsProfileVersion: PLAYER_DEFAULTS_PROFILE_VERSION, autoplayBlockBackground: true });
+    expect(settings.autoplayBlockBackground).toBe(true);
   });
 
   it("exposes import/export keys without duplicates", () => {

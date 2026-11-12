@@ -16,6 +16,7 @@ import {
   clickSkipAdBtn,
   findSkipAdButton,
   getAdPlaying,
+  getMainVideo,
   getYouTubePlayer,
 } from "./content/adDom";
 import {
@@ -37,11 +38,11 @@ import {
 } from "./shared/shortcuts";
 import {
   DEFAULT_SETTINGS,
-  PLAYER_DEFAULTS_PROFILE,
-  PLAYER_DEFAULTS_PROFILE_VERSION,
+  getSettingsMigrationPatch,
   migrateSettings,
 } from "./shared/settings";
 import { normalizeQualityLevel, pickBestQualityLevel } from "./shared/quality";
+import { getAutoplayBlockReason as decideAutoplayBlock } from "./shared/autoplay";
 import { getYouTubeVideoIdFromUrl, getYouTubeVideoKeyFromUrl } from "./shared/youtube";
 
 declare global {
@@ -171,14 +172,9 @@ declare global {
         chrome.storage.local.get(
           DEFAULT_SETTINGS,
           (s) => {
-            const storedProfileVersion = Number(s.playerDefaultsProfileVersion) || 0;
+            const migrationPatch = getSettingsMigrationPatch(s.playerDefaultsProfileVersion);
             s = migrateSettings(s);
-            if (storedProfileVersion < PLAYER_DEFAULTS_PROFILE_VERSION) {
-              chrome.storage.local.set({
-                ...PLAYER_DEFAULTS_PROFILE,
-                playerDefaultsProfileVersion: PLAYER_DEFAULTS_PROFILE_VERSION,
-              });
-            }
+            if (migrationPatch) chrome.storage.local.set(migrationPatch);
 
             config.enabled = !!s.enabled;
             config.adSkipperEnabled = s.adSkipperEnabled !== false;
@@ -834,7 +830,7 @@ declare global {
   }
 
   function getActiveVideo() {
-    return document.querySelector("video") as HTMLVideoElement | null;
+    return getMainVideo();
   }
 
   function getCurrentVideoKey() {
@@ -2659,6 +2655,30 @@ declare global {
     console.debug("[YouTube Extension][playback]", message, data);
   }
 
+  const PLAYBACK_EVENT_LOG_KEY = "playbackEventLog";
+  const PLAYBACK_EVENT_LOG_LIMIT = 30;
+
+  // Every pause/seek the extension performs on the real video is recorded so
+  // "it paused by itself" reports can be traced from the options page.
+  function recordPlaybackEvent(kind: string, reason: string, currentTime = 0) {
+    if (!chrome?.storage?.local) return;
+    const entry = {
+      at: Date.now(),
+      kind,
+      reason,
+      time: Math.round(currentTime * 10) / 10,
+      hidden: document.hidden,
+      video: getCurrentVideoId() || "",
+    };
+    try {
+      chrome.storage.local.get({ [PLAYBACK_EVENT_LOG_KEY]: [] }, (data) => {
+        const log = Array.isArray(data[PLAYBACK_EVENT_LOG_KEY]) ? data[PLAYBACK_EVENT_LOG_KEY] : [];
+        log.unshift(entry);
+        chrome.storage.local.set({ [PLAYBACK_EVENT_LOG_KEY]: log.slice(0, PLAYBACK_EVENT_LOG_LIMIT) });
+      });
+    } catch (err) {}
+  }
+
   function markUserPlaybackIntent(reason = "user") {
     adState.lastUserPlaybackIntentAt = Date.now();
     adState.lastUserPlaybackIntentReason = reason;
@@ -2681,19 +2701,30 @@ declare global {
   }
 
   function getAutoplayBlockReason(video = getActiveVideo()) {
-    if (!video || !config.enabled || adState.active || getAdPlaying()) return "";
-    if (!isNearVideoStart(video)) return "";
-    if (config.autoplayIgnorePopup && isPopupWindow()) return "";
-    if (config.autoplayAllowPlaylists && isPlaylistContext()) return "";
-    if (document.hidden && isAdSkipperActive() && isWatchPage()) return "";
+    if (!video) return "";
+    const key = getCurrentVideoKey();
+    return decideAutoplayBlock({
+      enabled: !!config.enabled,
+      adActive: !!adState.active || getAdPlaying(),
+      isMainVideo: video === getMainVideo(),
+      currentTime: Number(video.currentTime || 0),
+      hidden: document.hidden,
+      isPopup: isPopupWindow(),
+      ignorePopup: !!config.autoplayIgnorePopup,
+      isPlaylist: isPlaylistContext(),
+      allowPlaylists: !!config.autoplayAllowPlaylists,
+      recentIntent: hasRecentPlaybackIntent(document.hidden ? BACKGROUND_PLAYBACK_INTENT_WINDOW_MS : USER_PLAYBACK_INTENT_WINDOW_MS),
+      alreadyBlockedThisVideo: !!key && adState.autoplayBlockedKey === key,
+      msSinceAdEnded: adState.lastAdEndedAt ? Date.now() - adState.lastAdEndedAt : Number.POSITIVE_INFINITY,
+      disableAll: !!config.autoplayDisableAll,
+      blockBackground: !!config.autoplayBlockBackground,
+      blockForeground: !!config.autoplayBlockForeground,
+    });
+  }
 
-    const intentWindow = document.hidden ? BACKGROUND_PLAYBACK_INTENT_WINDOW_MS : USER_PLAYBACK_INTENT_WINDOW_MS;
-    if (hasRecentPlaybackIntent(intentWindow)) return "";
-
-    if (config.autoplayDisableAll) return "autoplay-disable-all";
-    if (document.hidden && config.autoplayBlockBackground) return "background-autoplay";
-    if (!document.hidden && config.autoplayBlockForeground) return "foreground-autoplay";
-    return "";
+  function blockAutoplay(video: HTMLVideoElement, reason: string) {
+    adState.autoplayBlockedKey = getCurrentVideoKey();
+    pauseVideo(video, reason);
   }
 
   function shouldBlockAutoplay(video = getActiveVideo()) {
@@ -2727,6 +2758,7 @@ declare global {
     } catch (err) {}
 
     if (paused) {
+      recordPlaybackEvent("pause", reason, Number(video.currentTime || 0));
       adState.lastPlaybackPauseReason = reason;
       adState.lastPlaybackPauseAt = Date.now();
       debugPlayback("paused video", {
@@ -2746,6 +2778,9 @@ declare global {
   function announceForegroundPlayback() {
     if (!config.enabled || !config.pauseBackgroundTabs || document.hidden || adState.active || getAdPlaying()) return;
     if (!chrome?.storage?.local) return;
+    const now = Date.now();
+    if (now - (adState.lastPlaybackAnnounceAt || 0) < 2000) return;
+    adState.lastPlaybackAnnounceAt = now;
     chrome.storage.local.set({
       tubeShieldActivePlayback: {
         token: adState.tabPlaybackToken,
@@ -2755,13 +2790,13 @@ declare global {
     });
   }
 
-  function handleVideoPlayEvent() {
+  function handleVideoPlayEvent(event?: Event) {
     const video = getActiveVideo();
-    if (!video) return;
+    if (!video || (event && event.target !== video)) return;
 
     const blockReason = getAutoplayBlockReason(video);
     if (blockReason) {
-      pauseVideo(video, blockReason);
+      blockAutoplay(video, blockReason);
       return;
     }
 
@@ -2806,7 +2841,7 @@ declare global {
 
     const initialBlockReason = getAutoplayBlockReason(video);
     if (!video.paused && initialBlockReason) {
-      pauseVideo(video, initialBlockReason);
+      blockAutoplay(video, initialBlockReason);
     }
   }
 
@@ -2823,13 +2858,10 @@ declare global {
       try { video.preload = "none"; } catch (err) {}
     }
 
-    if (video.paused) return;
-
-    if (blockReason) {
-      pauseVideo(video, blockReason);
-    } else {
-      announceForegroundPlayback();
-    }
+    // Pausing is driven only by the "play" event (and the one-off check when
+    // the listener is bound). Polling here used to re-pause videos the user
+    // had resumed with headphone buttons or the OS media controls.
+    if (!video.paused && !blockReason) announceForegroundPlayback();
   }
 
   function getSpeedThroughRate() {
@@ -2844,18 +2876,29 @@ declare global {
       source: MAIN_FORCE_SKIP_MESSAGE,
       targetTime: adState.skipTargetTime || Date.now(),
       rate: getSpeedThroughRate(),
+      adSrc: adState.adSrc || "",
     });
   }
 
-  function requestMainWorldSpeedThrough(rate = getSpeedThroughRate()) {
+  function requestMainWorldSpeedThrough(rate = getSpeedThroughRate(), adOnly = false) {
     postMainWorldMessage({
       source: MAIN_SPEED_THROUGH_MESSAGE,
       rate,
+      adOnly,
     });
   }
 
-  function forceSkipAd(video = document.querySelector("video")) {
+  // True when the element is still showing the ad we started handling. YouTube
+  // reuses the same <video> for content, so a stale reference is not enough.
+  function isSameAdSource(video: HTMLVideoElement | null) {
+    if (!video) return false;
+    if (!adState.adSrc || !video.currentSrc) return true;
+    return video.currentSrc === adState.adSrc;
+  }
+
+  function forceSkipAd(video = getMainVideo()) {
     if (!isAdSkipperActive() || !config.aggressiveSkip || adState.watching) return false;
+    if (!getAdPlaying() || !isSameAdSource(video)) return false;
 
     requestMainWorldSkip();
 
@@ -2909,7 +2952,7 @@ declare global {
     adState.forceSkipStartedAt = null;
   }
 
-  function getCurrentPlaybackRate(video = document.querySelector("video")) {
+  function getCurrentPlaybackRate(video = getMainVideo()) {
     const player: any = getYouTubePlayer();
     try {
       if (player && typeof player.getPlaybackRate === "function") {
@@ -2937,11 +2980,12 @@ declare global {
     stopPlaybackRateRestore();
   }
 
-  function applySpeedThrough(video = document.querySelector("video")) {
+  function applySpeedThrough(video = getMainVideo()) {
     if (!isAdSkipperActive() || !config.aggressiveSkip || adState.watching) return false;
+    if (!getAdPlaying() || !isSameAdSource(video)) return false;
 
     const rate = getSpeedThroughRate();
-    requestMainWorldSpeedThrough(rate);
+    requestMainWorldSpeedThrough(rate, true);
 
     let attempted = false;
     if (video) {
@@ -2985,7 +3029,7 @@ declare global {
 
   function restorePlaybackRate(rate = adState.preAdPlaybackRate || 1) {
     const targetRate = normalizePlaybackRate(rate || 1);
-    const video = document.querySelector("video");
+    const video = getMainVideo();
     if (video) {
       try {
         if (video.playbackRate !== targetRate) video.playbackRate = targetRate;
@@ -3062,7 +3106,7 @@ declare global {
   function attemptScheduledSkip() {
     if (!isAdSkipperActive() || !adState.active || adState.watching) return false;
 
-    const video = document.querySelector("video");
+    const video = getMainVideo();
     const skipButton = findSkipAdButton();
     const action = chooseAdSkipAction({
       adConfirmed: getAdPlaying(),
@@ -3080,6 +3124,7 @@ declare global {
     }
 
     if (action === "seek-end") {
+      if (!adState.forceSkipInterval) recordPlaybackEvent("ad-seek", "skip-fallback", Number(video?.currentTime || 0));
       forceSkipAd(video);
       startForceSkipBurst(video);
     } else if (action === "speed-through") {
@@ -3089,7 +3134,7 @@ declare global {
     return false;
   }
 
-  function startForceSkipBurst(video = document.querySelector("video")) {
+  function startForceSkipBurst(video = getMainVideo()) {
     if (!isAdSkipperActive() || !config.aggressiveSkip || adState.forceSkipInterval) return;
     adState.forceSkipStartedAt = Date.now();
 
@@ -3104,7 +3149,8 @@ declare global {
         return;
       }
 
-      forceSkipAd(video);
+      // Always re-resolve: the captured element may now be playing content.
+      forceSkipAd(getMainVideo());
 
       if (Date.now() - adState.forceSkipStartedAt >= FORCE_SKIP_WINDOW_MS) {
         stopForceSkipBurst();
@@ -3597,6 +3643,8 @@ declare global {
     adState.forceSkipStartedAt = null;
     adState.skipTimeout = null;
     adState.speedThroughInterval = null;
+    adState.adSrc = "";
+    adState.lastAdEndedAt = Date.now();
   }
 
   const AD_WATCHDOG_EVENTS = ["play", "playing", "timeupdate", "durationchange", "ratechange", "loadeddata"];
@@ -3695,6 +3743,7 @@ declare global {
       adState.lastVideoTime = -1;
       adState.alreadyCounted = false;
 
+      adState.adSrc = getMainVideo()?.currentSrc || "";
       capturePlaybackRate();
       muteVideo();
       startSpeedThrough();
@@ -3706,7 +3755,7 @@ declare global {
 
       if (adState.watching) return;
 
-      const video = document.querySelector("video");
+      const video = getMainVideo();
 
       // Detectar novo anúncio em sequência (posição do vídeo voltou ao início)
       if (video) {
@@ -3718,11 +3767,14 @@ declare global {
           adState.startTime = Date.now();
           adState.alreadyCounted = false;
           adState.lastVideoTime = ct;
+          adState.adSrc = video.currentSrc || "";
           scheduleSkip();
           if (config.showOverlay) createOverlay();
           return;
         }
         adState.lastVideoTime = ct;
+        // The ad class is confirmed synchronously here, so this src is an ad.
+        if (video.currentSrc) adState.adSrc = video.currentSrc;
       }
 
       // Verificar se o delay passou (comparação DIRETA de timestamp)
@@ -3919,7 +3971,7 @@ declare global {
       e.preventDefault();
       e.stopPropagation();
 
-      const video = document.querySelector('video');
+      const video = getMainVideo();
       if (!video) return;
 
       try {
@@ -3935,11 +3987,10 @@ declare global {
       }
     });
 
-    player.style.position = 'relative';
     player.appendChild(btn);
 
     // Listen for PiP state changes to update button
-    const video = document.querySelector('video');
+    const video = getMainVideo();
     if (video) {
       video.addEventListener('enterpictureinpicture', () => {
         const b = document.getElementById(PIP_BTN_ID);

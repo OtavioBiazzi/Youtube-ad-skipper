@@ -12,8 +12,7 @@ import {
 } from "./shared/adTiming";
 import {
   DEFAULT_SETTINGS,
-  PLAYER_DEFAULTS_PROFILE,
-  PLAYER_DEFAULTS_PROFILE_VERSION,
+  getSettingsMigrationPatch,
   SETTINGS_EXPORT_KEYS,
   migrateSettings,
   type ExtensionSettings,
@@ -202,14 +201,9 @@ function announcePreset(id: SettingsPresetId, button: HTMLButtonElement) {
 // ── Load ─────────────────────────────────────────
 
 chrome.storage.local.get(DEFAULT_VALUES, (s: any) => {
-  const storedProfileVersion = Number(s.playerDefaultsProfileVersion) || 0;
+  const migrationPatch = getSettingsMigrationPatch(s.playerDefaultsProfileVersion);
   s = migrateSettings(s);
-  if (storedProfileVersion < PLAYER_DEFAULTS_PROFILE_VERSION) {
-    chrome.storage.local.set({
-      ...PLAYER_DEFAULTS_PROFILE,
-      playerDefaultsProfileVersion: PLAYER_DEFAULTS_PROFILE_VERSION,
-    });
-  }
+  if (migrationPatch) chrome.storage.local.set(migrationPatch);
 
   initialState = JSON.parse(JSON.stringify(s));
 
@@ -1374,3 +1368,46 @@ chrome.storage.onChanged.addListener((changes) => {
 });
 
 export {};
+
+// ── Playback diagnostics ─────────────────────────
+
+const PLAYBACK_REASON_LABELS: Record<string, string> = {
+  "background-autoplay": "Autoplay bloqueado em aba de fundo",
+  "foreground-autoplay": "Autoplay bloqueado na aba ativa",
+  "autoplay-disable-all": "Autoplay desativado (todos)",
+  "background-tab-playback-signal": "Outra aba começou a tocar",
+  "skip-fallback": "Anúncio avançado até o fim",
+};
+
+function renderPlaybackLog() {
+  const list = document.getElementById("playback-log");
+  if (!list || !chrome?.storage?.local) return;
+  chrome.storage.local.get({ playbackEventLog: [] }, (data: any) => {
+    const log = Array.isArray(data.playbackEventLog) ? data.playbackEventLog : [];
+    list.textContent = "";
+    if (!log.length) {
+      const empty = document.createElement("li");
+      empty.className = "playback-log-empty";
+      empty.textContent = "Nenhuma ação registrada. A extensão não pausou nenhum vídeo.";
+      list.appendChild(empty);
+      return;
+    }
+    for (const entry of log.slice(0, 15)) {
+      const item = document.createElement("li");
+      const when = new Date(Number(entry.at) || 0);
+      const label = PLAYBACK_REASON_LABELS[entry.reason] || String(entry.reason || entry.kind || "?");
+      const time = document.createElement("time");
+      time.textContent = when.toLocaleString();
+      const text = document.createElement("span");
+      text.textContent = `${label} · ${Number(entry.time) || 0}s${entry.hidden ? " · aba em segundo plano" : ""}${entry.video ? " · " + entry.video : ""}`;
+      item.append(time, text);
+      list.appendChild(item);
+    }
+  });
+}
+
+document.getElementById("playback-log-refresh")?.addEventListener("click", renderPlaybackLog);
+document.getElementById("playback-log-clear")?.addEventListener("click", () => {
+  chrome.storage.local.set({ playbackEventLog: [] }, renderPlaybackLog);
+});
+renderPlaybackLog();
