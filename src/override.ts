@@ -88,8 +88,19 @@ import { getAdSeekTarget } from "./shared/adStrategy";
     return hadVideo && !keptVideo ? list : filtered;
   }
 
+  // Lives, premieres and post-live DVR streams are served through HLS/DASH
+  // manifests. Filtering them (or deleting the manifest URLs) left the player
+  // with nothing to play: the "black player" bug.
+  function isLiveResponse(response) {
+    const details = response?.videoDetails;
+    if (details?.isLive || details?.isUpcoming || details?.isPostLiveDvr) return true;
+    const streaming = response?.streamingData;
+    return !!streaming?.hlsManifestUrl && !Array.isArray(streaming?.adaptiveFormats);
+  }
+
   function filterStreamingData(streamingData) {
     if (!streamingData || typeof streamingData !== "object" || !hasCodecFilters()) return streamingData;
+    const before = (streamingData.adaptiveFormats || []).length + (streamingData.formats || []).length;
 
     if (Array.isArray(streamingData.formats)) {
       streamingData.formats = filterFormatList(streamingData.formats);
@@ -98,9 +109,11 @@ import { getAdSeekTarget } from "./shared/adStrategy";
       streamingData.adaptiveFormats = filterFormatList(streamingData.adaptiveFormats);
     }
 
-    if (codecSettings.forceAvc || codecSettings.forceStandardFps) {
+    // Only drop the DASH manifest (which would bypass the filtered list) when
+    // the filter actually removed something and a playable list remains.
+    const after = (streamingData.adaptiveFormats || []).length + (streamingData.formats || []).length;
+    if (after > 0 && after < before) {
       delete streamingData.dashManifestUrl;
-      delete streamingData.hlsManifestUrl;
     }
 
     return streamingData;
@@ -109,7 +122,7 @@ import { getAdSeekTarget } from "./shared/adStrategy";
   function filterPlayerResponse(response, depth = 0) {
     if (!response || typeof response !== "object" || !hasCodecFilters() || depth > 4) return response;
 
-    if (response.streamingData) {
+    if (response.streamingData && !isLiveResponse(response)) {
       filterStreamingData(response.streamingData);
     }
 
@@ -171,6 +184,7 @@ import { getAdSeekTarget } from "./shared/adStrategy";
 
   function updateCodecSettings(settings) {
     codecSettings = normalizeCodecSettings(settings);
+    ensureResponseHooks();
     try {
       localStorage.setItem(CODEC_SETTINGS_STORAGE_KEY, JSON.stringify(codecSettings));
     } catch (err) {}
@@ -220,7 +234,13 @@ import { getAdSeekTarget } from "./shared/adStrategy";
     );
   }
 
-  if (OVERRIDE_FEATURES.codecResponseFilters) {
+  let responseHooksInstalled = false;
+
+  // The global JSON.parse / Response.json hooks are only installed when a codec
+  // filter is actually enabled, so users without filters pay nothing.
+  function ensureResponseHooks() {
+    if (responseHooksInstalled || !OVERRIDE_FEATURES.codecResponseFilters || !hasCodecFilters()) return;
+    responseHooksInstalled = true;
     JSON.parse = function(text, reviver) {
       const parsed = originalJsonParse(text, reviver);
       return textLooksLikePlayerResponse(text) ? filterPlayerResponse(parsed) : parsed;
@@ -237,6 +257,8 @@ import { getAdSeekTarget } from "./shared/adStrategy";
       };
     }
   }
+
+  ensureResponseHooks();
 
   function getCapture(options) {
     return typeof options === "boolean" ? options : !!(options && options.capture);
@@ -489,7 +511,7 @@ import { getAdSeekTarget } from "./shared/adStrategy";
     }
   });
 
-  installPlayerResponseSetter();
+  if (hasCodecFilters()) installPlayerResponseSetter();
   applyCodecFiltersToKnownGlobals();
   document.addEventListener("yt-navigate-start", applyCodecFiltersToKnownGlobals, true);
   document.addEventListener("yt-navigate-finish", applyCodecFiltersToKnownGlobals, true);

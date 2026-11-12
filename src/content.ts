@@ -1500,8 +1500,8 @@ declare global {
       blocks.push(`
         ytd-watch-flexy #movie_player {
           width: 100% !important;
+          height: 100% !important;
           max-width: none !important;
-          aspect-ratio: 16 / 9 !important;
           overflow: hidden !important;
         }
 
@@ -1645,37 +1645,47 @@ declare global {
     }, 200);
   }
 
+  let theaterToggleAt = 0;
+
+  // Returns true once the page is in the requested mode. Only ever uses
+  // YouTube's own size button: forcing the [theater] attribute desynced the
+  // player and could leave it collapsed/invisible. A cooldown prevents a
+  // second click from undoing the first while YouTube is still updating.
   function ensureTheaterMode(active) {
-    const watchFlexy = document.querySelector("ytd-watch-flexy");
-    const currentlyTheater = !!watchFlexy?.hasAttribute("theater");
-    if (currentlyTheater === active) return;
+    const watchFlexy = document.querySelector("ytd-watch-flexy") as HTMLElement | null;
+    if (!watchFlexy || watchFlexy.hidden) return false;
+    const currentlyTheater = watchFlexy.hasAttribute("theater");
+    if (currentlyTheater === active) return true;
+    if (document.fullscreenElement || miniplayerActive) return false;
+    if (Date.now() - theaterToggleAt < 1500) return false;
 
-    const theaterButton = document.querySelector(".ytp-size-button, button.ytp-size-button") as HTMLElement | null;
-    if (theaterButton) {
-      theaterButton.click();
-      return;
-    }
+    const player = getYouTubePlayer();
+    const theaterButton = player?.querySelector(".ytp-size-button") as HTMLElement | null;
+    if (!theaterButton || theaterButton.getBoundingClientRect().width <= 0) return false;
 
-    if (!watchFlexy) return;
-    if (active) {
-      watchFlexy.setAttribute("theater", "");
-    } else {
-      watchFlexy.removeAttribute("theater");
-    }
+    theaterToggleAt = Date.now();
+    theaterButton.click();
+    return false;
   }
 
   function runAutoLayoutTasks() {
     if (!config.enabled || !isWatchPage()) return;
 
     const key = getCurrentVideoKey();
-    if ((config.appearanceAutoTheater || config.appearanceAutoExpandPlayer) && adState.autoTheaterAppliedKey !== key) {
-      adState.autoTheaterAppliedKey = key;
-      setTimeout(() => ensureTheaterMode(true), 300);
+    if ((config.appearanceAutoTheater || config.appearanceAutoExpandPlayer) && key && adState.autoTheaterAppliedKey !== key) {
+      // Retried by the maintenance loop until YouTube confirms the mode, so
+      // a click sent before the page finished hydrating is not lost.
+      if (ensureTheaterMode(true)) adState.autoTheaterAppliedKey = key;
     }
 
     if (config.cinemaDefault && !adState.cinemaInitialized) {
       adState.cinemaInitialized = true;
       setCinemaMode(true);
+    }
+
+    // Cinema may ask for theater before the page is ready; keep retrying per video.
+    if (adState.cinemaActive && (config.cinemaUseYouTubeTheater || config.cinemaAutoResize) && key && adState.cinemaTheaterKey !== key) {
+      if (ensureTheaterMode(true)) adState.cinemaTheaterKey = key;
     }
   }
 
@@ -1755,23 +1765,14 @@ declare global {
         box-shadow: 0 0 0 100vmax rgba(0, 0, 0, ${Math.min(0.85, opacity).toFixed(2)}) !important;
       }
 
-      /* Cinema owns the available width; keep a stable 16:9 stage so ultrawide
-         screens do not collapse the player into YouTube's regular max-width. */
-      html.${CINEMA_CLASS} ytd-watch-flexy #player-container-outer,
-      html.${CINEMA_CLASS} ytd-watch-flexy #player-theater-container,
-      html.${CINEMA_CLASS} ytd-watch-flexy #player-full-bleed-container {
-        width: 100% !important;
-        max-width: none !important;
-        margin-inline: auto !important;
-      }
+      /* Cinema only darkens the surroundings. It used to force its own size
+         on #movie_player, which fought YouTube's computed size and could crop
+         the video or push it out of view. Sizing is left to YouTube/theater. */
 
-      html.${CINEMA_CLASS} ytd-watch-flexy #movie_player {
-        width: min(100vw, calc((100vh - 72px) * 16 / 9)) !important;
-        max-width: 100% !important;
-        height: auto !important;
-        aspect-ratio: 16 / 9 !important;
-        margin-inline: auto !important;
-        overflow: hidden !important;
+      html.${CINEMA_CLASS}.${MINIPLAYER_ACTIVE_CLASS} ytd-watch-flexy #player-container-outer,
+      html.${CINEMA_CLASS}.${MINIPLAYER_ACTIVE_CLASS} ytd-watch-flexy #player-theater-container,
+      html.${CINEMA_CLASS}.${MINIPLAYER_ACTIVE_CLASS} ytd-watch-flexy #player-full-bleed-container {
+        box-shadow: none !important;
       }
     `;
   }
@@ -1803,6 +1804,7 @@ declare global {
 
   function setCinemaMode(active) {
     adState.cinemaActive = !!active;
+    adState.cinemaTheaterKey = "";
     if (config.cinemaUseYouTubeTheater || config.cinemaAutoResize) {
       ensureTheaterMode(adState.cinemaActive);
     }
