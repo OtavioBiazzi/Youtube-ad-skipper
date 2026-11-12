@@ -3716,6 +3716,7 @@
         chrome.storage.local.set({ warningCount: adState.warningCount });
       }
     }
+    const ADBLOCK_HOST_TAGS = /* @__PURE__ */ new Set(["YTD-POPUP-CONTAINER", "TP-YT-IRON-OVERLAY-BACKDROP", "YTD-APP", "BODY"]);
     function checkAndNukeNode(node) {
       if (!isAdSkipperActive()) return;
       if (!node || node.nodeType !== 1) return;
@@ -3734,6 +3735,7 @@
           return;
         }
       }
+      if (!ADBLOCK_HOST_TAGS.has(node.tagName) && !node.closest?.("ytd-popup-container")) return;
       const found = node.querySelector && node.querySelector("ytd-enforcement-message-view-model");
       if (found) {
         nukeAdblockElement(found.closest("tp-yt-paper-dialog") || found);
@@ -4252,7 +4254,11 @@
         else rightControls.insertBefore(controls, rightControls.firstChild);
       }
       syncPillStyle(controls, rightControls);
-      fitPlayerControls(player);
+      const fitKey = player.clientWidth + ":" + signature + ":" + (player.querySelector(".ytp-time-display")?.textContent?.length || 0) + ":" + document.fullscreenElement;
+      if (adState.controlsFitKey !== fitKey) {
+        adState.controlsFitKey = fitKey;
+        fitPlayerControls(player);
+      }
       ensureEndTimeLabel(player);
       bindPlayerControlsVideo();
       bindGearMenu();
@@ -5329,7 +5335,10 @@
         return;
       }
       bindAdSkipperWatchdog();
-      dismissAdblockWarning();
+      if (Date.now() - (adState.lastAdblockScanAt || 0) > 2e3) {
+        adState.lastAdblockScanAt = Date.now();
+        dismissAdblockWarning();
+      }
       const adPlaying = getAdPlaying();
       if (!adPlaying) enforceAutoplayGuards();
       if (adPlaying && !adState.active) {

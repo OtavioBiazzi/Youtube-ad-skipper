@@ -3018,6 +3018,8 @@ declare global {
     }
   }
 
+  const ADBLOCK_HOST_TAGS = new Set(["YTD-POPUP-CONTAINER", "TP-YT-IRON-OVERLAY-BACKDROP", "YTD-APP", "BODY"]);
+
   function checkAndNukeNode(node) {
     if (!isAdSkipperActive()) return;
     if (!node || node.nodeType !== 1) return;
@@ -3036,7 +3038,9 @@ declare global {
       }
     }
 
-    // Check filhos
+    // Only containers that can host YouTube's popups are searched: running
+    // querySelector on every node YouTube adds was the main idle cost.
+    if (!ADBLOCK_HOST_TAGS.has(node.tagName) && !node.closest?.("ytd-popup-container")) return;
     const found = node.querySelector && node.querySelector('ytd-enforcement-message-view-model');
     if (found) {
       nukeAdblockElement(found.closest('tp-yt-paper-dialog') || found);
@@ -3658,7 +3662,12 @@ declare global {
     }
 
     syncPillStyle(controls, rightControls);
-    fitPlayerControls(player);
+    // Measuring forces a layout: only refit when something that affects it changed.
+    const fitKey = player.clientWidth + ":" + signature + ":" + (player.querySelector(".ytp-time-display")?.textContent?.length || 0) + ":" + document.fullscreenElement;
+    if (adState.controlsFitKey !== fitKey) {
+      adState.controlsFitKey = fitKey;
+      fitPlayerControls(player);
+    }
 
     ensureEndTimeLabel(player);
     bindPlayerControlsVideo();
@@ -4904,8 +4913,11 @@ declare global {
 
     bindAdSkipperWatchdog();
 
-    // Sempre tentar fechar popup anti-adblock
-    dismissAdblockWarning();
+    // Safety net only (the observer removes the warning live): every 2s.
+    if (Date.now() - (adState.lastAdblockScanAt || 0) > 2000) {
+      adState.lastAdblockScanAt = Date.now();
+      dismissAdblockWarning();
+    }
 
     const adPlaying = getAdPlaying();
     if (!adPlaying) enforceAutoplayGuards();
