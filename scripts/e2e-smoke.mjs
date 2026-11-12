@@ -98,6 +98,48 @@ try {
     if (v && v.paused) v.play().catch(() => {});
   });
 
+  // ── In-player controls (checked early: headless YouTube errors after ~40s) ──
+  if (!process.env.E2E_NO_EXTENSION) {
+    await page.waitForSelector("#yte-controls .yte-btn", { timeout: 15000 }).catch(() => {});
+    const ui = await page.evaluate(() => {
+      const controls = document.getElementById("yte-controls");
+      return {
+        insidePlayer: !!controls?.closest("#movie_player .ytp-right-controls"),
+        buttons: Array.from(controls?.querySelectorAll("[data-yte-action]") || []).map((b) => b.getAttribute("data-yte-action")),
+        endTime: document.getElementById("yte-end-time")?.textContent || "",
+      };
+    });
+    check("buttons injected into YouTube's control bar", ui.insidePlayer && ui.buttons.length >= 4, ui.buttons.join(","));
+    check("'termina às' shown next to the time", /termina \d/.test(ui.endTime), ui.endTime);
+
+    // Hover the player so the control bar is visible, then use the speed button.
+    await page.hover("#movie_player");
+    await page.click('#yte-controls [data-yte-action="speed"]');
+    const rateAfterClick = await page.evaluate(() => document.querySelector("#movie_player video").playbackRate);
+    check("speed button cycles the speed", Math.abs(rateAfterClick - 1.25) < 0.01, `rate=${rateAfterClick}`);
+    await page.click('#yte-controls [data-yte-action="speed"]', { button: "right" });
+    const rateAfterReset = await page.evaluate(() => document.querySelector("#movie_player video").playbackRate);
+    check("right click resets speed to 1x", Math.abs(rateAfterReset - 1) < 0.01, `rate=${rateAfterReset}`);
+
+    // Filter panel: open, apply a preset, make sure the video keeps playing.
+    await page.hover("#movie_player");
+    await page.click('#yte-controls [data-yte-action="filters"]');
+    const panelOpen = await page.isVisible("#yte-filter-panel");
+    check("filter panel opens inside the player", panelOpen);
+    if (panelOpen) {
+      await page.click('#yte-filter-panel [data-preset="night"]');
+      await page.waitForTimeout(300);
+      const filter = await page.evaluate(() => getComputedStyle(document.querySelector("#movie_player video.html5-main-video")).filter);
+      check("preset applies a CSS filter to the video", /sepia|hue-rotate|brightness/.test(filter), filter);
+      const pausedAfterPanel = await page.evaluate(() => document.querySelector("#movie_player video").paused);
+      check("clicking inside the panel does not pause the video", !pausedAfterPanel);
+      await page.screenshot({ path: join(screenshotDir, "e2e-filters.png") });
+      await page.click('#yte-filter-panel .yte-fp-foot button');
+      await page.keyboard.press("Escape");
+      await page.mouse.click(5, 300);
+    }
+  }
+
   const start = Date.now();
   let sawAd = false;
   let lastTime = 0;
@@ -182,6 +224,35 @@ try {
   const docked = await page.evaluate(() => !document.documentElement.classList.contains("tube-shield-miniplayer-active"));
   check("miniplayer docks when scrolling back up", docked);
   await page.screenshot({ path: join(screenshotDir, "e2e-docked.png") });
+
+  // ── Live delay chip (optional second page) ──
+  let liveUrl = process.env.E2E_LIVE_VIDEO || "";
+  if (!liveUrl) {
+    // Find a live that is on air right now (YouTube's "Live" search filter).
+    await page.goto("https://www.youtube.com/results?search_query=lofi+radio&sp=EgJAAQ%253D%253D", { waitUntil: "domcontentloaded", timeout: 60000 });
+    await page.waitForSelector("ytd-video-renderer a#thumbnail", { timeout: 20000 }).catch(() => {});
+    liveUrl = await page.evaluate(() => document.querySelector("ytd-video-renderer a#thumbnail")?.href || "");
+  }
+  if (!process.env.E2E_NO_EXTENSION && liveUrl && liveUrl !== "off") {
+    await page.goto(liveUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
+    await page.waitForSelector("#movie_player video", { timeout: 45000 }).catch(() => {});
+    await page.evaluate(() => { const v = document.querySelector("#movie_player video"); if (v && v.paused) v.play().catch(() => {}); });
+    await page.waitForTimeout(12000);
+    const liveState = await page.evaluate(() => {
+      const chip = document.querySelector('#yte-controls [data-yte-action="live"]');
+      const v = document.querySelector("#movie_player video");
+      return { visible: !!chip && !chip.hidden, text: chip?.textContent || "", rate: v?.playbackRate || 0, paused: !!v?.paused, ad: !!document.getElementById("movie_player")?.classList.contains("ad-showing"), error: document.querySelector("#movie_player .ytp-error")?.textContent?.trim() || "" };
+    });
+    if (liveState.error) {
+      console.log(`WARN  live chip — this browser cannot play the live: ${liveState.error}`);
+    } else if (liveState.ad) {
+      console.log("WARN  live chip — an ad was playing on the live, skipped");
+    } else {
+      check("live chip visible on a live stream", liveState.visible, liveState.text);
+      check("live catch-up keeps a gentle rate", liveState.rate >= 1 && liveState.rate <= 1.26, `rate=${liveState.rate} ${liveState.text}`);
+    }
+    await page.screenshot({ path: join(screenshotDir, "e2e-live.png") });
+  }
 
   const log = worker ? await worker.evaluate(() => chrome.storage.local.get("playbackEventLog")) : {};
   const entries = (log.playbackEventLog || []).filter((e) => e.kind === "pause");

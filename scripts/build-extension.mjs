@@ -83,6 +83,12 @@ for (const file of staticFiles) {
   await copyFile(resolve(root, file), resolve(distDir, file));
 }
 
+// Bundled fonts (OFL), so extension pages never call Google Fonts.
+await mkdir(resolve(distDir, "fonts"), { recursive: true });
+for (const file of await readdir(resolve(root, "fonts"))) {
+  await copyFile(resolve(root, "fonts", file), resolve(distDir, "fonts", file));
+}
+
 const builtFiles = await readdir(tempDir);
 for (const file of builtFiles.filter((name) => name.endsWith(".js"))) {
   await copyFile(resolve(tempDir, file), resolve(distDir, file));

@@ -38,7 +38,7 @@
     const safe = Number.isFinite(n) ? n : SAFE_AD_SPEED_RATE;
     return safe.toFixed(safe % 1 === 0 ? 0 : 1) + "x";
   }
-  const PLAYER_DEFAULTS_PROFILE_VERSION = 3;
+  const PLAYER_DEFAULTS_PROFILE_VERSION = 4;
   const PLAYER_DEFAULTS_PROFILE = {
     playerSpeedEnabled: true,
     playerSpeedStep: 0.02,
@@ -203,7 +203,13 @@
     videoFilterSaturate: 100,
     videoFilterGrayscale: 0,
     videoFilterSepia: 0,
-    resumePlaybackEnabled: false
+    resumePlaybackEnabled: false,
+    playerControlsEnabled: true,
+    playerEndTimeEnabled: true,
+    liveCatchUpEnabled: true,
+    liveCatchUpTarget: 3,
+    liveCatchUpMaxRate: 1.25,
+    videoFilterHue: 0
   };
   const SETTINGS_EXPORT_KEYS = Object.keys(DEFAULT_SETTINGS);
   function normalizeSettings(raw = {}) {
@@ -235,6 +241,12 @@
     3: {
       autoplayBlockBackground: false,
       appearanceSortNewestComments: false
+    },
+    // v4: controls moved inside YouTube's own control bar; the separate bar
+    // below the video becomes optional.
+    4: {
+      playerControlsEnabled: true,
+      toolbarEnabled: false
     }
   };
   function getSettingsMigrationPatch(storedVersion) {
@@ -827,6 +839,42 @@
     chrome.storage.local.set({ toolbarEnabled: optToolbarEnabled.checked });
     renderToolbarControlLocks();
   });
+  const optControlsPlacement = byId("opt-controls-placement");
+  let playerControlsEnabledState = true;
+  function getControlsPlacement(inside, below) {
+    return inside && below ? "both" : inside ? "inside" : below ? "below" : "off";
+  }
+  function renderControlsPlacement() {
+    optControlsPlacement.value = getControlsPlacement(playerControlsEnabledState, optToolbarEnabled.checked);
+    renderToolbarControlLocks();
+  }
+  optControlsPlacement.addEventListener("change", () => {
+    const value = optControlsPlacement.value;
+    playerControlsEnabledState = value === "inside" || value === "both";
+    optToolbarEnabled.checked = value === "below" || value === "both";
+    chrome.storage.local.set({ playerControlsEnabled: playerControlsEnabledState, toolbarEnabled: optToolbarEnabled.checked });
+    renderToolbarControlLocks();
+  });
+  chrome.storage.local.get({ playerControlsEnabled: true }, (data) => {
+    playerControlsEnabledState = data.playerControlsEnabled !== false;
+    renderControlsPlacement();
+  });
+  function renderSliderOutputs() {
+    document.querySelectorAll(".slider-row input[type=range]").forEach((input) => {
+      const output = input.parentElement?.querySelector("output");
+      const unit = input.dataset.setting === "videoFilterHue" ? "°" : "%";
+      if (output) output.textContent = input.value + unit;
+    });
+  }
+  document.querySelectorAll(".slider-row input[type=range]").forEach((input) => {
+    input.addEventListener("input", renderSliderOutputs);
+    input.addEventListener("dblclick", () => {
+      input.value = input.dataset.setting === "videoFilterHue" || input.dataset.setting === "videoFilterSepia" || input.dataset.setting === "videoFilterGrayscale" ? "0" : "100";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+  });
+  setTimeout(renderSliderOutputs, 150);
   optToolbarPosition.addEventListener("change", () => {
     chrome.storage.local.set({ toolbarPosition: normalizeToolbarPosition(optToolbarPosition.value) });
   });
@@ -924,7 +972,7 @@
     if (control instanceof HTMLInputElement && control.type === "checkbox") {
       return control.checked;
     }
-    if (control instanceof HTMLInputElement && control.type === "number") {
+    if (control instanceof HTMLInputElement && (control.type === "number" || control.type === "range") || typeof DEFAULT_VALUES[key] === "number") {
       const value = Number(control.value);
       return Number.isFinite(value) ? value : DEFAULT_VALUES[key] || 0;
     }
@@ -1262,9 +1310,11 @@
     optMiniplayerPosition.disabled = !optMiniplayerEnabled.checked;
   }
   function renderToolbarControlLocks() {
-    const disabled = !optToolbarEnabled.checked;
-    optToolbarPosition.disabled = disabled;
-    optToolbarCenter.disabled = disabled;
+    const belowEnabled = optToolbarEnabled.checked;
+    const anyEnabled = belowEnabled || playerControlsEnabledState;
+    const disabled = !anyEnabled;
+    optToolbarPosition.disabled = !belowEnabled;
+    optToolbarCenter.disabled = !belowEnabled;
     optToolbarLoop.disabled = disabled;
     optToolbarSpeed.disabled = disabled;
     optToolbarPopup.disabled = disabled;
@@ -1467,10 +1517,12 @@
     if (changes.miniplayerSize) optMiniplayerSize.value = normalizeMiniplayerSize(changes.miniplayerSize.newValue);
     if (changes.miniplayerPosition) optMiniplayerPosition.value = normalizeMiniplayerPosition(changes.miniplayerPosition.newValue);
     if (changes.playerPopupSize) optPlayerPopupSize.value = normalizePlayerPopupSize(changes.playerPopupSize.newValue);
-    if (changes.toolbarEnabled) {
-      optToolbarEnabled.checked = changes.toolbarEnabled.newValue !== false;
-      renderToolbarControlLocks();
+    if (changes.toolbarEnabled || changes.playerControlsEnabled) {
+      if (changes.toolbarEnabled) optToolbarEnabled.checked = changes.toolbarEnabled.newValue !== false;
+      if (changes.playerControlsEnabled) playerControlsEnabledState = changes.playerControlsEnabled.newValue !== false;
+      renderControlsPlacement();
     }
+    if (Object.keys(changes).some((key) => key.startsWith("videoFilter"))) setTimeout(renderSliderOutputs, 50);
     if (changes.toolbarPosition) optToolbarPosition.value = normalizeToolbarPosition(changes.toolbarPosition.newValue);
     if (changes.toolbarCenter) optToolbarCenter.checked = changes.toolbarCenter.newValue !== false;
     if (changes.toolbarLoop) optToolbarLoop.checked = changes.toolbarLoop.newValue !== false;

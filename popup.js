@@ -1,6 +1,6 @@
 (function() {
   "use strict";
-  const PLAYER_DEFAULTS_PROFILE_VERSION = 3;
+  const PLAYER_DEFAULTS_PROFILE_VERSION = 4;
   const PLAYER_DEFAULTS_PROFILE = {
     playerSpeedEnabled: true,
     playerSpeedStep: 0.02,
@@ -165,7 +165,13 @@
     videoFilterSaturate: 100,
     videoFilterGrayscale: 0,
     videoFilterSepia: 0,
-    resumePlaybackEnabled: false
+    resumePlaybackEnabled: false,
+    playerControlsEnabled: true,
+    playerEndTimeEnabled: true,
+    liveCatchUpEnabled: true,
+    liveCatchUpTarget: 3,
+    liveCatchUpMaxRate: 1.25,
+    videoFilterHue: 0
   };
   const SETTINGS_EXPORT_KEYS = Object.keys(DEFAULT_SETTINGS);
   function normalizeSettings(raw = {}) {
@@ -197,6 +203,12 @@
     3: {
       autoplayBlockBackground: false,
       appearanceSortNewestComments: false
+    },
+    // v4: controls moved inside YouTube's own control bar; the separate bar
+    // below the video becomes optional.
+    4: {
+      playerControlsEnabled: true,
+      toolbarEnabled: false
     }
   };
   function getSettingsMigrationPatch(storedVersion) {

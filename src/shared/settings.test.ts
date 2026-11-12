@@ -54,7 +54,9 @@ describe("shared settings", () => {
     });
 
     expect(settings.playerDefaultsProfileVersion).toBe(PLAYER_DEFAULTS_PROFILE_VERSION);
-    expect(settings.toolbarEnabled).toBe(PLAYER_DEFAULTS_PROFILE.toolbarEnabled);
+    // Later migrations win over the v2 profile: controls now live in the player.
+    expect(settings.toolbarEnabled).toBe(false);
+    expect(settings.playerControlsEnabled).toBe(true);
     expect(settings.miniplayerSize).toBe(PLAYER_DEFAULTS_PROFILE.miniplayerSize);
   });
 

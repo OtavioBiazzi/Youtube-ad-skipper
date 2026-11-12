@@ -1,5 +1,5 @@
 export const SETTINGS_VERSION = 1;
-export const PLAYER_DEFAULTS_PROFILE_VERSION = 3;
+export const PLAYER_DEFAULTS_PROFILE_VERSION = 4;
 
 export type ListMode = "whitelist" | "blacklist";
 export type QualityLevel = "auto" | "medium" | "large" | "hd720" | "hd1080" | "hd1440" | "hd2160" | "highres";
@@ -176,6 +176,12 @@ export const DEFAULT_SETTINGS = {
   videoFilterGrayscale: 0,
   videoFilterSepia: 0,
   resumePlaybackEnabled: false,
+  playerControlsEnabled: true,
+  playerEndTimeEnabled: true,
+  liveCatchUpEnabled: true,
+  liveCatchUpTarget: 3,
+  liveCatchUpMaxRate: 1.25,
+  videoFilterHue: 0,
 };
 
 export type ExtensionSettings = typeof DEFAULT_SETTINGS;
@@ -221,6 +227,12 @@ export const SETTINGS_MIGRATIONS: Record<number, Record<string, PlannedSettingVa
   3: {
     autoplayBlockBackground: false,
     appearanceSortNewestComments: false,
+  },
+  // v4: controls moved inside YouTube's own control bar; the separate bar
+  // below the video becomes optional.
+  4: {
+    playerControlsEnabled: true,
+    toolbarEnabled: false,
   },
 };
 

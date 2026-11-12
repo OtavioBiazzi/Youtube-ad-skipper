@@ -355,6 +355,14 @@
             </div>
           </article>
           <article class="card card--module">
+            <div class="card-header"><span>Lives</span></div>
+            <div class="card-body control-stack">
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Tirar o atraso das lives</span><span class="opt-desc">Acelera de leve enquanto houver atraso acumulado, sem pular nada. Mostra o atraso no botão "AO VIVO" do player.</span></div><label class="switch"><input type="checkbox" data-setting="liveCatchUpEnabled" checked><span class="switch-track"></span></label></div>
+              <label class="field-row"><span>Atraso alvo</span><select class="control-input" data-setting="liveCatchUpTarget"><option value="1.5">1,5 s (agressivo)</option><option value="3" selected>3 s</option><option value="5">5 s</option><option value="8">8 s (conexão instável)</option></select></label>
+              <label class="field-row"><span>Velocidade máxima</span><select class="control-input" data-setting="liveCatchUpMaxRate"><option value="1.1">1,1x (imperceptível)</option><option value="1.25" selected>1,25x</option><option value="1.5">1,5x</option></select></label>
+            </div>
+          </article>
+          <article class="card card--module">
             <div class="card-header"><span>Pop-up, PiP e Miniplayer</span><span class="tag tag--safe">ATIVO</span></div>
             <div class="card-body control-stack">
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Continuar de onde parou</span><span class="opt-desc">Lembra a posição de vídeos com mais de 3 minutos e retoma ao abrir de novo. Links com tempo (?t=) têm prioridade.</span></div><label class="switch"><input type="checkbox" data-setting="resumePlaybackEnabled"><span class="switch-track"></span></label></div>
@@ -388,7 +396,6 @@
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Ocultar comentários</span><span class="opt-desc">Esconde o bloco de comentários abaixo do vídeo.</span></div><label class="switch"><input type="checkbox" id="opt-appearance-hide-comments"><span class="switch-track"></span></label></div>
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Ocultar cards finais</span><span class="opt-desc">Remove cards, telas finais e teasers sobre o player.</span></div><label class="switch"><input type="checkbox" id="opt-appearance-hide-endcards"><span class="switch-track"></span></label></div>
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Ordenar comentários recentes</span><span class="opt-desc">Tenta abrir os comentários com os mais recentes primeiro.</span></div><label class="switch"><input type="checkbox" data-setting="appearanceSortNewestComments"><span class="switch-track"></span></label></div>
-              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Aplicar filtros automaticamente</span><span class="opt-desc">Mantém seus filtros de vídeo em todos os vídeos seguintes.</span></div><label class="switch"><input type="checkbox" data-setting="appearanceAutoApplyFilters"><span class="switch-track"></span></label></div>
             </div>
           </article>
           <article class="card card--module">
@@ -459,13 +466,14 @@
         <article class="card card--module">
           <div class="card-header"><span>Filtros de vídeo</span><span class="tag tag--safe">NOVO</span></div>
           <div class="card-body control-stack">
-            <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Ativar filtros</span><span class="opt-desc">Aplica os ajustes abaixo no vídeo atual.</span></div><label class="switch"><input type="checkbox" data-setting="videoFiltersEnabled"><span class="switch-track"></span></label></div>
-            <div class="appearance-grid">
-              <label class="field-row"><span>Brilho</span><input class="control-input" data-setting="videoFilterBrightness" type="number" value="100" min="0" max="200" step="5"></label>
-              <label class="field-row"><span>Contraste</span><input class="control-input" data-setting="videoFilterContrast" type="number" value="100" min="0" max="200" step="5"></label>
-              <label class="field-row"><span>Saturação</span><input class="control-input" data-setting="videoFilterSaturate" type="number" value="100" min="0" max="250" step="5"></label>
-              <label class="field-row"><span>Cinza</span><input class="control-input" data-setting="videoFilterGrayscale" type="number" value="0" min="0" max="100" step="5"></label>
-              <label class="field-row"><span>Sépia</span><input class="control-input" data-setting="videoFilterSepia" type="number" value="0" min="0" max="100" step="5"></label>
+            <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Ativar filtros</span><span class="opt-desc">Vale para todos os vídeos. Também dá para ajustar ao vivo pelo botão de filtros no player.</span></div><label class="switch"><input type="checkbox" data-setting="videoFiltersEnabled"><span class="switch-track"></span></label></div>
+            <div class="filter-sliders">
+              <label class="slider-row"><span>Brilho</span><input type="range" data-setting="videoFilterBrightness" min="50" max="150" step="1" value="100"><output></output></label>
+              <label class="slider-row"><span>Contraste</span><input type="range" data-setting="videoFilterContrast" min="50" max="150" step="1" value="100"><output></output></label>
+              <label class="slider-row"><span>Saturação</span><input type="range" data-setting="videoFilterSaturate" min="0" max="200" step="1" value="100"><output></output></label>
+              <label class="slider-row"><span>Tom</span><input type="range" data-setting="videoFilterHue" min="-30" max="30" step="1" value="0"><output></output></label>
+              <label class="slider-row"><span>Quente</span><input type="range" data-setting="videoFilterSepia" min="0" max="100" step="1" value="0"><output></output></label>
+              <label class="slider-row"><span>Preto e branco</span><input type="range" data-setting="videoFilterGrayscale" min="0" max="100" step="1" value="0"><output></output></label>
             </div>
           </div>
         </article>
@@ -482,10 +490,11 @@
         </div>
         <div class="section-grid section-grid--split">
           <article class="card card--module">
-            <div class="card-header"><span>Barra de controles do player</span><span class="tag tag--safe">ATIVO</span></div>
+            <div class="card-header"><span>Botões do player</span><span class="tag tag--safe">ATIVO</span></div>
             <div class="card-body control-stack">
-              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Exibir em uma barra</span><span class="opt-desc">Adiciona atalhos abaixo do player do YouTube.</span></div><label class="switch"><input type="checkbox" id="opt-toolbar-enabled" checked><span class="switch-track"></span></label></div>
-              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Exibir dentro do player</span><span class="opt-desc">Coloca os controles sobre o vídeo quando houver espaço.</span></div><label class="switch"><input type="checkbox" data-setting="toolbarInsidePlayer"><span class="switch-track"></span></label></div>
+              <label class="field-row"><span>Onde ficam os botões</span><select class="control-input" id="opt-controls-placement"><option value="inside">Dentro da barra do player</option><option value="below">Em uma barra abaixo do vídeo</option><option value="both">Nos dois lugares</option><option value="off">Escondidos</option></select></label>
+              <input type="checkbox" id="opt-toolbar-enabled" hidden>
+              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Mostrar "termina às"</span><span class="opt-desc">Ao lado do tempo do vídeo, considerando a velocidade atual.</span></div><label class="switch"><input type="checkbox" data-setting="playerEndTimeEnabled" checked><span class="switch-track"></span></label></div>
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Manter controles visíveis</span><span class="opt-desc">Mantém os controles sem precisar clicar ou passar o cursor no icone de mais opções.</span></div><label class="switch"><input type="checkbox" data-setting="toolbarAlwaysVisible" checked><span class="switch-track"></span></label></div>
               <label class="field-row"><span>Posição da barra</span><select class="control-input" id="opt-toolbar-position"><option value="below" selected>Abaixo do vídeo</option><option value="above">Acima do vídeo</option></select></label>
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Centralizar ao expandir ou tela cheia</span></div><label class="switch"><input type="checkbox" id="opt-toolbar-center" checked><span class="switch-track"></span></label></div>
