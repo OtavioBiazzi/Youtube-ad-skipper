@@ -38,7 +38,7 @@
     const safe = Number.isFinite(n) ? n : SAFE_AD_SPEED_RATE;
     return safe.toFixed(safe % 1 === 0 ? 0 : 1) + "x";
   }
-  const PLAYER_DEFAULTS_PROFILE_VERSION = 4;
+  const PLAYER_DEFAULTS_PROFILE_VERSION = 5;
   const PLAYER_DEFAULTS_PROFILE = {
     playerSpeedEnabled: true,
     playerSpeedStep: 0.02,
@@ -206,7 +206,7 @@
     resumePlaybackEnabled: false,
     playerControlsEnabled: true,
     playerControlsStyle: "pill",
-    playerEndTimeEnabled: true,
+    playerEndTimeEnabled: false,
     liveCatchUpEnabled: true,
     liveCatchUpTarget: 3,
     liveCatchUpMaxRate: 1.25,
@@ -248,6 +248,11 @@
     4: {
       playerControlsEnabled: true,
       toolbarEnabled: false
+    },
+    // v5: the "termina às" clock is opt-in; buttons default to their own pill.
+    5: {
+      playerEndTimeEnabled: false,
+      playerControlsStyle: "pill"
     }
   };
   function getSettingsMigrationPatch(storedVersion) {

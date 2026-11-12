@@ -254,7 +254,7 @@
     const wanted = normalizeShortcutCombo(combo);
     return !!wanted && eventToShortcutCombo(event) === wanted;
   }
-  const PLAYER_DEFAULTS_PROFILE_VERSION = 4;
+  const PLAYER_DEFAULTS_PROFILE_VERSION = 5;
   const PLAYER_DEFAULTS_PROFILE = {
     playerSpeedEnabled: true,
     playerSpeedStep: 0.02,
@@ -422,7 +422,7 @@
     resumePlaybackEnabled: false,
     playerControlsEnabled: true,
     playerControlsStyle: "pill",
-    playerEndTimeEnabled: true,
+    playerEndTimeEnabled: false,
     liveCatchUpEnabled: true,
     liveCatchUpTarget: 3,
     liveCatchUpMaxRate: 1.25,
@@ -464,6 +464,11 @@
     4: {
       playerControlsEnabled: true,
       toolbarEnabled: false
+    },
+    // v5: the "termina às" clock is opt-in; buttons default to their own pill.
+    5: {
+      playerEndTimeEnabled: false,
+      playerControlsStyle: "pill"
     }
   };
   function getSettingsMigrationPatch(storedVersion) {
@@ -901,7 +906,7 @@
       config.resumePlaybackEnabled = !!s.resumePlaybackEnabled;
       config.playerControlsEnabled = s.playerControlsEnabled !== false;
       config.playerControlsStyle = s.playerControlsStyle === "divider" ? "divider" : "pill";
-      config.playerEndTimeEnabled = s.playerEndTimeEnabled !== false;
+      config.playerEndTimeEnabled = s.playerEndTimeEnabled === true;
       config.liveCatchUpEnabled = s.liveCatchUpEnabled !== false;
       config.liveCatchUpTarget = Number(s.liveCatchUpTarget) > 0 ? Number(s.liveCatchUpTarget) : 3;
       config.liveCatchUpMaxRate = Math.min(1.5, Math.max(1.05, Number(s.liveCatchUpMaxRate) || 1.25));
@@ -4255,7 +4260,7 @@
       refreshPlayerControlStates();
     }
     function ensureEndTimeLabel(player) {
-      if (config.playerEndTimeEnabled === false) {
+      if (config.playerEndTimeEnabled !== true) {
         document.getElementById(END_TIME_ID)?.remove();
         return;
       }

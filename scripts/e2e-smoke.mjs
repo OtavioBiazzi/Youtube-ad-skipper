@@ -104,13 +104,13 @@ try {
     const ui = await page.evaluate(() => {
       const controls = document.getElementById("yte-controls");
       return {
-        insidePlayer: !!controls?.closest("#movie_player .ytp-right-controls"),
+        insidePlayer: !!controls?.closest("#movie_player .ytp-chrome-controls"),
         buttons: Array.from(controls?.querySelectorAll("[data-yte-action]") || []).map((b) => b.getAttribute("data-yte-action")),
         endTime: document.getElementById("yte-end-time")?.textContent || "",
       };
     });
     check("buttons injected into YouTube's control bar", ui.insidePlayer && ui.buttons.length >= 4, ui.buttons.join(","));
-    check("'termina às' shown next to the time", /termina \d/.test(ui.endTime), ui.endTime);
+    check("'termina às' is off by default", !ui.endTime, ui.endTime);
 
     // Hover the player so the control bar is visible, then use the speed button.
     await page.hover("#movie_player");

@@ -1,5 +1,5 @@
 export const SETTINGS_VERSION = 1;
-export const PLAYER_DEFAULTS_PROFILE_VERSION = 4;
+export const PLAYER_DEFAULTS_PROFILE_VERSION = 5;
 
 export type ListMode = "whitelist" | "blacklist";
 export type QualityLevel = "auto" | "medium" | "large" | "hd720" | "hd1080" | "hd1440" | "hd2160" | "highres";
@@ -178,7 +178,7 @@ export const DEFAULT_SETTINGS = {
   resumePlaybackEnabled: false,
   playerControlsEnabled: true,
   playerControlsStyle: "pill",
-  playerEndTimeEnabled: true,
+  playerEndTimeEnabled: false,
   liveCatchUpEnabled: true,
   liveCatchUpTarget: 3,
   liveCatchUpMaxRate: 1.25,
@@ -234,6 +234,11 @@ export const SETTINGS_MIGRATIONS: Record<number, Record<string, PlannedSettingVa
   4: {
     playerControlsEnabled: true,
     toolbarEnabled: false,
+  },
+  // v5: the "termina às" clock is opt-in; buttons default to their own pill.
+  5: {
+    playerEndTimeEnabled: false,
+    playerControlsStyle: "pill",
   },
 };
 

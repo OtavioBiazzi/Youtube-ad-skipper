@@ -318,7 +318,7 @@ declare global {
     config.resumePlaybackEnabled = !!s.resumePlaybackEnabled;
     config.playerControlsEnabled = s.playerControlsEnabled !== false;
     config.playerControlsStyle = s.playerControlsStyle === "divider" ? "divider" : "pill";
-    config.playerEndTimeEnabled = s.playerEndTimeEnabled !== false;
+    config.playerEndTimeEnabled = s.playerEndTimeEnabled === true;
     config.liveCatchUpEnabled = s.liveCatchUpEnabled !== false;
     config.liveCatchUpTarget = Number(s.liveCatchUpTarget) > 0 ? Number(s.liveCatchUpTarget) : 3;
     config.liveCatchUpMaxRate = Math.min(1.5, Math.max(1.05, Number(s.liveCatchUpMaxRate) || 1.25));
@@ -4174,7 +4174,7 @@ declare global {
   // ── "Termina às" ao lado do tempo do vídeo ──
 
   function ensureEndTimeLabel(player: HTMLElement) {
-    if (config.playerEndTimeEnabled === false) {
+    if (config.playerEndTimeEnabled !== true) {
       document.getElementById(END_TIME_ID)?.remove();
       return;
     }
