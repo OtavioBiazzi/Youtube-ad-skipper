@@ -2,6 +2,10 @@
 
 Todas as mudancas relevantes deste projeto serao registradas aqui.
 
+## 5.2.1
+
+- Botão "Nova versão disponível" no popup: aparece quando há uma release mais nova no GitHub e leva direto ao download.
+
 ## 5.2.0 — Player mais integrado ao YouTube
 
 ### Adicionado

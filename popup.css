@@ -308,3 +308,20 @@ body.extension-disabled .group { opacity: 0.45; pointer-events: none; }
 }
 
 .row[hidden] { display: none; }
+
+.update-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  color: var(--text);
+  text-decoration: none;
+  font-size: 13px;
+}
+
+.update-banner[hidden] { display: none; }
+.update-banner span { color: var(--accent); font: 500 13px var(--font-display); }
+.update-banner:hover { background: var(--panel); }
