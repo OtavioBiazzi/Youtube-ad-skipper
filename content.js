@@ -1088,6 +1088,82 @@
     }
   `;
   }
+  const THEME_HOSTS = [
+    "html",
+    "html[dark]",
+    "ytd-app",
+    "ytd-masthead",
+    "#masthead-container",
+    "ytd-popup-container",
+    "tp-yt-iron-dropdown",
+    "ytd-multi-page-menu-renderer",
+    "ytd-guide-renderer",
+    "ytd-mini-guide-renderer",
+    "ytd-browse",
+    "ytd-watch-flexy",
+    "ytd-search",
+    "ytd-shorts",
+    "yt-chip-cloud-renderer",
+    "ytd-engagement-panel-section-list-renderer"
+  ].join(",\n");
+  function buildYouTubeThemeCss(p, customCss = "") {
+    return `
+${THEME_HOSTS} {
+  --yt-spec-base-background: ${p.background} !important;
+  --yt-spec-raised-background: ${p.surfaceRaised} !important;
+  --yt-spec-menu-background: ${p.surfaceRaised} !important;
+  --yt-spec-brand-background-solid: ${p.background} !important;
+  --yt-spec-brand-background-primary: ${p.background} !important;
+  --yt-spec-brand-background-secondary: ${p.surface} !important;
+  --yt-spec-general-background-a: ${p.background} !important;
+  --yt-spec-general-background-b: ${p.surface} !important;
+  --yt-spec-general-background-c: ${p.surfaceRaised} !important;
+  --yt-spec-badge-chip-background: color-mix(in srgb, ${p.text} 10%, ${p.background}) !important;
+  --yt-spec-button-chip-background-hover: color-mix(in srgb, ${p.text} 18%, ${p.background}) !important;
+  --yt-spec-additive-background: color-mix(in srgb, ${p.text} 6%, transparent) !important;
+  --yt-spec-10-percent-layer: ${p.border} !important;
+  --yt-spec-outline: ${p.border} !important;
+  --yt-spec-touch-response: color-mix(in srgb, ${p.text} 20%, transparent) !important;
+  --yt-spec-text-primary: ${p.text} !important;
+  --yt-spec-text-secondary: ${p.muted} !important;
+  --yt-spec-text-disabled: color-mix(in srgb, ${p.muted} 60%, ${p.background}) !important;
+  --yt-spec-icon-active-other: ${p.text} !important;
+  --yt-spec-icon-inactive: ${p.muted} !important;
+  --yt-spec-call-to-action: ${p.accent} !important;
+  --yt-spec-themed-blue: ${p.accent} !important;
+  --yt-spec-brand-icon-active: ${p.accent} !important;
+  --yt-spec-static-brand-red: ${p.accent} !important;
+  /* Light pills on dark (Inscrever-se, chips selecionados): keep dark text. */
+  --yt-spec-inverted-background: ${p.text} !important;
+  --yt-spec-text-primary-inverse: ${p.background} !important;
+}
+
+/* Filled light buttons (Inscrever-se…): dark text. YouTube ships both the
+   old kebab-case and the newer camelCase class names. */
+.yt-spec-button-shape-next--mono.yt-spec-button-shape-next--filled,
+.yt-spec-button-shape-next--mono.yt-spec-button-shape-next--filled *,
+.ytSpecButtonShapeNextMono.ytSpecButtonShapeNextFilled,
+.ytSpecButtonShapeNextMono.ytSpecButtonShapeNextFilled *,
+yt-chip-cloud-chip-renderer[selected] #chip-container,
+yt-chip-cloud-chip-renderer[selected] #chip-container * {
+  color: ${p.background} !important;
+  fill: ${p.background} !important;
+}
+
+html, body, ytd-app {
+  background: ${p.background} !important;
+}
+
+/* Player: only the played part and the scrubber take the accent. */
+#movie_player .ytp-play-progress,
+#movie_player .ytp-swatch-background-color,
+#movie_player .ytp-scrubber-button {
+  background: ${p.accent} !important;
+}
+
+${customCss}
+`;
+  }
   const MINIPLAYER_ENTER_MARGIN = 40;
   const MINIPLAYER_EXIT_MARGIN = 140;
   function shouldFloatPlayer(input) {
@@ -1551,10 +1627,13 @@
       if (!isBridgeMessage(data)) return;
       if (data.source === MAIN_LIVE_STATS && data.token === mainWorldSessionToken) {
         adState.lastBridgeReplyAt = Date.now();
+        const latency = Number(data.latency);
+        const reportedDvr = data.atLiveHead === false && !(Number.isFinite(latency) && latency < 30);
+        adState.liveDvrStreak = reportedDvr ? (adState.liveDvrStreak || 0) + 1 : 0;
         adState.liveStats = {
-          latency: Number(data.latency),
+          latency,
           health: Number(data.health),
-          atLiveHead: data.atLiveHead !== false,
+          atLiveHead: (adState.liveDvrStreak || 0) < 4,
           at: Date.now()
         };
         return;
@@ -2104,77 +2183,9 @@
     function buildThemeCss() {
       const engine = normalizeThemeEngine(config.themeEngine);
       if (engine === "youtube") return "";
-      const palette = getThemePalette();
       const customCss = String(config.themeCustomCss || "").trim();
       const allowCustomCss = engine === "custom" || engine === "deepdark" && config.themeDeepDarkCustom;
-      return `
-      html,
-      ytd-app,
-      #content,
-      #page-manager,
-      ytd-browse,
-      ytd-watch-flexy {
-        --yt-spec-base-background: ${palette.background} !important;
-        --yt-spec-raised-background: ${palette.surfaceRaised} !important;
-        --yt-spec-menu-background: ${palette.surfaceRaised} !important;
-        --yt-spec-brand-background-solid: ${palette.background} !important;
-        --yt-spec-general-background-a: ${palette.background} !important;
-        --yt-spec-general-background-b: ${palette.surface} !important;
-        --yt-spec-general-background-c: ${palette.surfaceRaised} !important;
-        --yt-spec-text-primary: ${palette.text} !important;
-        --yt-spec-text-secondary: ${palette.muted} !important;
-        --yt-spec-call-to-action: ${palette.accent} !important;
-        --yt-spec-themed-blue: ${palette.accent} !important;
-        --yt-spec-static-brand-red: ${palette.accent} !important;
-        background: ${palette.background} !important;
-        color: ${palette.text} !important;
-      }
-
-      ytd-masthead,
-      #masthead-container,
-      tp-yt-paper-dialog,
-      ytd-popup-container,
-      ytd-menu-popup-renderer,
-      ytd-multi-page-menu-renderer,
-      ytd-guide-renderer,
-      ytd-mini-guide-renderer,
-      ytd-watch-flexy #secondary-inner,
-      ytd-live-chat-frame {
-        background: ${palette.surface} !important;
-        color: ${palette.text} !important;
-      }
-
-      ytd-video-renderer,
-      ytd-rich-item-renderer,
-      ytd-compact-video-renderer,
-      ytd-grid-video-renderer,
-      ytd-playlist-panel-video-renderer {
-        color: ${palette.text} !important;
-      }
-
-      ytd-thumbnail-overlay-time-status-renderer,
-      .ytp-chrome-bottom .ytp-progress-list,
-      .ytp-volume-slider-handle,
-      .ytp-play-progress,
-      .ytp-swatch-background-color {
-        background-color: ${palette.accent} !important;
-      }
-
-      #video-title:hover,
-      ytd-toggle-button-renderer[is-icon-button][style-target="button"] yt-icon {
-        color: ${palette.accent} !important;
-      }
-
-      ytd-rich-item-renderer,
-      ytd-video-renderer,
-      ytd-comment-thread-renderer,
-      ytd-playlist-panel-video-renderer,
-      #sections.ytd-guide-renderer > ytd-guide-section-renderer {
-        border-color: ${palette.border} !important;
-      }
-
-      ${allowCustomCss && customCss ? customCss : ""}
-    `;
+      return buildYouTubeThemeCss(getThemePalette(), allowCustomCss ? customCss : "");
     }
     function buildAppearanceCss() {
       const blocks = [];
@@ -2348,7 +2359,21 @@
       }
       return blocks.join("\n");
     }
+    function syncThemeDarkMode() {
+      const root = document.documentElement;
+      const wantDark = !!config.enabled && normalizeThemeEngine(config.themeEngine) !== "youtube";
+      if (wantDark) {
+        if (!root.hasAttribute("dark")) {
+          root.setAttribute("dark", "");
+          root.dataset.yteForcedDark = "1";
+        }
+      } else if (root.dataset.yteForcedDark === "1") {
+        root.removeAttribute("dark");
+        delete root.dataset.yteForcedDark;
+      }
+    }
     function applyAppearanceFilters() {
+      syncThemeDarkMode();
       const signature = [
         config.enabled,
         config.appearanceHideShorts,
@@ -4474,11 +4499,7 @@
       panel.querySelector(".ytp-popup-content").replaceChildren(panelEl);
       sizeFilterPanel(panel);
       if (direction !== "none" && before.height > 0) {
-        const after = panel.getBoundingClientRect();
-        panel.animate(
-          [{ width: before.width + "px", height: before.height + "px" }, { width: after.width + "px", height: after.height + "px" }],
-          { duration: SUBMENU_ANIM_MS, easing: "cubic-bezier(0.4, 0, 0.2, 1)" }
-        );
+        morphPanelFrom(panel, before.width, before.height);
         slidePanels(null, panelEl, direction);
       }
     }
@@ -4656,9 +4677,17 @@
       closeYouTubeSettingsMenu();
       const panel = openFilterPanel("forward");
       if (!panel || !from || from.width <= 0) return;
+      morphPanelFrom(panel, from.width, from.height);
+    }
+    function morphPanelFrom(panel, fromWidth, fromHeight) {
       const to = panel.getBoundingClientRect();
+      const dx = Math.max(0, to.width - fromWidth);
+      const dy = Math.max(0, to.height - fromHeight);
+      if (dx < 1 && dy < 1) return;
+      const leftAnchored = panel.id === "yte-live-panel";
+      const start = leftAnchored ? `inset(${dy}px ${dx}px 0 0 round 12px)` : `inset(${dy}px 0 0 ${dx}px round 12px)`;
       panel.animate(
-        [{ width: from.width + "px", height: from.height + "px" }, { width: to.width + "px", height: to.height + "px" }],
+        [{ clipPath: start }, { clipPath: "inset(0 0 0 0 round 12px)" }],
         { duration: SUBMENU_ANIM_MS, easing: "cubic-bezier(0.4, 0, 0.2, 1)" }
       );
     }
@@ -5201,11 +5230,7 @@
       content.replaceChildren(panelEl);
       sizeFilterPanel(panel);
       if (direction !== "none" && previous) {
-        const after = panel.getBoundingClientRect();
-        panel.animate(
-          [{ width: before.width + "px", height: before.height + "px" }, { width: after.width + "px", height: after.height + "px" }],
-          { duration: SUBMENU_ANIM_MS, easing: "cubic-bezier(0.4, 0, 0.2, 1)" }
-        );
+        morphPanelFrom(panel, before.width, before.height);
         slidePanels(null, panelEl, direction);
       }
       syncLivePanel();

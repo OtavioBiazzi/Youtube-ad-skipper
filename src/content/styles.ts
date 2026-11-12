@@ -544,3 +544,99 @@ export function buildMiniplayerCss(size: { width: number; height: number }, posi
     }
   `;
 }
+
+export interface ThemePalette {
+  accent: string;
+  background: string;
+  surface: string;
+  surfaceRaised: string;
+  text: string;
+  muted: string;
+  border: string;
+}
+
+// Hosts where YouTube (re)declares its color tokens; setting ours there keeps
+// every component consistent without forcing backgrounds on elements.
+const THEME_HOSTS = [
+  "html",
+  "html[dark]",
+  "ytd-app",
+  "ytd-masthead",
+  "#masthead-container",
+  "ytd-popup-container",
+  "tp-yt-iron-dropdown",
+  "ytd-multi-page-menu-renderer",
+  "ytd-guide-renderer",
+  "ytd-mini-guide-renderer",
+  "ytd-browse",
+  "ytd-watch-flexy",
+  "ytd-search",
+  "ytd-shorts",
+  "yt-chip-cloud-renderer",
+  "ytd-engagement-panel-section-list-renderer",
+].join(",\n");
+
+/**
+ * Theme = YouTube's own design tokens, remapped. No element gets a forced
+ * background (that is what cropped boxes and popups before), and inside the
+ * player only the watched part of the progress bar takes the accent.
+ */
+export function buildYouTubeThemeCss(p: ThemePalette, customCss = "") {
+  return `
+${THEME_HOSTS} {
+  --yt-spec-base-background: ${p.background} !important;
+  --yt-spec-raised-background: ${p.surfaceRaised} !important;
+  --yt-spec-menu-background: ${p.surfaceRaised} !important;
+  --yt-spec-brand-background-solid: ${p.background} !important;
+  --yt-spec-brand-background-primary: ${p.background} !important;
+  --yt-spec-brand-background-secondary: ${p.surface} !important;
+  --yt-spec-general-background-a: ${p.background} !important;
+  --yt-spec-general-background-b: ${p.surface} !important;
+  --yt-spec-general-background-c: ${p.surfaceRaised} !important;
+  --yt-spec-badge-chip-background: color-mix(in srgb, ${p.text} 10%, ${p.background}) !important;
+  --yt-spec-button-chip-background-hover: color-mix(in srgb, ${p.text} 18%, ${p.background}) !important;
+  --yt-spec-additive-background: color-mix(in srgb, ${p.text} 6%, transparent) !important;
+  --yt-spec-10-percent-layer: ${p.border} !important;
+  --yt-spec-outline: ${p.border} !important;
+  --yt-spec-touch-response: color-mix(in srgb, ${p.text} 20%, transparent) !important;
+  --yt-spec-text-primary: ${p.text} !important;
+  --yt-spec-text-secondary: ${p.muted} !important;
+  --yt-spec-text-disabled: color-mix(in srgb, ${p.muted} 60%, ${p.background}) !important;
+  --yt-spec-icon-active-other: ${p.text} !important;
+  --yt-spec-icon-inactive: ${p.muted} !important;
+  --yt-spec-call-to-action: ${p.accent} !important;
+  --yt-spec-themed-blue: ${p.accent} !important;
+  --yt-spec-brand-icon-active: ${p.accent} !important;
+  --yt-spec-static-brand-red: ${p.accent} !important;
+  /* Light pills on dark (Inscrever-se, chips selecionados): keep dark text. */
+  --yt-spec-inverted-background: ${p.text} !important;
+  --yt-spec-text-primary-inverse: ${p.background} !important;
+}
+
+/* Filled light buttons (Inscrever-se…): dark text. YouTube ships both the
+   old kebab-case and the newer camelCase class names. */
+.yt-spec-button-shape-next--mono.yt-spec-button-shape-next--filled,
+.yt-spec-button-shape-next--mono.yt-spec-button-shape-next--filled *,
+.ytSpecButtonShapeNextMono.ytSpecButtonShapeNextFilled,
+.ytSpecButtonShapeNextMono.ytSpecButtonShapeNextFilled *,
+yt-chip-cloud-chip-renderer[selected] #chip-container,
+yt-chip-cloud-chip-renderer[selected] #chip-container * {
+  color: ${p.background} !important;
+  fill: ${p.background} !important;
+}
+
+html, body, ytd-app {
+  background: ${p.background} !important;
+}
+
+/* Player: only the played part and the scrubber take the accent. */
+#movie_player .ytp-play-progress,
+#movie_player .ytp-swatch-background-color,
+#movie_player .ytp-scrubber-button {
+  background: ${p.accent} !important;
+}
+
+${customCss}
+`;
+}
+

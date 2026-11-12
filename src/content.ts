@@ -60,6 +60,7 @@ import {
   buildMiniplayerCss,
   buildPlayerToolbarCss,
   buildPlayerUiCss,
+  buildYouTubeThemeCss,
 } from "./content/styles";
 import { shouldFloatPlayer, shouldResetMiniplayerDismissal } from "./shared/miniplayer";
 import { LIVE_MAX_RATES, LIVE_MODES, decideLiveRate, normalizeLiveMode } from "./shared/liveLatency";
@@ -450,10 +451,15 @@ declare global {
     if (!isBridgeMessage(data)) return;
     if (data.source === MAIN_LIVE_STATS && data.token === mainWorldSessionToken) {
       adState.lastBridgeReplyAt = Date.now();
+      const latency = Number(data.latency);
+      // YouTube's "at live head" flag flickers near the edge: only switch to
+      // DVR after 4 readings in a row, and a small delay is always "live".
+      const reportedDvr = data.atLiveHead === false && !(Number.isFinite(latency) && latency < 30);
+      adState.liveDvrStreak = reportedDvr ? (adState.liveDvrStreak || 0) + 1 : 0;
       adState.liveStats = {
-        latency: Number(data.latency),
+        latency,
         health: Number(data.health),
-        atLiveHead: data.atLiveHead !== false,
+        atLiveHead: (adState.liveDvrStreak || 0) < 4,
         at: Date.now(),
       };
       return;
@@ -1105,79 +1111,9 @@ declare global {
   function buildThemeCss() {
     const engine = normalizeThemeEngine(config.themeEngine);
     if (engine === "youtube") return "";
-
-    const palette = getThemePalette();
     const customCss = String(config.themeCustomCss || "").trim();
     const allowCustomCss = engine === "custom" || (engine === "deepdark" && config.themeDeepDarkCustom);
-
-    return `
-      html,
-      ytd-app,
-      #content,
-      #page-manager,
-      ytd-browse,
-      ytd-watch-flexy {
-        --yt-spec-base-background: ${palette.background} !important;
-        --yt-spec-raised-background: ${palette.surfaceRaised} !important;
-        --yt-spec-menu-background: ${palette.surfaceRaised} !important;
-        --yt-spec-brand-background-solid: ${palette.background} !important;
-        --yt-spec-general-background-a: ${palette.background} !important;
-        --yt-spec-general-background-b: ${palette.surface} !important;
-        --yt-spec-general-background-c: ${palette.surfaceRaised} !important;
-        --yt-spec-text-primary: ${palette.text} !important;
-        --yt-spec-text-secondary: ${palette.muted} !important;
-        --yt-spec-call-to-action: ${palette.accent} !important;
-        --yt-spec-themed-blue: ${palette.accent} !important;
-        --yt-spec-static-brand-red: ${palette.accent} !important;
-        background: ${palette.background} !important;
-        color: ${palette.text} !important;
-      }
-
-      ytd-masthead,
-      #masthead-container,
-      tp-yt-paper-dialog,
-      ytd-popup-container,
-      ytd-menu-popup-renderer,
-      ytd-multi-page-menu-renderer,
-      ytd-guide-renderer,
-      ytd-mini-guide-renderer,
-      ytd-watch-flexy #secondary-inner,
-      ytd-live-chat-frame {
-        background: ${palette.surface} !important;
-        color: ${palette.text} !important;
-      }
-
-      ytd-video-renderer,
-      ytd-rich-item-renderer,
-      ytd-compact-video-renderer,
-      ytd-grid-video-renderer,
-      ytd-playlist-panel-video-renderer {
-        color: ${palette.text} !important;
-      }
-
-      ytd-thumbnail-overlay-time-status-renderer,
-      .ytp-chrome-bottom .ytp-progress-list,
-      .ytp-volume-slider-handle,
-      .ytp-play-progress,
-      .ytp-swatch-background-color {
-        background-color: ${palette.accent} !important;
-      }
-
-      #video-title:hover,
-      ytd-toggle-button-renderer[is-icon-button][style-target="button"] yt-icon {
-        color: ${palette.accent} !important;
-      }
-
-      ytd-rich-item-renderer,
-      ytd-video-renderer,
-      ytd-comment-thread-renderer,
-      ytd-playlist-panel-video-renderer,
-      #sections.ytd-guide-renderer > ytd-guide-section-renderer {
-        border-color: ${palette.border} !important;
-      }
-
-      ${allowCustomCss && customCss ? customCss : ""}
-    `;
+    return buildYouTubeThemeCss(getThemePalette(), allowCustomCss ? customCss : "");
   }
 
   function buildAppearanceCss() {
@@ -1367,7 +1303,25 @@ declare global {
     return blocks.join("\n");
   }
 
+  // Our themes are dark palettes. YouTube in light mode keeps dark text in its
+  // components, so a theme on top of it was unreadable: switch YouTube's own
+  // dark mode on while a theme is active (and give it back afterwards).
+  function syncThemeDarkMode() {
+    const root = document.documentElement;
+    const wantDark = !!config.enabled && normalizeThemeEngine(config.themeEngine) !== "youtube";
+    if (wantDark) {
+      if (!root.hasAttribute("dark")) {
+        root.setAttribute("dark", "");
+        root.dataset.yteForcedDark = "1";
+      }
+    } else if (root.dataset.yteForcedDark === "1") {
+      root.removeAttribute("dark");
+      delete root.dataset.yteForcedDark;
+    }
+  }
+
   function applyAppearanceFilters() {
+    syncThemeDarkMode();
     const signature = [
       config.enabled,
       config.appearanceHideShorts,
@@ -3904,11 +3858,7 @@ declare global {
     (panel.querySelector(".ytp-popup-content") as HTMLElement).replaceChildren(panelEl);
     sizeFilterPanel(panel);
     if (direction !== "none" && before.height > 0) {
-      const after = panel.getBoundingClientRect();
-      panel.animate(
-        [{ width: before.width + "px", height: before.height + "px" }, { width: after.width + "px", height: after.height + "px" }],
-        { duration: SUBMENU_ANIM_MS, easing: "cubic-bezier(0.4, 0, 0.2, 1)" },
-      );
+      morphPanelFrom(panel, before.width, before.height);
       slidePanels(null, panelEl, direction);
     }
   }
@@ -4126,9 +4076,22 @@ declare global {
     closeYouTubeSettingsMenu();
     const panel = openFilterPanel("forward");
     if (!panel || !from || from.width <= 0) return;
+    morphPanelFrom(panel, from.width, from.height);
+  }
+
+  // Grow from the previous box (gear menu or previous view) to the panel's
+  // own size by animating a clip instead of width/height: no page layout
+  // per frame, so it runs as smoothly as YouTube's own menus. Panels are
+  // anchored bottom-right/bottom-left, so the clip opens from that corner.
+  function morphPanelFrom(panel: HTMLElement, fromWidth: number, fromHeight: number) {
     const to = panel.getBoundingClientRect();
+    const dx = Math.max(0, to.width - fromWidth);
+    const dy = Math.max(0, to.height - fromHeight);
+    if (dx < 1 && dy < 1) return;
+    const leftAnchored = panel.id === "yte-live-panel";
+    const start = leftAnchored ? `inset(${dy}px ${dx}px 0 0 round 12px)` : `inset(${dy}px 0 0 ${dx}px round 12px)`;
     panel.animate(
-      [{ width: from.width + "px", height: from.height + "px" }, { width: to.width + "px", height: to.height + "px" }],
+      [{ clipPath: start }, { clipPath: "inset(0 0 0 0 round 12px)" }],
       { duration: SUBMENU_ANIM_MS, easing: "cubic-bezier(0.4, 0, 0.2, 1)" },
     );
   }
@@ -4766,11 +4729,7 @@ declare global {
     if (direction !== "none" && previous) {
       // Same feel as YouTube's sub-menus: the box resizes while the new
       // view slides in from the side.
-      const after = panel.getBoundingClientRect();
-      panel.animate(
-        [{ width: before.width + "px", height: before.height + "px" }, { width: after.width + "px", height: after.height + "px" }],
-        { duration: SUBMENU_ANIM_MS, easing: "cubic-bezier(0.4, 0, 0.2, 1)" },
-      );
+      morphPanelFrom(panel, before.width, before.height);
       slidePanels(null, panelEl, direction);
     }
     syncLivePanel();
