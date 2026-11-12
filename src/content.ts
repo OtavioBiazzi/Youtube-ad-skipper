@@ -4399,19 +4399,44 @@ declare global {
     sizeFilterPanel(panel);
   }
 
+  // Lowest free line above the control bar. In fullscreen YouTube shows
+  // overlays above the bar (like/dislike/share quick actions, info cards);
+  // the panel must open above those, never on top of them.
+  const PANEL_AVOID_SELECTORS = [".ytp-fullscreen-quick-actions", ".ytp-overlay-bottom-right"];
+
+  function getPanelBottomOffset(player: HTMLElement, panelWidth: number) {
+    const playerRect = player.getBoundingClientRect();
+    const bar = player.querySelector(".ytp-chrome-bottom") as HTMLElement | null;
+    let limit = bar ? bar.getBoundingClientRect().top : playerRect.bottom - 62;
+    for (const selector of PANEL_AVOID_SELECTORS) {
+      player.querySelectorAll<HTMLElement>(selector).forEach((el) => {
+        const rect = el.getBoundingClientRect();
+        if (rect.height <= 0 || rect.width <= 0 || rect.top >= limit) return;
+        const style = getComputedStyle(el);
+        if (style.visibility === "hidden" || style.display === "none" || Number(style.opacity) === 0) return;
+        // Only matters if it sits under the panel (right side of the player).
+        if (rect.right < playerRect.right - panelWidth - 12) return;
+        limit = Math.min(limit, rect.top);
+      });
+    }
+    return { bottom: Math.max(62, Math.round(playerRect.bottom - limit + 10)), available: limit - playerRect.top - 20 };
+  }
+
   // YouTube sizes its popups from JS; do the same so the panel hugs its rows.
   function sizeFilterPanel(panel: HTMLElement) {
     const player = getYouTubePlayer();
     const panelEl = panel.querySelector(".ytp-panel") as HTMLElement | null;
     if (!player || !panelEl) return;
     const width = Math.min(360, Math.max(260, player.clientWidth - 24));
+    const offset = getPanelBottomOffset(player, width);
+    panel.style.bottom = offset.bottom + "px";
     panel.style.width = width + "px";
     panelEl.style.width = width + "px";
     panel.style.height = "auto";
     panelEl.style.height = "auto";
     panelEl.style.position = "static";
     const natural = panelEl.scrollHeight;
-    const maxHeight = Math.max(160, player.clientHeight - 84);
+    const maxHeight = Math.max(160, Math.min(player.clientHeight - 84, offset.available));
     const height = Math.min(natural, maxHeight);
     panelEl.style.position = "";
     panel.style.height = height + "px";
@@ -4492,6 +4517,14 @@ declare global {
     renderFilterPanel(panel);
     document.addEventListener("pointerdown", handleOutsideFilterPanel, true);
   }
+
+  // Re-place an open panel when the player changes size (fullscreen, theater).
+  const resizeOpenFilterPanel = () => {
+    const panel = document.getElementById(FILTER_PANEL_ID);
+    if (panel && !panel.hidden) window.setTimeout(() => sizeFilterPanel(panel), 250);
+  };
+  document.addEventListener("fullscreenchange", resizeOpenFilterPanel);
+  window.addEventListener("resize", resizeOpenFilterPanel);
 
   // ── Live: tirar o atraso acelerando de leve ──
 

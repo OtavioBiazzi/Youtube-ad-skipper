@@ -4463,18 +4463,37 @@
       content.replaceChildren(panelEl);
       sizeFilterPanel(panel);
     }
+    const PANEL_AVOID_SELECTORS = [".ytp-fullscreen-quick-actions", ".ytp-overlay-bottom-right"];
+    function getPanelBottomOffset(player, panelWidth) {
+      const playerRect = player.getBoundingClientRect();
+      const bar = player.querySelector(".ytp-chrome-bottom");
+      let limit = bar ? bar.getBoundingClientRect().top : playerRect.bottom - 62;
+      for (const selector of PANEL_AVOID_SELECTORS) {
+        player.querySelectorAll(selector).forEach((el) => {
+          const rect = el.getBoundingClientRect();
+          if (rect.height <= 0 || rect.width <= 0 || rect.top >= limit) return;
+          const style = getComputedStyle(el);
+          if (style.visibility === "hidden" || style.display === "none" || Number(style.opacity) === 0) return;
+          if (rect.right < playerRect.right - panelWidth - 12) return;
+          limit = Math.min(limit, rect.top);
+        });
+      }
+      return { bottom: Math.max(62, Math.round(playerRect.bottom - limit + 10)), available: limit - playerRect.top - 20 };
+    }
     function sizeFilterPanel(panel) {
       const player = getYouTubePlayer();
       const panelEl = panel.querySelector(".ytp-panel");
       if (!player || !panelEl) return;
       const width = Math.min(360, Math.max(260, player.clientWidth - 24));
+      const offset = getPanelBottomOffset(player, width);
+      panel.style.bottom = offset.bottom + "px";
       panel.style.width = width + "px";
       panelEl.style.width = width + "px";
       panel.style.height = "auto";
       panelEl.style.height = "auto";
       panelEl.style.position = "static";
       const natural = panelEl.scrollHeight;
-      const maxHeight = Math.max(160, player.clientHeight - 84);
+      const maxHeight = Math.max(160, Math.min(player.clientHeight - 84, offset.available));
       const height = Math.min(natural, maxHeight);
       panelEl.style.position = "";
       panel.style.height = height + "px";
@@ -4547,6 +4566,12 @@
       renderFilterPanel(panel);
       document.addEventListener("pointerdown", handleOutsideFilterPanel, true);
     }
+    const resizeOpenFilterPanel = () => {
+      const panel = document.getElementById(FILTER_PANEL_ID);
+      if (panel && !panel.hidden) window.setTimeout(() => sizeFilterPanel(panel), 250);
+    };
+    document.addEventListener("fullscreenchange", resizeOpenFilterPanel);
+    window.addEventListener("resize", resizeOpenFilterPanel);
     function getLiveTarget() {
       const n = Number(config.liveCatchUpTarget);
       return Number.isFinite(n) && n > 0 ? n : 3;
