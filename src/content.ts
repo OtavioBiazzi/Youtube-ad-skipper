@@ -317,6 +317,7 @@ declare global {
     config.codecForceAvc = !!s.codecForceAvc;
     config.resumePlaybackEnabled = !!s.resumePlaybackEnabled;
     config.playerControlsEnabled = s.playerControlsEnabled !== false;
+    config.playerControlsStyle = s.playerControlsStyle === "divider" ? "divider" : "pill";
     config.playerEndTimeEnabled = s.playerEndTimeEnabled !== false;
     config.liveCatchUpEnabled = s.liveCatchUpEnabled !== false;
     config.liveCatchUpTarget = Number(s.liveCatchUpTarget) > 0 ? Number(s.liveCatchUpTarget) : 3;
@@ -3798,15 +3799,12 @@ declare global {
         z-index: 80;
       }
 
-      #movie_player.yte-compact #${PLAYER_CONTROLS_ID} [data-priority="low"] {
-        display: none;
-      }
-
-      #movie_player.yte-tiny #${PLAYER_CONTROLS_ID} [data-priority="mid"] {
+      #${PLAYER_CONTROLS_ID} [data-fit-hidden] {
         display: none;
       }
 
       #${END_TIME_ID}:empty { display: none; }
+      #movie_player.yte-no-endtime #${END_TIME_ID} { display: none; }
 
       #${END_TIME_ID} {
         margin-left: 6px;
@@ -3883,8 +3881,23 @@ declare global {
         box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.35);
       }
 
-      /* Divider between our buttons and YouTube's own. */
-      #${PLAYER_CONTROLS_ID}::after {
+      /* Style "pill": our own rounded group next to YouTube's, using the
+         same background/radius/height read from YouTube's group at runtime. */
+      #${PLAYER_CONTROLS_ID}.yte-style-pill {
+        float: none;
+        align-self: center;
+        flex: none;
+        height: var(--yte-pill-h, 40px);
+        margin: 0 var(--yte-pill-gap, 12px);
+        padding: 0 4px;
+        border-radius: var(--yte-pill-radius, 28px);
+        background: var(--yte-pill-bg, rgba(0, 0, 0, 0.3));
+      }
+
+      #${PLAYER_CONTROLS_ID}.yte-style-pill .yte-btn { min-height: 0; }
+
+      /* Style "divider": inside YouTube's group, separated by a thin line. */
+      #${PLAYER_CONTROLS_ID}.yte-style-divider::after {
         content: "";
         align-self: center;
         width: 1px;
@@ -3927,8 +3940,54 @@ declare global {
     return items;
   }
 
+  function getPlayerControlsStyle(): "pill" | "divider" {
+    return config.playerControlsStyle === "divider" ? "divider" : "pill";
+  }
+
   function getPlayerControlsSignature() {
-    return getPlayerControlItems().map((item) => item.id).join(",");
+    return getPlayerControlsStyle() + ":" + getPlayerControlItems().map((item) => item.id).join(",");
+  }
+
+  // Hide our lower-priority buttons (then the end-time clock) only while the
+  // left side of YouTube's bar (play, volume, time) would be squeezed.
+  // Order in which our buttons give up their place when space is short.
+  const FIT_HIDE_ORDER = ["popup", "boost", "cinema", "screenshot", "pip", "loop", "filters"];
+
+  function fitPlayerControls(player: HTMLElement) {
+    const controls = document.getElementById(PLAYER_CONTROLS_ID);
+    const left = player.querySelector(".ytp-left-controls") as HTMLElement | null;
+    const time = player.querySelector(".ytp-time-display") as HTMLElement | null;
+    if (!controls) return;
+    const overflowing = () => (!!left && left.scrollWidth > left.clientWidth + 1) || (!!time && time.scrollWidth > time.clientWidth + 1);
+
+    controls.querySelectorAll<HTMLElement>("[data-fit-hidden]").forEach((button) => button.removeAttribute("data-fit-hidden"));
+    player.classList.remove("yte-no-endtime");
+    if (!overflowing()) return;
+
+    for (const action of FIT_HIDE_ORDER) {
+      const button = controls.querySelector<HTMLElement>(`[data-yte-action="${action}"]`);
+      if (!button) continue;
+      button.setAttribute("data-fit-hidden", "");
+      if (!overflowing()) return;
+    }
+    player.classList.add("yte-no-endtime");
+  }
+
+  // Copy the look of YouTube's own control group so our pill always matches.
+  function syncPillStyle(controls: HTMLElement, rightControls: HTMLElement) {
+    if (getPlayerControlsStyle() !== "pill") return;
+    const style = getComputedStyle(rightControls);
+    const bg = style.backgroundColor;
+    const transparent = !bg || bg === "transparent" || bg === "rgba(0, 0, 0, 0)";
+    const height = Math.round(rightControls.getBoundingClientRect().height);
+    const values: Record<string, string> = {
+      "--yte-pill-bg": transparent ? "rgba(0, 0, 0, 0.3)" : bg,
+      "--yte-pill-radius": style.borderRadius && style.borderRadius !== "0px" ? style.borderRadius : "28px",
+      "--yte-pill-h": height > 20 && height < 80 ? height + "px" : "40px",
+    };
+    for (const [name, value] of Object.entries(values)) {
+      if (controls.style.getPropertyValue(name) !== value) controls.style.setProperty(name, value);
+    }
   }
 
   function shouldShowPlayerControls() {
@@ -3956,13 +4015,14 @@ declare global {
     if (!player || !rightControls) return;
     ensurePlayerUiStyle();
 
-    const width = player.clientWidth;
-    player.classList.toggle("yte-compact", width > 0 && width < 760);
-    player.classList.toggle("yte-tiny", width > 0 && width < 520);
 
     let controls = document.getElementById(PLAYER_CONTROLS_ID);
     const signature = getPlayerControlsSignature();
-    if (controls && (controls.parentElement !== rightControls || controls.dataset.signature !== signature)) {
+    const style = getPlayerControlsStyle();
+    // Pill: a sibling group right before YouTube's; divider: inside it.
+    const expectedParent = style === "pill" ? rightControls.parentElement : rightControls;
+    if (!expectedParent) return;
+    if (controls && (controls.parentElement !== expectedParent || controls.dataset.signature !== signature)) {
       controls.remove();
       controls = null;
     }
@@ -3970,6 +4030,7 @@ declare global {
     if (!controls) {
       controls = document.createElement("span");
       controls.id = PLAYER_CONTROLS_ID;
+      controls.className = "yte-style-" + style;
       controls.dataset.signature = signature;
       for (const item of getPlayerControlItems()) {
         const button = document.createElement("button");
@@ -4009,9 +4070,12 @@ declare global {
         refreshPlayerControlStates();
       }, { passive: false });
 
-      // Keep these out of the "hide controls" sizing: insert before YouTube's own.
-      rightControls.insertBefore(controls, rightControls.firstChild);
+      if (style === "pill") expectedParent.insertBefore(controls, rightControls);
+      else rightControls.insertBefore(controls, rightControls.firstChild);
     }
+
+    syncPillStyle(controls, rightControls);
+    fitPlayerControls(player);
 
     ensureEndTimeLabel(player);
     bindPlayerControlsVideo();

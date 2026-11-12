@@ -302,3 +302,5 @@ body.extension-disabled .group { opacity: 0.45; pointer-events: none; }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
 }
+
+.row[hidden] { display: none; }

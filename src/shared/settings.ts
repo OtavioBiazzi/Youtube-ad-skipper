@@ -177,6 +177,7 @@ export const DEFAULT_SETTINGS = {
   videoFilterSepia: 0,
   resumePlaybackEnabled: false,
   playerControlsEnabled: true,
+  playerControlsStyle: "pill",
   playerEndTimeEnabled: true,
   liveCatchUpEnabled: true,
   liveCatchUpTarget: 3,

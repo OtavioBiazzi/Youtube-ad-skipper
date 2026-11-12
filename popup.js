@@ -167,6 +167,7 @@
     videoFilterSepia: 0,
     resumePlaybackEnabled: false,
     playerControlsEnabled: true,
+    playerControlsStyle: "pill",
     playerEndTimeEnabled: true,
     liveCatchUpEnabled: true,
     liveCatchUpTarget: 3,
@@ -403,6 +404,32 @@
       chrome.storage.local.set({ playerControlsEnabled: inside, toolbarEnabled: below });
       renderPlacement(inside, below);
       announceChange(inside ? "Botões dentro do player." : below ? "Botões numa barra abaixo do vídeo." : "Botões escondidos.");
+    });
+  });
+  const styleButtons = Array.from(document.querySelectorAll("[data-controls-style]"));
+  const styleRow = document.getElementById("style-row");
+  function renderControlsStyle(style, inside) {
+    const current = style === "divider" ? "divider" : "pill";
+    styleButtons.forEach((button) => button.setAttribute("aria-checked", String(button.dataset.controlsStyle === current)));
+    if (styleRow) styleRow.hidden = !inside;
+  }
+  chrome.storage.local.get(DEFAULT_SETTINGS, (settings) => {
+    const migrated = migrateSettings(settings);
+    renderControlsStyle(String(migrated.playerControlsStyle), migrated.playerControlsEnabled !== false);
+  });
+  styleButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      const style = button.dataset.controlsStyle === "divider" ? "divider" : "pill";
+      chrome.storage.local.set({ playerControlsStyle: style });
+      renderControlsStyle(style, true);
+      announceChange(style === "pill" ? "Botões numa caixa própria." : "Botões junto com os do YouTube.");
+    });
+  });
+  chrome.storage.onChanged.addListener((changes) => {
+    if (!changes.playerControlsEnabled && !changes.playerControlsStyle) return;
+    chrome.storage.local.get(DEFAULT_SETTINGS, (settings) => {
+      const migrated = migrateSettings(settings);
+      renderControlsStyle(String(migrated.playerControlsStyle), migrated.playerControlsEnabled !== false);
     });
   });
 })();

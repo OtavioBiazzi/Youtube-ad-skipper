@@ -233,3 +233,36 @@ placementButtons.forEach((button) => {
     announceChange(inside ? "Botões dentro do player." : below ? "Botões numa barra abaixo do vídeo." : "Botões escondidos.");
   });
 });
+
+// ── Visual of the in-player buttons (A/B: separate pill or divider) ─────────
+
+const styleButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-controls-style]"));
+const styleRow = document.getElementById("style-row");
+
+function renderControlsStyle(style: string, inside: boolean) {
+  const current = style === "divider" ? "divider" : "pill";
+  styleButtons.forEach((button) => button.setAttribute("aria-checked", String(button.dataset.controlsStyle === current)));
+  if (styleRow) styleRow.hidden = !inside;
+}
+
+chrome.storage.local.get(DEFAULT_SETTINGS, (settings: Record<string, unknown>) => {
+  const migrated = migrateSettings(settings) as Record<string, unknown>;
+  renderControlsStyle(String(migrated.playerControlsStyle), migrated.playerControlsEnabled !== false);
+});
+
+styleButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    const style = button.dataset.controlsStyle === "divider" ? "divider" : "pill";
+    chrome.storage.local.set({ playerControlsStyle: style });
+    renderControlsStyle(style, true);
+    announceChange(style === "pill" ? "Botões numa caixa própria." : "Botões junto com os do YouTube.");
+  });
+});
+
+chrome.storage.onChanged.addListener((changes) => {
+  if (!changes.playerControlsEnabled && !changes.playerControlsStyle) return;
+  chrome.storage.local.get(DEFAULT_SETTINGS, (settings: Record<string, unknown>) => {
+    const migrated = migrateSettings(settings) as Record<string, unknown>;
+    renderControlsStyle(String(migrated.playerControlsStyle), migrated.playerControlsEnabled !== false);
+  });
+});

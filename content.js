@@ -421,6 +421,7 @@
     videoFilterSepia: 0,
     resumePlaybackEnabled: false,
     playerControlsEnabled: true,
+    playerControlsStyle: "pill",
     playerEndTimeEnabled: true,
     liveCatchUpEnabled: true,
     liveCatchUpTarget: 3,
@@ -899,6 +900,7 @@
       config.codecForceAvc = !!s.codecForceAvc;
       config.resumePlaybackEnabled = !!s.resumePlaybackEnabled;
       config.playerControlsEnabled = s.playerControlsEnabled !== false;
+      config.playerControlsStyle = s.playerControlsStyle === "divider" ? "divider" : "pill";
       config.playerEndTimeEnabled = s.playerEndTimeEnabled !== false;
       config.liveCatchUpEnabled = s.liveCatchUpEnabled !== false;
       config.liveCatchUpTarget = Number(s.liveCatchUpTarget) > 0 ? Number(s.liveCatchUpTarget) : 3;
@@ -3915,15 +3917,12 @@
         z-index: 80;
       }
 
-      #movie_player.yte-compact #${PLAYER_CONTROLS_ID} [data-priority="low"] {
-        display: none;
-      }
-
-      #movie_player.yte-tiny #${PLAYER_CONTROLS_ID} [data-priority="mid"] {
+      #${PLAYER_CONTROLS_ID} [data-fit-hidden] {
         display: none;
       }
 
       #${END_TIME_ID}:empty { display: none; }
+      #movie_player.yte-no-endtime #${END_TIME_ID} { display: none; }
 
       #${END_TIME_ID} {
         margin-left: 6px;
@@ -4000,8 +3999,23 @@
         box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.35);
       }
 
-      /* Divider between our buttons and YouTube's own. */
-      #${PLAYER_CONTROLS_ID}::after {
+      /* Style "pill": our own rounded group next to YouTube's, using the
+         same background/radius/height read from YouTube's group at runtime. */
+      #${PLAYER_CONTROLS_ID}.yte-style-pill {
+        float: none;
+        align-self: center;
+        flex: none;
+        height: var(--yte-pill-h, 40px);
+        margin: 0 var(--yte-pill-gap, 12px);
+        padding: 0 4px;
+        border-radius: var(--yte-pill-radius, 28px);
+        background: var(--yte-pill-bg, rgba(0, 0, 0, 0.3));
+      }
+
+      #${PLAYER_CONTROLS_ID}.yte-style-pill .yte-btn { min-height: 0; }
+
+      /* Style "divider": inside YouTube's group, separated by a thin line. */
+      #${PLAYER_CONTROLS_ID}.yte-style-divider::after {
         content: "";
         align-self: center;
         width: 1px;
@@ -4040,8 +4054,44 @@
       if (config.toolbarPip !== false && document.pictureInPictureEnabled) items.push({ id: "pip", tip: "Picture-in-picture", icon: "pip", priority: "mid" });
       return items;
     }
+    function getPlayerControlsStyle() {
+      return config.playerControlsStyle === "divider" ? "divider" : "pill";
+    }
     function getPlayerControlsSignature() {
-      return getPlayerControlItems().map((item) => item.id).join(",");
+      return getPlayerControlsStyle() + ":" + getPlayerControlItems().map((item) => item.id).join(",");
+    }
+    const FIT_HIDE_ORDER = ["popup", "boost", "cinema", "screenshot", "pip", "loop", "filters"];
+    function fitPlayerControls(player) {
+      const controls = document.getElementById(PLAYER_CONTROLS_ID);
+      const left = player.querySelector(".ytp-left-controls");
+      const time = player.querySelector(".ytp-time-display");
+      if (!controls) return;
+      const overflowing = () => !!left && left.scrollWidth > left.clientWidth + 1 || !!time && time.scrollWidth > time.clientWidth + 1;
+      controls.querySelectorAll("[data-fit-hidden]").forEach((button) => button.removeAttribute("data-fit-hidden"));
+      player.classList.remove("yte-no-endtime");
+      if (!overflowing()) return;
+      for (const action of FIT_HIDE_ORDER) {
+        const button = controls.querySelector(`[data-yte-action="${action}"]`);
+        if (!button) continue;
+        button.setAttribute("data-fit-hidden", "");
+        if (!overflowing()) return;
+      }
+      player.classList.add("yte-no-endtime");
+    }
+    function syncPillStyle(controls, rightControls) {
+      if (getPlayerControlsStyle() !== "pill") return;
+      const style = getComputedStyle(rightControls);
+      const bg = style.backgroundColor;
+      const transparent = !bg || bg === "transparent" || bg === "rgba(0, 0, 0, 0)";
+      const height = Math.round(rightControls.getBoundingClientRect().height);
+      const values = {
+        "--yte-pill-bg": transparent ? "rgba(0, 0, 0, 0.3)" : bg,
+        "--yte-pill-radius": style.borderRadius && style.borderRadius !== "0px" ? style.borderRadius : "28px",
+        "--yte-pill-h": height > 20 && height < 80 ? height + "px" : "40px"
+      };
+      for (const [name, value] of Object.entries(values)) {
+        if (controls.style.getPropertyValue(name) !== value) controls.style.setProperty(name, value);
+      }
     }
     function shouldShowPlayerControls() {
       return !!config.enabled && config.playerControlsEnabled !== false && (isWatchPage() || /^\/embed\//.test(location.pathname));
@@ -4063,18 +4113,19 @@
       const rightControls = player?.querySelector(".ytp-right-controls");
       if (!player || !rightControls) return;
       ensurePlayerUiStyle();
-      const width = player.clientWidth;
-      player.classList.toggle("yte-compact", width > 0 && width < 760);
-      player.classList.toggle("yte-tiny", width > 0 && width < 520);
       let controls = document.getElementById(PLAYER_CONTROLS_ID);
       const signature = getPlayerControlsSignature();
-      if (controls && (controls.parentElement !== rightControls || controls.dataset.signature !== signature)) {
+      const style = getPlayerControlsStyle();
+      const expectedParent = style === "pill" ? rightControls.parentElement : rightControls;
+      if (!expectedParent) return;
+      if (controls && (controls.parentElement !== expectedParent || controls.dataset.signature !== signature)) {
         controls.remove();
         controls = null;
       }
       if (!controls) {
         controls = document.createElement("span");
         controls.id = PLAYER_CONTROLS_ID;
+        controls.className = "yte-style-" + style;
         controls.dataset.signature = signature;
         for (const item of getPlayerControlItems()) {
           const button = document.createElement("button");
@@ -4112,8 +4163,11 @@
           adjustToolbarSpeed(getWheelDirection(event), getActiveVideo());
           refreshPlayerControlStates();
         }, { passive: false });
-        rightControls.insertBefore(controls, rightControls.firstChild);
+        if (style === "pill") expectedParent.insertBefore(controls, rightControls);
+        else rightControls.insertBefore(controls, rightControls.firstChild);
       }
+      syncPillStyle(controls, rightControls);
+      fitPlayerControls(player);
       ensureEndTimeLabel(player);
       bindPlayerControlsVideo();
       refreshPlayerControlStates();
