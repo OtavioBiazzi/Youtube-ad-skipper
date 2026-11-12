@@ -179,6 +179,7 @@ export const DEFAULT_SETTINGS = {
   playerControlsEnabled: true,
   playerControlsStyle: "pill",
   settingsMenuItemsEnabled: true,
+  skipSurveysEnabled: true,
   playerEndTimeEnabled: false,
   liveCatchUpEnabled: true,
   liveCatchUpTarget: 3,

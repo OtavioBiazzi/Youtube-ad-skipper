@@ -4,6 +4,8 @@ export const MAIN_SPEED_THROUGH_MESSAGE = "yt-ad-skipper:speed-through";
 export const MAIN_FORCE_SKIP_RESULT = "yt-ad-skipper:force-skip-result";
 export const MAIN_PLAYER_RESIZE_MESSAGE = "youtube-extension:player-resize";
 export const MAIN_QUALITY_MESSAGE = "youtube-extension:set-quality";
+export const MAIN_QUALITY_RESULT = "youtube-extension:quality-result";
+export const MAIN_PLAYER_COMMAND = "youtube-extension:player-command";
 export const CODEC_SETTINGS_MESSAGE = "youtube-extension:codec-settings";
 export const CODEC_SETTINGS_STORAGE_KEY = "youtubeExtensionCodecSettings";
 

@@ -29,6 +29,23 @@ Todas as mudancas relevantes deste projeto serao registradas aqui.
 - Diagnóstico de reprodução no Control Center: lista toda pausa/avanço feito pela extensão e o motivo.
 - Atalhos rápidos de Miniplayer e Continuar no popup.
 
+### Corrigido na auditoria das opções antigas
+
+- Qualidade automática: a extensão falava com o player do lado errado (onde a API do YouTube não existe) e nunca sabia a qualidade atual. Agora a escolha acontece no contexto da página, e "restaurar ao sair da tela cheia" volta a funcionar.
+- Todo vídeo era tratado como playlist (o YouTube deixa um painel de playlist vazio na página), o que trocava a qualidade para a de playlists e desligava o bloqueio de autoplay.
+- Velocidade padrão não "pegava" porque o YouTube reaplicava a velocidade dele logo depois de carregar o vídeo; não é mais aplicada em lives.
+- Volume padrão agora atualiza o volume do próprio YouTube (barra e volume salvo).
+- Volume boost podia deixar o vídeo mudo (processador de áudio criado antes de qualquer clique); agora só é criado após interação e é retomado no próximo clique.
+- O atalho "Cinema" ativava o modo teatro.
+- A rodinha do mouse dentro do painel de filtros ou da engrenagem mudava volume/velocidade.
+- O CSS de aparência era reconstruído (com três redimensionamentos) a cada vídeo; seletores de Shorts atualizados.
+- Botão flutuante de PiP antigo, duplicado e sem estilo, aposentado (o PiP fica na barra).
+
+### Adicionado
+
+- Pular pesquisas automaticamente (opção, ligada por padrão): pula pesquisas de anúncio e esconde as pesquisas de opinião do YouTube.
+- `npm run e2e:audit`: confere no YouTube real qualidade, velocidade, volume, atalhos, rodinha, barra abaixo do vídeo e Shorts.
+
 ### Melhorado
 
 - Redesign do popup e do Control Center: fontes embutidas (Pixelify Sans nos títulos, IBM Plex no texto), menu lateral, superfícies retas, sem selos decorativos e textos reescritos.

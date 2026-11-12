@@ -82,11 +82,23 @@ export function getAdPlaying(doc: Document = document): boolean {
   return Array.from(badges).some((badge) => badge.offsetWidth > 0 || badge.offsetHeight > 0);
 }
 
+let surveySkipEnabled = true;
+
+/** Survey ads ("Pular pesquisa") are only skipped when this option is on. */
+export function setSurveySkipEnabled(enabled: boolean) {
+  surveySkipEnabled = enabled;
+}
+
+function isSurveyElement(element: Element) {
+  return !!element.closest(AD_SURVEY_SELECTORS);
+}
+
 export function findSkipAdButton(doc: Document = document): HTMLElement | null {
   const root = getYouTubePlayer(doc) || doc.documentElement;
 
   for (const className of SKIP_BUTTON_CLASSES) {
     for (const element of root.getElementsByClassName(className)) {
+      if (!surveySkipEnabled && isSurveyElement(element)) continue;
       const target = getClickableTarget(element);
       if (isClickableVisible(target)) return target;
     }
@@ -94,6 +106,7 @@ export function findSkipAdButton(doc: Document = document): HTMLElement | null {
 
   for (const selector of SKIP_BUTTON_SELECTORS) {
     for (const element of root.querySelectorAll(selector)) {
+      if (!surveySkipEnabled && isSurveyElement(element)) continue;
       const target = getClickableTarget(element);
       if (isClickableVisible(target)) return target;
     }
@@ -103,6 +116,7 @@ export function findSkipAdButton(doc: Document = document): HTMLElement | null {
     const label = [element.textContent, element.getAttribute("aria-label"), element.getAttribute("title")]
       .filter(Boolean)
       .join(" ");
+    if (!surveySkipEnabled && isSurveyElement(element)) continue;
     const target = getClickableTarget(element);
     if (isLikelySkipControlText(label) && isClickableVisible(target)) return target;
   }

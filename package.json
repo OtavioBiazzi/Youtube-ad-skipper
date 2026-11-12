@@ -10,7 +10,8 @@
     "build": "node scripts/build-extension.mjs",
     "package": "npm run check && npm run test && npm run build && node scripts/verify-extension.mjs && node scripts/package-extension.mjs",
     "verify": "npm run check && npm run test && npm run build && node scripts/verify-extension.mjs",
-    "e2e": "node scripts/e2e-smoke.mjs"
+    "e2e": "node scripts/e2e-smoke.mjs",
+    "e2e:audit": "node scripts/e2e-audit.mjs"
   },
   "devDependencies": {
     "@fontsource/ibm-plex-mono": "^5.3.0",

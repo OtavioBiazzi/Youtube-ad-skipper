@@ -189,6 +189,7 @@ const POPUP_SETTING_MESSAGES: Record<string, [string, string]> = {
   miniplayerEnabled: ["Miniplayer ativado.", "Miniplayer desativado."],
   resumePlaybackEnabled: ["Vídeos vão continuar de onde pararam.", "Continuar de onde parou desativado."],
   liveCatchUpEnabled: ["Lives sem atraso: acelera de leve quando atrasar.", "Lives no ritmo normal."],
+  skipSurveysEnabled: ["Pesquisas serão puladas automaticamente.", "Pesquisas não serão puladas."],
 };
 
 const popupSettingInputs = Array.from(document.querySelectorAll<HTMLInputElement>("[data-popup-setting]"));

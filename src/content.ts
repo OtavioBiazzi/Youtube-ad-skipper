@@ -18,6 +18,7 @@ import {
   getAdPlaying,
   getMainVideo,
   getYouTubePlayer,
+  setSurveySkipEnabled,
 } from "./content/adDom";
 import {
   CODEC_SETTINGS_MESSAGE,
@@ -25,7 +26,9 @@ import {
   MAIN_FORCE_SKIP_MESSAGE,
   MAIN_FORCE_SKIP_RESULT,
   MAIN_PLAYER_RESIZE_MESSAGE,
+  MAIN_PLAYER_COMMAND,
   MAIN_QUALITY_MESSAGE,
+  MAIN_QUALITY_RESULT,
   MAIN_SESSION_MESSAGE,
   MAIN_SPEED_THROUGH_MESSAGE,
   createBridgeSessionToken,
@@ -319,6 +322,8 @@ declare global {
     config.playerControlsEnabled = s.playerControlsEnabled !== false;
     config.playerControlsStyle = s.playerControlsStyle === "divider" ? "divider" : "pill";
     config.settingsMenuItemsEnabled = s.settingsMenuItemsEnabled !== false;
+    config.skipSurveysEnabled = s.skipSurveysEnabled !== false;
+    setSurveySkipEnabled(config.skipSurveysEnabled);
     config.playerEndTimeEnabled = s.playerEndTimeEnabled === true;
     config.liveCatchUpEnabled = s.liveCatchUpEnabled !== false;
     config.liveCatchUpTarget = Number(s.liveCatchUpTarget) > 0 ? Number(s.liveCatchUpTarget) : 3;
@@ -401,7 +406,7 @@ declare global {
       if (hasPrefix(settingChanges, "volumeBoost")) applyVolumeBoost();
       if (hasPrefix(settingChanges, "quality")) resetQualityState();
       if (has(settingChanges, "appearanceConvertShorts")) convertShortsUrlIfNeeded();
-      if (hasPrefix(settingChanges, "appearanceHide", "layout", "theme", "ultrawide") ||
+      if (hasPrefix(settingChanges, "appearanceHide", "layout", "theme", "ultrawide", "skipSurveys") ||
           has(settingChanges, "appearanceLayoutRowsEnabled", "appearanceUseViewportPlayer")) {
         applyAppearanceFilters();
       }
@@ -432,6 +437,14 @@ declare global {
     if (event.source !== window) return;
     const data = event.data || {};
     if (!isBridgeMessage(data)) return;
+    if (data.source === MAIN_QUALITY_RESULT && data.token === mainWorldSessionToken) {
+      adState.qualityCurrent = typeof data.current === "string" ? data.current : "";
+      if (Array.isArray(data.available)) adState.qualityAvailable = data.available.filter((level) => typeof level === "string");
+      if (data.query && adState.fullscreenQualityMode && adState.preFullscreenQuality === null) {
+        adState.preFullscreenQuality = adState.qualityCurrent || "";
+      }
+      return;
+    }
     if (data.source !== MAIN_FORCE_SKIP_RESULT || data.token !== mainWorldSessionToken || !data.ok) return;
     if (data.method === "click") {
       finishSkipClick();
@@ -721,15 +734,9 @@ declare global {
       } catch (err) {}
     }
 
-    const player: any = getYouTubePlayer();
-    try {
-      if (player && typeof player.setVolume === "function") {
-        player.setVolume(target);
-      }
-      if (unmute && target > 0 && player && typeof player.unMute === "function") {
-        player.unMute();
-      }
-    } catch (err) {}
+    // Keep YouTube's own volume state (slider, saved volume) in sync.
+    postMainWorldMessage({ source: MAIN_PLAYER_COMMAND, command: "setVolume", value: target });
+    if (unmute && target > 0) postMainWorldMessage({ source: MAIN_PLAYER_COMMAND, command: "unMute" });
 
     return target;
   }
@@ -738,10 +745,27 @@ declare global {
     return !!config.enabled && !!config.volumeBoostEnabled && normalizeVolumeBoostLevel(config.volumeBoostLevel) > 1;
   }
 
+  // Routing the video through an AudioContext created before any user
+  // gesture leaves it "suspended" and the video silent. Only build the graph
+  // once the page has had user activation.
+  function hasUserActivation() {
+    try {
+      const activation = (navigator as any).userActivation;
+      if (activation && typeof activation.hasBeenActive === "boolean") return activation.hasBeenActive;
+    } catch (err) {}
+    return !!adState.lastUserPlaybackIntentAt;
+  }
+
+  function resumeSuspendedBoost() {
+    const graph = volumeBoostGraphs.get(getActiveVideo() as HTMLMediaElement);
+    if (graph && graph.context.state === "suspended") graph.context.resume().catch(() => {});
+  }
+
   function ensureVolumeBoostGraph(video: HTMLMediaElement | null) {
     if (!video) return null;
     const existing = volumeBoostGraphs.get(video);
     if (existing) return existing;
+    if (!hasUserActivation()) return null;
 
     const AudioContextCtor = window.AudioContext || (window as any).webkitAudioContext;
     if (!AudioContextCtor) return null;
@@ -776,7 +800,7 @@ declare global {
       return enabled;
     } catch (err) {
       console.warn("[YouTube Extension] Volume boost unavailable:", err);
-      if (showFeedback) showPlayerFeedback("volume", "Boost indisponivel", "O navegador bloqueou o audio graph");
+      if (showFeedback) showPlayerFeedback("volume", "Boost indisponível", "O navegador bloqueou o processamento de áudio");
       return false;
     }
   }
@@ -838,29 +862,15 @@ declare global {
     adState.qualityAppliedKey = "";
   }
 
+  // Filled by MAIN_QUALITY_RESULT from the page (the player API is not
+  // reachable from the content script's isolated world).
   function getCurrentQualityLevel() {
-    const player: any = getYouTubePlayer();
-    try {
-      if (player && typeof player.getPlaybackQuality === "function") {
-        return normalizeQualityLevel(player.getPlaybackQuality(), "");
-      }
-    } catch (err) {}
-    return "";
+    return normalizeQualityLevel(adState.qualityCurrent, "");
   }
 
   function getAvailableQualityLevels() {
-    const player: any = getYouTubePlayer();
-    try {
-      if (player && typeof player.getAvailableQualityLevels === "function") {
-        const levels = player.getAvailableQualityLevels();
-        if (Array.isArray(levels)) {
-          return levels
-            .map(level => normalizeQualityLevel(level, ""))
-            .filter(level => level && level !== "auto");
-        }
-      }
-    } catch (err) {}
-    return [];
+    const levels = Array.isArray(adState.qualityAvailable) ? adState.qualityAvailable : [];
+    return levels.map((level) => normalizeQualityLevel(level, "")).filter((level) => level && level !== "auto");
   }
 
   function pickAvailableQuality(target) {
@@ -868,34 +878,13 @@ declare global {
   }
 
   function setPlaybackQuality(target) {
-    const player: any = getYouTubePlayer();
-    if (!player) return false;
+    if (!getYouTubePlayer()) return false;
+    requestMainWorldQuality(target);
+    return true;
+  }
 
-    const level = pickAvailableQuality(target);
-    let attempted = false;
-
-    try {
-      if (typeof player.setPlaybackQualityRange === "function") {
-        if (level === "auto") {
-          player.setPlaybackQualityRange("auto");
-        } else {
-          player.setPlaybackQualityRange(level, level);
-        }
-        attempted = true;
-      }
-    } catch (err) {}
-
-    try {
-      if (typeof player.setPlaybackQuality === "function") {
-        player.setPlaybackQuality(level);
-        attempted = true;
-      }
-    } catch (err) {}
-
-    requestMainWorldQuality(level);
-    attempted = true;
-
-    return attempted;
+  function queryMainWorldQuality() {
+    postMainWorldMessage({ source: MAIN_QUALITY_MESSAGE, level: "", query: true });
   }
 
   function isFullscreenMode() {
@@ -962,7 +951,9 @@ declare global {
     if (fullscreen && config.qualityFullscreenEnabled) {
       if (!adState.fullscreenQualityMode) {
         adState.fullscreenQualityMode = true;
-        adState.preFullscreenQuality = getCurrentQualityLevel();
+        // Filled by the page's reply, which arrives before the next apply.
+        adState.preFullscreenQuality = null;
+        queryMainWorldQuality();
         resetQualityState();
       }
 
@@ -1143,6 +1134,13 @@ declare global {
     if (config.appearanceHideShorts) {
       blocks.push(`
         ytd-reel-shelf-renderer,
+        ytd-rich-shelf-renderer[is-shorts],
+        ytd-rich-section-renderer:has(ytd-rich-shelf-renderer[is-shorts]),
+        grid-shelf-view-model:has(ytm-shorts-lockup-view-model),
+        ytm-shorts-lockup-view-model,
+        yt-tab-shape[tab-title="Shorts"],
+        ytd-guide-entry-renderer:has(a[title="Shorts"]),
+        ytd-mini-guide-entry-renderer[aria-label="Shorts"],
         ytd-rich-section-renderer:has(a[href^="/shorts/"]),
         ytd-rich-item-renderer:has(a[href^="/shorts/"]),
         ytd-video-renderer:has(a[href^="/shorts/"]),
@@ -1151,6 +1149,23 @@ declare global {
         ytd-guide-entry-renderer:has(a[href^="/shorts"]),
         ytd-mini-guide-entry-renderer:has(a[href^="/shorts"]),
         ytd-browse[page-subtype="shorts"] {
+          display: none !important;
+        }
+      `);
+    }
+
+    // YouTube's own opinion surveys ("Como você avalia este vídeo?") in the
+    // feed, under the video and inside the player.
+    if (config.skipSurveysEnabled !== false) {
+      blocks.push(`
+        ytd-inline-survey-renderer,
+        ytd-single-option-survey-renderer,
+        ytd-rich-section-renderer:has(ytd-inline-survey-renderer),
+        ytd-item-section-renderer:has(> #contents > ytd-inline-survey-renderer),
+        yt-survey-renderer,
+        ytd-feedback-survey-renderer,
+        .ytp-survey-container,
+        .ytp-player-survey {
           display: none !important;
         }
       `);
@@ -1327,25 +1342,31 @@ declare global {
       config.themeCustomMuted,
       config.themeCustomBorder,
       config.themeCustomCss,
-      location.pathname,
+      config.skipSurveysEnabled,
+      // Only what the CSS depends on; the full path rebuilt it (and fired
+      // three layout refreshes) on every video navigation.
+      isChannelPage(),
+      isPopupWindow(),
     ].join(":");
 
     if (signature === appearanceSignature) return;
+    const layoutKeyOf = (sig: string) => sig.split(":").slice(6, 15).join(":") + ":" + isChannelPage();
+    const layoutChanged = !appearanceSignature || layoutKeyOf(appearanceSignature) !== layoutKeyOf(signature);
     appearanceSignature = signature;
 
     const css = config.enabled ? buildAppearanceCss() : "";
     const existing = document.getElementById(APPEARANCE_STYLE_ID);
     if (!css) {
       existing?.remove();
-      scheduleYouTubeLayoutRefresh();
+      if (layoutChanged) scheduleYouTubeLayoutRefresh();
       return;
     }
 
     const style = existing || document.createElement("style");
     style.id = APPEARANCE_STYLE_ID;
-    style.textContent = css;
+    if (style.textContent !== css) style.textContent = css;
     if (!existing) (document.head || document.documentElement).appendChild(style);
-    scheduleYouTubeLayoutRefresh();
+    if (layoutChanged) scheduleYouTubeLayoutRefresh();
   }
 
   function scheduleYouTubeLayoutRefresh() {
@@ -2001,8 +2022,8 @@ declare global {
     if (config.toolbarPopup && config.playerPopupEnabled !== false) actions.push({ action: "popup", title: "Abrir em pop-up", icon: "popup" });
     if (config.toolbarPip) actions.push({ action: "pip", title: "Picture-in-Picture", icon: "pip" });
     if (config.toolbarScreenshot) actions.push({ action: "screenshot", title: "Capturar frame", icon: "camera" });
-    if (config.toolbarFilters) actions.push({ action: "filters", title: "Filtros de video", icon: "filters" });
-    if (config.toolbarSettings) actions.push({ action: "settings", title: "Configuracoes", icon: "settings" });
+    if (config.toolbarFilters) actions.push({ action: "filters", title: "Filtros de vídeo", icon: "filters" });
+    if (config.toolbarSettings) actions.push({ action: "settings", title: "Configurações", icon: "settings" });
     return actions;
   }
 
@@ -2514,9 +2535,25 @@ declare global {
       adState.defaultVolumeAppliedKey = "";
     }
 
-    if (config.playerSpeedEnabled && adState.defaultSpeedAppliedKey !== key) {
-      setUserPlaybackRate(config.playerSpeedDefault, video);
-      adState.defaultSpeedAppliedKey = key;
+    // YouTube re-applies its own rate right after loading a video, so keep
+    // re-asserting the default until it sticks (or give up after ~6s).
+    // Skipped on lives, where it would fight the live catch-up.
+    if (config.playerSpeedEnabled && adState.defaultSpeedAppliedKey !== key && !isLiveStream()) {
+      if (adState.defaultSpeedPendingKey !== key) {
+        adState.defaultSpeedPendingKey = key;
+        adState.defaultSpeedPendingSince = Date.now();
+        adState.defaultSpeedStableTicks = 0;
+      }
+      const target = normalizeUserPlaybackRate(config.playerSpeedDefault, 1);
+      if (Math.abs(video.playbackRate - target) > 0.001) {
+        adState.defaultSpeedStableTicks = 0;
+        if (video.readyState >= 1) setUserPlaybackRate(target, video);
+      } else {
+        adState.defaultSpeedStableTicks = (adState.defaultSpeedStableTicks || 0) + 1;
+      }
+      if (adState.defaultSpeedStableTicks >= 3 || Date.now() - adState.defaultSpeedPendingSince > 6000) {
+        adState.defaultSpeedAppliedKey = key;
+      }
     }
 
     if (config.playerVolumeEnabled && adState.defaultVolumeAppliedKey !== key) {
@@ -2534,6 +2571,8 @@ declare global {
 
   function isPointerInsidePlayer(target) {
     if (!target || !(target instanceof Element)) return false;
+    // Menus and panels scroll normally; the speed button has its own wheel.
+    if (target.closest(".ytp-popup, .ytp-settings-menu, #" + FILTER_PANEL_ID + ", #" + PLAYER_CONTROLS_ID)) return false;
     const player = getYouTubePlayer();
     if (player && player.contains(target)) return true;
     return !!target.closest("#movie_player, .html5-video-player");
@@ -2587,7 +2626,13 @@ declare global {
       if (url.searchParams.has("list")) return true;
     } catch (err) {}
 
-    return !!document.querySelector("ytd-playlist-panel-renderer, ytd-playlist-video-list-renderer");
+    // YouTube keeps an empty, hidden playlist panel on every watch page, so
+    // only a visible panel with items counts (otherwise every video looked
+    // like a playlist: wrong quality target, autoplay guard disabled).
+    const panel = document.querySelector("ytd-watch-flexy ytd-playlist-panel-renderer") as HTMLElement | null;
+    if (!panel || panel.hidden || panel.hasAttribute("hidden")) return false;
+    const rect = panel.getBoundingClientRect();
+    return rect.height > 0 && !!panel.querySelector("ytd-playlist-panel-video-renderer");
   }
 
   function isDiagnosticsEnabled() {
@@ -2826,6 +2871,7 @@ declare global {
       targetTime: adState.skipTargetTime || Date.now(),
       rate: getSpeedThroughRate(),
       adSrc: adState.adSrc || "",
+      skipSurveys: config.skipSurveysEnabled !== false,
     });
   }
 
@@ -5051,7 +5097,7 @@ declare global {
       { combo: config.shortcutSpeedUp, action: "speed-up" },
       { combo: config.shortcutVolumeDown, action: "volume-down" },
       { combo: config.shortcutVolumeUp, action: "volume-up" },
-      { combo: config.shortcutCinema, action: "theater" },
+      { combo: config.shortcutCinema, action: "cinema" },
       { combo: config.shortcutScreenshot, action: "screenshot" },
       { combo: config.shortcutPopup, action: "popup" },
       { combo: config.shortcutLoop, action: "loop" },
@@ -5078,7 +5124,23 @@ declare global {
       return;
     }
 
+    if (matched.action === "cinema") {
+      toggleCinemaMode();
+      showPlayerFeedback("settings", adState.cinemaActive ? "Cinema ligado" : "Cinema desligado");
+      refreshPlayerControlStates();
+      refreshGearItems();
+      return;
+    }
+
+    if (matched.action === "popup") {
+      // Same path as the button: leaves fullscreen before opening the window.
+      handlePlayerControlAction("popup", new MouseEvent("click"));
+      return;
+    }
+
     handlePlayerToolbarAction(matched.action);
+    refreshPlayerControlStates();
+    refreshGearItems();
   }
 
   document.addEventListener('keydown', handleConfiguredShortcut, true);
@@ -5105,6 +5167,8 @@ declare global {
 
   document.addEventListener("pointerdown", (event) => {
     markUserPlaybackIntent("pointerdown");
+    resumeSuspendedBoost();
+    if (config.volumeBoostEnabled) setTimeout(() => applyVolumeBoost(getActiveVideo()), 0);
     if (config.volumeBoostEnabled && config.volumeBoostAuto && isPointerInsidePlayer(event.target)) {
       setTimeout(() => applyVolumeBoost(getActiveVideo()), 0);
     }
@@ -5113,6 +5177,7 @@ declare global {
   document.addEventListener("keydown", (event) => {
     const playbackKeys = [" ", "Enter", "k", "K", "MediaPlayPause", "MediaPlay"];
     if (playbackKeys.includes(event.key)) markUserPlaybackIntent("keyboard");
+    resumeSuspendedBoost();
   }, true);
 
   document.addEventListener("visibilitychange", () => {
@@ -5243,16 +5308,10 @@ declare global {
     if (style) style.remove();
   }
 
+  // Legacy floating PiP button: replaced by the PiP button in the player's
+  // control bar. Kept only to clean up pages that still have it.
   function injectPipButton() {
-    if (!config.enabled || !config.pipEnabled) return;
-    // Wait for the player to be ready
-    const player = document.querySelector('#movie_player') || document.querySelector('.html5-video-player');
-    if (player) {
-      createPipButton();
-    } else {
-      // Retry after a short delay
-      setTimeout(() => { if (config.enabled && config.pipEnabled) createPipButton(); }, 2000);
-    }
+    removePipButton();
   }
 
   // SPA navigation. This used to be a MutationObserver on the whole document

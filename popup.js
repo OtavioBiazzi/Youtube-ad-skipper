@@ -169,6 +169,7 @@
     playerControlsEnabled: true,
     playerControlsStyle: "pill",
     settingsMenuItemsEnabled: true,
+    skipSurveysEnabled: true,
     playerEndTimeEnabled: false,
     liveCatchUpEnabled: true,
     liveCatchUpTarget: 3,
@@ -374,7 +375,8 @@
   const POPUP_SETTING_MESSAGES = {
     miniplayerEnabled: ["Miniplayer ativado.", "Miniplayer desativado."],
     resumePlaybackEnabled: ["Vídeos vão continuar de onde pararam.", "Continuar de onde parou desativado."],
-    liveCatchUpEnabled: ["Lives sem atraso: acelera de leve quando atrasar.", "Lives no ritmo normal."]
+    liveCatchUpEnabled: ["Lives sem atraso: acelera de leve quando atrasar.", "Lives no ritmo normal."],
+    skipSurveysEnabled: ["Pesquisas serão puladas automaticamente.", "Pesquisas não serão puladas."]
   };
   const popupSettingInputs = Array.from(document.querySelectorAll("[data-popup-setting]"));
   chrome.storage.local.get(DEFAULT_SETTINGS, (settings) => {

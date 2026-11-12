@@ -4,12 +4,15 @@ import {
   MAIN_FORCE_SKIP_MESSAGE,
   MAIN_FORCE_SKIP_RESULT,
   MAIN_PLAYER_RESIZE_MESSAGE,
+  MAIN_PLAYER_COMMAND,
   MAIN_QUALITY_MESSAGE,
+  MAIN_QUALITY_RESULT,
   MAIN_SESSION_MESSAGE,
   MAIN_SPEED_THROUGH_MESSAGE,
   isBridgeMessage,
 } from "./shared/messages";
 import { getAdSeekTarget } from "./shared/adStrategy";
+import { pickBestQualityLevel } from "./shared/quality";
 
 (function() {
   const pageWindow: any = window;
@@ -191,22 +194,44 @@ import { getAdSeekTarget } from "./shared/adStrategy";
     applyCodecFiltersToKnownGlobals();
   }
 
-  function setPlayerQuality(level) {
-    const target = String(level || "");
-    if (!target) return;
+  // Quality lives in the page's player API, which the content script cannot
+  // reach. Pick the best available level here and report what is playing.
+  function setPlayerQuality(level, query = false) {
     const player: any = document.getElementById("movie_player") || document.querySelector(".html5-video-player");
     if (!player) return;
-
+    let available: string[] = [];
     try {
-      if (typeof player.setPlaybackQualityRange === "function") {
-        target === "auto" ? player.setPlaybackQualityRange("auto") : player.setPlaybackQualityRange(target, target);
-      }
+      if (typeof player.getAvailableQualityLevels === "function") available = player.getAvailableQualityLevels() || [];
     } catch (err) {}
 
+    let applied = "";
+    const target = String(level || "");
+    if (target && !query) {
+      applied = pickBestQualityLevel(target, available);
+      try {
+        if (typeof player.setPlaybackQualityRange === "function") {
+          applied === "auto" ? player.setPlaybackQualityRange("auto") : player.setPlaybackQualityRange(applied, applied);
+        }
+      } catch (err) {}
+      try {
+        if (typeof player.setPlaybackQuality === "function") player.setPlaybackQuality(applied);
+      } catch (err) {}
+    }
+
+    let current = "";
     try {
-      if (typeof player.setPlaybackQuality === "function") {
-        player.setPlaybackQuality(target);
-      }
+      if (typeof player.getPlaybackQuality === "function") current = String(player.getPlaybackQuality() || "");
+    } catch (err) {}
+    window.postMessage({ source: MAIN_QUALITY_RESULT, token: bridgeSessionToken, current, available, applied, query }, "*");
+  }
+
+  // Small whitelist of player calls the content script needs.
+  function runPlayerCommand(command, value) {
+    const player: any = document.getElementById("movie_player") || document.querySelector(".html5-video-player");
+    if (!player) return;
+    try {
+      if (command === "setVolume" && typeof player.setVolume === "function") player.setVolume(Math.max(0, Math.min(100, Number(value) || 0)));
+      else if (command === "unMute" && typeof player.unMute === "function") player.unMute();
     } catch (err) {}
   }
 
@@ -317,7 +342,7 @@ import { getAdSeekTarget } from "./shared/adStrategy";
     return !!survey && (survey.offsetWidth > 0 || survey.offsetHeight > 0);
   }
 
-  function clickSkipButton() {
+  function clickSkipButton(skipSurveys = true) {
     const root = getPlayer();
     if (!root || !isAdShowing()) return false;
     const selectors = [
@@ -339,6 +364,7 @@ import { getAdSeekTarget } from "./shared/adStrategy";
 
     for (const selector of selectors) {
       for (const el of root.querySelectorAll(selector)) {
+        if (!skipSurveys && el.closest(".ytp-ad-survey, .ytp-ad-survey-interstitial, .ytp-ad-survey-question")) continue;
         const target = getClickTarget(el);
         if (!target || typeof target.click !== "function" || !isVisible(target)) continue;
         target.dispatchEvent(new MouseEvent("mouseover", { bubbles: true, cancelable: true, view: window }));
@@ -381,10 +407,10 @@ import { getAdSeekTarget } from "./shared/adStrategy";
     return document.getElementById("movie_player") || document.querySelector(".html5-video-player");
   }
 
-  function forceSkipFromMainWorld(rate = 3, adSrc = "") {
+  function forceSkipFromMainWorld(rate = 3, adSrc = "", skipSurveys = true) {
     if (!isAdShowing()) return { ok: false, method: "no-ad" };
     const speedRate = normalizeAdRate(rate);
-    if (clickSkipButton()) {
+    if (clickSkipButton(skipSurveys)) {
       return { ok: true, method: "click" };
     }
 
@@ -500,7 +526,7 @@ import { getAdSeekTarget } from "./shared/adStrategy";
       return;
     }
     if (data.source === MAIN_FORCE_SKIP_MESSAGE) {
-      const result = forceSkipFromMainWorld(data.rate, typeof data.adSrc === "string" ? data.adSrc : "");
+      const result = forceSkipFromMainWorld(data.rate, typeof data.adSrc === "string" ? data.adSrc : "", data.skipSurveys !== false);
       window.postMessage({ source: MAIN_FORCE_SKIP_RESULT, token: bridgeSessionToken, ...result }, "*");
       return;
     }
@@ -513,7 +539,11 @@ import { getAdSeekTarget } from "./shared/adStrategy";
       return;
     }
     if (data.source === MAIN_QUALITY_MESSAGE) {
-      setPlayerQuality(data.level);
+      setPlayerQuality(data.level, data.query === true);
+      return;
+    }
+    if (data.source === MAIN_PLAYER_COMMAND) {
+      runPlayerCommand(String(data.command || ""), data.value);
     }
   });
 
