@@ -2,6 +2,11 @@
 
 Todas as mudancas relevantes deste projeto serao registradas aqui.
 
+## 5.2.3
+
+- Contagem de anúncios pulados corrigida: um mesmo anúncio podia ser contado duas vezes (quando o anúncio terminava, o vídeo voltava ao início enquanto o YouTube ainda marcava o player como em anúncio). Agora cada contagem exige um anúncio de pelo menos 0,8 s (ou um clique real no Pular) e 1,2 s entre contagens.
+- Cada anúncio contado aparece em Avançado → Diagnóstico de reprodução, com a hora e o motivo.
+
 ## 5.2.2
 
 - Menus do YouTube (Legendas, Qualidade, Timer…) não ficam mais com um espaço vazio no topo.
