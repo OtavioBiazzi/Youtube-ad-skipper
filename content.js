@@ -2018,43 +2018,35 @@
       #${PLAYER_FEEDBACK_ID} {
         position: fixed !important;
         z-index: 2147483600 !important;
-        min-width: 132px !important;
-        max-width: min(260px, calc(100vw - 32px)) !important;
-        padding: 10px 14px !important;
-        border-radius: 999px !important;
-        border: 1px solid rgba(255, 255, 255, 0.18) !important;
-        background: rgba(10, 10, 12, 0.84) !important;
+        display: flex !important;
+        align-items: baseline !important;
+        gap: 8px !important;
+        max-width: min(360px, calc(100vw - 32px)) !important;
+        padding: 9px 16px !important;
+        border-radius: 20px !important;
+        background: rgba(0, 0, 0, 0.6) !important;
         color: #fff !important;
-        box-shadow: 0 18px 50px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
-        backdrop-filter: blur(14px) saturate(1.1) !important;
-        -webkit-backdrop-filter: blur(14px) saturate(1.1) !important;
-        font: 700 13px/1.15 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
-        letter-spacing: 0 !important;
-        text-align: center !important;
+        font: 500 14px/1.2 Roboto, Arial, sans-serif !important;
+        white-space: nowrap !important;
         pointer-events: none !important;
         opacity: 0 !important;
-        transform: translate(-50%, -50%) scale(0.96) !important;
-        transition: opacity 150ms ease, transform 150ms ease !important;
+        transform: translate(-50%, -50%) !important;
+        transition: opacity 120ms ease !important;
       }
 
-      #${PLAYER_FEEDBACK_ID}.is-visible {
-        opacity: 1 !important;
-        transform: translate(-50%, -50%) scale(1) !important;
-      }
+      #${PLAYER_FEEDBACK_ID}.is-visible { opacity: 1 !important; }
 
       #${PLAYER_FEEDBACK_ID} .feedback-label {
-        display: block !important;
-        color: rgba(255, 255, 255, 0.68) !important;
-        font-size: 10px !important;
-        font-weight: 650 !important;
-        text-transform: uppercase !important;
+        color: rgba(255, 255, 255, 0.7) !important;
+        font-size: 13px !important;
+        font-weight: 400 !important;
       }
 
+      #${PLAYER_FEEDBACK_ID} .feedback-label:first-child { display: none !important; }
+
       #${PLAYER_FEEDBACK_ID} .feedback-value {
-        display: block !important;
-        margin-top: 2px !important;
-        color: #fff !important;
-        font-size: 18px !important;
+        font-size: 15px !important;
+        font-weight: 500 !important;
       }
     `;
       (document.head || document.documentElement).appendChild(style);
@@ -2077,7 +2069,7 @@
       ${label ? `<span class="feedback-label">${label}</span>` : ""}
     `;
       feedback.style.left = Math.round(rect.left + rect.width / 2) + "px";
-      feedback.style.top = Math.round(rect.top + rect.height * 0.23) + "px";
+      feedback.style.top = Math.round(rect.top + Math.min(64, rect.height * 0.12)) + "px";
       feedback.classList.add("is-visible");
       if (playerFeedbackTimer) window.clearTimeout(playerFeedbackTimer);
       playerFeedbackTimer = window.setTimeout(() => {
@@ -3947,6 +3939,8 @@
         right: 12px;
         bottom: 62px;
         z-index: 70;
+        border-radius: 12px !important;
+        overflow: hidden !important;
       }
 
       #${FILTER_PANEL_ID}[hidden] { display: none !important; }

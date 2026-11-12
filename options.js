@@ -372,6 +372,7 @@
   }
   const DEFAULT = DEFAULT_SETTINGS;
   const DEFAULT_VALUES = DEFAULT_SETTINGS;
+  let playerControlsEnabledState = true;
   function byId(id) {
     return document.getElementById(id);
   }
@@ -840,7 +841,6 @@
     renderToolbarControlLocks();
   });
   const optControlsPlacement = byId("opt-controls-placement");
-  let playerControlsEnabledState = true;
   function getControlsPlacement(inside, below) {
     return inside && below ? "both" : inside ? "inside" : below ? "below" : "off";
   }
@@ -1599,22 +1599,23 @@
   (function setupNavScrollSpy() {
     const links = Array.from(document.querySelectorAll(".module-nav a[href^='#']"));
     const sections = links.map((link) => document.getElementById(link.getAttribute("href").slice(1))).filter((section) => !!section);
-    if (!sections.length || typeof IntersectionObserver === "undefined") return;
-    const visible = /* @__PURE__ */ new Map();
-    const observer = new IntersectionObserver((entries) => {
-      for (const entry of entries) visible.set(entry.target.id, entry.isIntersecting ? entry.intersectionRatio : 0);
-      let best = "";
-      let bestRatio = 0;
+    if (!sections.length) return;
+    let raf = 0;
+    const update = () => {
+      raf = 0;
+      const line = document.querySelector(".app-header")?.offsetHeight || 64;
+      let current = sections[0];
       for (const section of sections) {
-        const ratio = visible.get(section.id) || 0;
-        if (ratio > bestRatio) {
-          best = section.id;
-          bestRatio = ratio;
-        }
+        if (section.getBoundingClientRect().top - line - 120 <= 0) current = section;
       }
-      if (!best) return;
-      for (const link of links) link.classList.toggle("is-active", link.getAttribute("href") === "#" + best);
-    }, { rootMargin: "-120px 0px -45% 0px", threshold: [0, 0.1, 0.25, 0.5, 0.75, 1] });
-    sections.forEach((section) => observer.observe(section));
+      if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4) current = sections[sections.length - 1];
+      for (const link of links) link.classList.toggle("is-active", link.getAttribute("href") === "#" + current.id);
+    };
+    const schedule = () => {
+      if (!raf) raf = requestAnimationFrame(update);
+    };
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
+    update();
   })();
 })();

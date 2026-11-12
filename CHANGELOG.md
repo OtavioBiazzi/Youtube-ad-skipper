@@ -18,12 +18,21 @@ Todas as mudancas relevantes deste projeto serao registradas aqui.
 
 ### Adicionado
 
+- Botões dentro da barra do próprio player (velocidade, repetir, filtros, frame, boost, cinema, janela, PiP), com ícones no padrão do YouTube e uma divisória separando dos botões nativos. Opção de deixá-los dentro do player, numa barra abaixo do vídeo, nos dois ou escondidos.
+- "Termina às" ao lado do tempo do vídeo, considerando a velocidade.
+- Painel de filtros dentro do player, com o mesmo visual do menu de configurações do YouTube: predefinições (Vívido, Cinema, Noite, Clarear, P&B), brilho, contraste, saturação, tom, quente e preto e branco. Os filtros agora valem para todos os vídeos.
+- Lives sem atraso: acelera de leve (até 1,25x) enquanto houver atraso acumulado e mostra o atraso no botão "AO VIVO".
+- Pesquisas de anúncio ("Pular pesquisa") agora são puladas.
 - Continuar de onde parou (opcional): lembra a posição de vídeos com mais de 3 minutos.
 - Botão para fechar o miniplayer até o player voltar a aparecer na tela.
 - Diagnóstico de reprodução no Control Center: lista toda pausa/avanço feito pela extensão e o motivo.
 - Atalhos rápidos de Miniplayer e Continuar no popup.
 
 ### Melhorado
+
+- Redesign do popup e do Control Center: fontes embutidas (Pixelify Sans nos títulos, IBM Plex no texto), menu lateral, superfícies retas, sem selos decorativos e textos reescritos.
+- O aviso de anúncio no player virou uma pílula no estilo do YouTube que diz o que está acontecendo de verdade ("Pulando em 2s", "Esperando o botão Pular", "Acelerando…").
+- Notificação de anúncio pulado e balões de velocidade/volume no estilo do YouTube.
 
 - Carregamento de configurações unificado (cerca de 330 linhas duplicadas a menos); contadores sincronizados entre abas.
 - Sem `MutationObserver` no documento inteiro para detectar navegação; ganchos globais de `JSON.parse` só quando há filtro de codec.

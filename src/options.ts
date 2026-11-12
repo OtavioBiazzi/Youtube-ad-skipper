@@ -41,6 +41,8 @@ type OptionsSettings = ExtensionSettings;
 
 const DEFAULT = DEFAULT_SETTINGS;
 const DEFAULT_VALUES = DEFAULT_SETTINGS as unknown as Record<string, PlannedSettingValue>;
+// Declared up-front: renderToolbarControlLocks() can run from the first storage callback.
+let playerControlsEnabledState = true;
 
 
 // ── Elements ─────────────────────────────────────
@@ -611,7 +613,6 @@ optToolbarEnabled.addEventListener("change", () => {
 
 // ── Where the player buttons live: inside YouTube's bar, below the video, both or off ──
 const optControlsPlacement = byId<HTMLSelectElement>("opt-controls-placement");
-let playerControlsEnabledState = true;
 
 function getControlsPlacement(inside: boolean, below: boolean) {
   return inside && below ? "both" : inside ? "inside" : below ? "below" : "off";
@@ -1481,22 +1482,22 @@ window.addEventListener("resize", syncHeaderHeight);
   const sections = links
     .map((link) => document.getElementById(link.getAttribute("href")!.slice(1)))
     .filter((section): section is HTMLElement => !!section);
-  if (!sections.length || typeof IntersectionObserver === "undefined") return;
+  if (!sections.length) return;
 
-  const visible = new Map<string, number>();
-  const observer = new IntersectionObserver((entries) => {
-    for (const entry of entries) visible.set(entry.target.id, entry.isIntersecting ? entry.intersectionRatio : 0);
-    let best = "";
-    let bestRatio = 0;
+  // Active = last section whose top passed a line just under the sticky header.
+  let raf = 0;
+  const update = () => {
+    raf = 0;
+    const line = (document.querySelector(".app-header") as HTMLElement | null)?.offsetHeight || 64;
+    let current = sections[0];
     for (const section of sections) {
-      const ratio = visible.get(section.id) || 0;
-      if (ratio > bestRatio) {
-        best = section.id;
-        bestRatio = ratio;
-      }
+      if (section.getBoundingClientRect().top - line - 120 <= 0) current = section;
     }
-    if (!best) return;
-    for (const link of links) link.classList.toggle("is-active", link.getAttribute("href") === "#" + best);
-  }, { rootMargin: "-120px 0px -45% 0px", threshold: [0, 0.1, 0.25, 0.5, 0.75, 1] });
-  sections.forEach((section) => observer.observe(section));
+    if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4) current = sections[sections.length - 1];
+    for (const link of links) link.classList.toggle("is-active", link.getAttribute("href") === "#" + current.id);
+  };
+  const schedule = () => { if (!raf) raf = requestAnimationFrame(update); };
+  window.addEventListener("scroll", schedule, { passive: true });
+  window.addEventListener("resize", schedule);
+  update();
 })();

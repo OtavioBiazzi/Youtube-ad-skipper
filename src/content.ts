@@ -3822,6 +3822,8 @@ declare global {
         right: 12px;
         bottom: 62px;
         z-index: 70;
+        border-radius: 12px !important;
+        overflow: hidden !important;
       }
 
       #${FILTER_PANEL_ID}[hidden] { display: none !important; }
