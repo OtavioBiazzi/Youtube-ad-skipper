@@ -24,6 +24,7 @@ import {
   CODEC_SETTINGS_STORAGE_KEY,
   MAIN_FORCE_SKIP_MESSAGE,
   MAIN_FORCE_SKIP_RESULT,
+  MAIN_PLAYER_RESIZE_MESSAGE,
   MAIN_QUALITY_MESSAGE,
   MAIN_SESSION_MESSAGE,
   MAIN_SPEED_THROUGH_MESSAGE,
@@ -43,6 +44,7 @@ import {
 } from "./shared/settings";
 import { normalizeQualityLevel, pickBestQualityLevel } from "./shared/quality";
 import { getAutoplayBlockReason as decideAutoplayBlock } from "./shared/autoplay";
+import { shouldFloatPlayer, shouldResetMiniplayerDismissal } from "./shared/miniplayer";
 import { getYouTubeVideoIdFromUrl, getYouTubeVideoKeyFromUrl } from "./shared/youtube";
 
 declare global {
@@ -1598,32 +1600,49 @@ declare global {
     }
   }
 
+  // Opt-in. Only touches YouTube's own sort dropdown inside #comments, once per
+  // video, never while hidden, and restores the scroll position afterwards.
   function sortCommentsNewestIfNeeded() {
     if (!config.enabled || !config.appearanceSortNewestComments || config.appearanceHideComments || !isWatchPage()) return;
+    if (document.hidden) return;
     const key = getCurrentVideoKey();
-    if (adState.commentsSortKey === key) return;
+    if (!key || adState.commentsSortKey === key) return;
     const now = Date.now();
     if (now - adState.commentsSortAttemptAt < 2500) return;
+
+    const sortMenu = document.querySelector("ytd-comments #sort-menu") as HTMLElement | null;
+    const trigger = sortMenu?.querySelector("#trigger, tp-yt-paper-button, button") as HTMLElement | null;
+    if (!sortMenu || !trigger || trigger.getBoundingClientRect().height <= 0) return;
+
     adState.commentsSortAttemptAt = now;
+    adState.commentsSortAttempts = (adState.commentsSortKeyAttempts === key ? adState.commentsSortAttempts || 0 : 0) + 1;
+    adState.commentsSortKeyAttempts = key;
+    if (adState.commentsSortAttempts > 3) {
+      adState.commentsSortKey = key;
+      return;
+    }
 
-    const comments = document.querySelector("ytd-comments, #comments");
-    if (!comments) return;
+    const scrollX = window.scrollX;
+    const scrollY = window.scrollY;
+    const restoreScroll = () => {
+      if (Math.abs(window.scrollY - scrollY) > 2) window.scrollTo(scrollX, scrollY);
+    };
 
-    const sortButton = comments.querySelector(
-      '#sort-menu button, #sort-menu [role="button"], [aria-label*="Classificar" i], [aria-label*="Ordenar" i], [aria-label*="Sort" i]'
-    ) as HTMLElement | null;
-    if (!sortButton || !clickElement(sortButton)) return;
-
+    trigger.click();
     window.setTimeout(() => {
-      const candidates = Array.from(document.querySelectorAll("ytd-menu-service-item-renderer, tp-yt-paper-item, yt-formatted-string, [role='menuitem']")) as HTMLElement[];
-      const newest = candidates.find((item) => {
-        const text = (item.textContent || "").toLowerCase();
-        return text.includes("mais recentes") || text.includes("newest first") || text.includes("newest");
-      });
-      if (newest && clickElement(newest)) {
+      // The menu items live inside the same yt-dropdown-menu; "Newest first"
+      // is always the second entry regardless of UI language.
+      const items = Array.from(sortMenu.querySelectorAll("tp-yt-paper-listbox a, tp-yt-paper-listbox tp-yt-paper-item")) as HTMLElement[];
+      const newest = items[1] || null;
+      if (newest) {
+        newest.click();
         adState.commentsSortKey = key;
+      } else {
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
       }
-    }, 180);
+      restoreScroll();
+      requestAnimationFrame(restoreScroll);
+    }, 200);
   }
 
   function ensureTheaterMode(active) {
@@ -1885,11 +1904,32 @@ declare global {
   const MINIPLAYER_STYLE_ID = "tube-shield-miniplayer-style";
   const MINIPLAYER_ACTIVE_CLASS = "tube-shield-miniplayer-active";
 
-  function getPlayerAnchor() {
-    return document.querySelector("#player-container-outer")
-      || document.querySelector("#player")
-      || document.querySelector("ytd-player")
-      || getYouTubePlayer();
+  const MINIPLAYER_SLOT_ATTR = "data-yte-mini-slot";
+  const MINIPLAYER_CLOSE_ID = "yte-miniplayer-close";
+  const MINIPLAYER_SLOT_SELECTORS = [
+    "#player-full-bleed-container",
+    "#full-bleed-container",
+    "#player-theater-container",
+    "#player-container-outer",
+    "#player-container",
+    "#player",
+  ];
+  let miniplayerActive = false;
+  let miniplayerDismissedKey = "";
+  let miniplayerSlot: HTMLElement | null = null;
+
+  // The in-flow element that currently hosts #movie_player. In theater mode
+  // YouTube moves the player into the full-bleed container, so the old
+  // "#player-container-outer" anchor was empty and the miniplayer misfired.
+  function getPlayerSlot(): HTMLElement | null {
+    const flexy = document.querySelector("ytd-watch-flexy");
+    const player = getYouTubePlayer();
+    if (!flexy || !player) return null;
+    for (const selector of MINIPLAYER_SLOT_SELECTORS) {
+      const el = flexy.querySelector(selector) as HTMLElement | null;
+      if (el && el.contains(player) && el.getBoundingClientRect().height > 0) return el;
+    }
+    return null;
   }
 
   function getMastheadHeight() {
@@ -1916,17 +1956,26 @@ declare global {
 
   function buildMiniplayerCss() {
     const size = parseMiniplayerSize();
+    // z-index stays below YouTube's masthead (2020) and its dropdowns/dialogs
+    // (2200+), so menus like "Sort comments" open on top of the miniplayer.
     return `
+      [${MINIPLAYER_SLOT_ATTR}] {
+        min-height: var(--yte-mini-slot-height, 0px) !important;
+      }
+
       html.${MINIPLAYER_ACTIVE_CLASS} ytd-watch-flexy #player,
       html.${MINIPLAYER_ACTIVE_CLASS} ytd-watch-flexy #player-container-outer,
+      html.${MINIPLAYER_ACTIVE_CLASS} ytd-watch-flexy #player-container-inner,
+      html.${MINIPLAYER_ACTIVE_CLASS} ytd-watch-flexy #player-container,
       html.${MINIPLAYER_ACTIVE_CLASS} ytd-watch-flexy #player-theater-container,
       html.${MINIPLAYER_ACTIVE_CLASS} ytd-watch-flexy #player-full-bleed-container,
+      html.${MINIPLAYER_ACTIVE_CLASS} ytd-watch-flexy #full-bleed-container,
       html.${MINIPLAYER_ACTIVE_CLASS} ytd-watch-flexy ytd-player {
-        position: relative !important;
-        z-index: 2147482500 !important;
+        z-index: 2010 !important;
         overflow: visible !important;
         transform: none !important;
         contain: none !important;
+        filter: none !important;
       }
 
       html.${MINIPLAYER_ACTIVE_CLASS} #movie_player.html5-video-player {
@@ -1934,13 +1983,17 @@ declare global {
         ${getMiniplayerPositionCss()}
         width: min(${size.width}px, calc(100vw - 36px)) !important;
         height: min(${size.height}px, calc(100vh - 90px)) !important;
-        z-index: 2147483600 !important;
-        border-radius: 10px !important;
+        z-index: 2010 !important;
+        border-radius: 12px !important;
         overflow: hidden !important;
         box-shadow: 0 22px 60px rgba(0, 0, 0, 0.48), 0 0 0 1px rgba(255, 255, 255, 0.14) !important;
         background: #000 !important;
-        transform: translateZ(0) !important;
-        isolation: isolate !important;
+        animation: yte-mini-in 180ms ease-out;
+      }
+
+      @keyframes yte-mini-in {
+        from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+        to { opacity: 1; transform: none; }
       }
 
       html.${MINIPLAYER_ACTIVE_CLASS} #movie_player .html5-video-container,
@@ -1955,6 +2008,59 @@ declare global {
         top: 0 !important;
         object-fit: contain !important;
         transform: none !important;
+      }
+
+      /* YouTube sizes the control bar in px for the docked player. */
+      html.${MINIPLAYER_ACTIVE_CLASS} #movie_player .ytp-chrome-bottom {
+        width: calc(100% - 24px) !important;
+        left: 12px !important;
+      }
+
+      html.${MINIPLAYER_ACTIVE_CLASS} #movie_player .ytp-ce-element,
+      html.${MINIPLAYER_ACTIVE_CLASS} #movie_player .ytp-cards-teaser,
+      html.${MINIPLAYER_ACTIVE_CLASS} #movie_player .ytp-size-button,
+      html.${MINIPLAYER_ACTIVE_CLASS} #movie_player .ytp-miniplayer-button,
+      html.${MINIPLAYER_ACTIVE_CLASS} #movie_player .ytp-chapter-container {
+        display: none !important;
+      }
+
+      #${MINIPLAYER_CLOSE_ID} {
+        display: none;
+      }
+
+      html.${MINIPLAYER_ACTIVE_CLASS} #${MINIPLAYER_CLOSE_ID} {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        z-index: 80;
+        display: grid;
+        place-items: center;
+        width: 30px;
+        height: 30px;
+        border: 0;
+        border-radius: 999px;
+        background: rgba(0, 0, 0, 0.62);
+        color: #fff;
+        cursor: pointer;
+        opacity: 0;
+        transition: opacity 140ms ease, background 140ms ease;
+      }
+
+      html.${MINIPLAYER_ACTIVE_CLASS} #movie_player:hover #${MINIPLAYER_CLOSE_ID},
+      html.${MINIPLAYER_ACTIVE_CLASS} #${MINIPLAYER_CLOSE_ID}:focus-visible {
+        opacity: 1;
+      }
+
+      #${MINIPLAYER_CLOSE_ID}:hover {
+        background: rgba(255, 51, 75, 0.9);
+      }
+
+      #${MINIPLAYER_CLOSE_ID} svg {
+        width: 16px;
+        height: 16px;
+        stroke: currentColor;
+        stroke-width: 2.4;
+        fill: none;
       }
     `;
   }
@@ -1983,33 +2089,103 @@ declare global {
     return /^\/(@|channel\/|c\/|user\/)/.test(location.pathname);
   }
 
-  function shouldUseMiniplayer() {
+  function isMiniplayerEligible() {
     if (!config.enabled || !config.miniplayerEnabled || !isWatchPage()) return false;
     if (document.fullscreenElement || document.pictureInPictureElement) return false;
+    if (isPopupWindow()) return false;
+    return !!getYouTubePlayer() && !!getActiveVideo();
+  }
 
+  function ensureMiniplayerCloseButton() {
     const player = getYouTubePlayer();
-    const video = getActiveVideo();
-    const anchor: any = getPlayerAnchor();
-    if (!player || !video || !anchor?.getBoundingClientRect) return false;
+    if (!player || player.querySelector("#" + MINIPLAYER_CLOSE_ID)) return;
+    const button = document.createElement("button");
+    button.id = MINIPLAYER_CLOSE_ID;
+    button.type = "button";
+    button.title = "Fechar miniplayer";
+    button.setAttribute("aria-label", "Fechar miniplayer");
+    button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>';
+    const stop = (event: Event) => event.stopPropagation();
+    button.addEventListener("mousedown", stop, true);
+    button.addEventListener("pointerdown", stop, true);
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      miniplayerDismissedKey = getCurrentVideoKey();
+      updateMiniplayer();
+    });
+    player.appendChild(button);
+  }
 
-    const rect = anchor.getBoundingClientRect();
-    const activationOffset = Math.max(80, getMastheadHeight() + 16);
-    return window.scrollY > 320 && rect.bottom < activationOffset;
+  function releaseMiniplayerSlot() {
+    if (!miniplayerSlot) return;
+    miniplayerSlot.removeAttribute(MINIPLAYER_SLOT_ATTR);
+    miniplayerSlot.style.removeProperty("--yte-mini-slot-height");
+    miniplayerSlot = null;
+  }
+
+  function requestMainWorldPlayerResize(floating: boolean) {
+    const size = parseMiniplayerSize();
+    postMainWorldMessage({
+      source: MAIN_PLAYER_RESIZE_MESSAGE,
+      floating,
+      width: Math.min(size.width, window.innerWidth - 36),
+      height: Math.min(size.height, window.innerHeight - 90),
+    });
+  }
+
+  function setMiniplayerActive(active: boolean, slot: HTMLElement | null) {
+    if (active === miniplayerActive && (!active || slot === miniplayerSlot)) return;
+
+    if (active && slot) {
+      // Reserve the slot's height so floating the player does not collapse
+      // the layout and yank the scroll position (the old flicker loop).
+      if (miniplayerSlot && miniplayerSlot !== slot) releaseMiniplayerSlot();
+      const height = Math.round(slot.getBoundingClientRect().height);
+      slot.style.setProperty("--yte-mini-slot-height", height + "px");
+      slot.setAttribute(MINIPLAYER_SLOT_ATTR, "");
+      miniplayerSlot = slot;
+      ensureMiniplayerCloseButton();
+    } else {
+      releaseMiniplayerSlot();
+    }
+
+    const changed = active !== miniplayerActive;
+    miniplayerActive = active;
+    document.documentElement.classList.toggle(MINIPLAYER_ACTIVE_CLASS, active);
+    if (changed) requestMainWorldPlayerResize(active);
   }
 
   function updateMiniplayer() {
-    const root = document.documentElement;
-    const active = shouldUseMiniplayer();
-
     if (!config.enabled || !config.miniplayerEnabled) {
-      root.classList.remove(MINIPLAYER_ACTIVE_CLASS);
+      setMiniplayerActive(false, null);
       document.getElementById(MINIPLAYER_STYLE_ID)?.remove();
       miniplayerSignature = "";
       return;
     }
 
     ensureMiniplayerStyle();
-    root.classList.toggle(MINIPLAYER_ACTIVE_CLASS, active);
+
+    const eligible = isMiniplayerEligible();
+    // While floating, measure the reserved slot; otherwise find the live one.
+    const slot = (miniplayerActive && miniplayerSlot?.isConnected) ? miniplayerSlot : getPlayerSlot();
+    const slotBottom = slot ? slot.getBoundingClientRect().bottom : Number.NaN;
+    const mastheadHeight = getMastheadHeight();
+    const key = getCurrentVideoKey();
+
+    if (miniplayerDismissedKey && (miniplayerDismissedKey !== key || shouldResetMiniplayerDismissal(slotBottom, mastheadHeight))) {
+      miniplayerDismissedKey = "";
+    }
+
+    const active = !!slot && shouldFloatPlayer({
+      eligible,
+      currentlyActive: miniplayerActive,
+      dismissed: !!key && miniplayerDismissedKey === key,
+      slotBottom,
+      mastheadHeight,
+    });
+
+    setMiniplayerActive(active, active ? slot : null);
   }
 
   function scheduleMiniplayerUpdate() {
@@ -2167,8 +2343,10 @@ declare global {
         vector-effect: non-scaling-stroke;
       }
 
+      /* visibility (not display) so hiding it does not shift the page */
       html.${MINIPLAYER_ACTIVE_CLASS} #${PLAYER_TOOLBAR_ID} {
-        display: none !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
       }
 
       @media (max-width: 720px) {

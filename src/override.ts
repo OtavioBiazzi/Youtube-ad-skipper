@@ -3,6 +3,7 @@ import {
   CODEC_SETTINGS_STORAGE_KEY,
   MAIN_FORCE_SKIP_MESSAGE,
   MAIN_FORCE_SKIP_RESULT,
+  MAIN_PLAYER_RESIZE_MESSAGE,
   MAIN_QUALITY_MESSAGE,
   MAIN_SESSION_MESSAGE,
   MAIN_SPEED_THROUGH_MESSAGE,
@@ -433,6 +434,26 @@ import { getAdSeekTarget } from "./shared/adStrategy";
     return attempted;
   }
 
+  // Tell YouTube's player its new size so controls/progress bar are laid out
+  // for the floating box; on exit a resize makes ytd-player recompute it.
+  function resizePlayerForMiniplayer(floating: boolean, width: number, height: number) {
+    const player: any = getPlayer();
+    if (!player) return;
+    const notify = () => {
+      if (!floating) {
+        window.dispatchEvent(new Event("resize"));
+        return;
+      }
+      try {
+        if (width > 0 && height > 0 && typeof player.setInternalSize === "function") {
+          player.setInternalSize(Math.round(width), Math.round(height));
+        }
+      } catch (err) {}
+    };
+    requestAnimationFrame(notify);
+    window.setTimeout(notify, 220);
+  }
+
   function isAuthorizedBridgeMessage(data) {
     return isBridgeMessage(data) && !!bridgeSessionToken && data.token === bridgeSessionToken;
   }
@@ -457,6 +478,10 @@ import { getAdSeekTarget } from "./shared/adStrategy";
     }
     if (data.source === MAIN_SPEED_THROUGH_MESSAGE) {
       setSpeedThrough(normalizePlaybackRate(data.rate), data.adOnly === true);
+      return;
+    }
+    if (data.source === MAIN_PLAYER_RESIZE_MESSAGE) {
+      resizePlayerForMiniplayer(data.floating === true, Number(data.width), Number(data.height));
       return;
     }
     if (data.source === MAIN_QUALITY_MESSAGE) {
