@@ -269,7 +269,7 @@ try {
     await page.evaluate(() => { const v = document.querySelector("#movie_player video"); if (v && v.paused) v.play().catch(() => {}); });
     await page.waitForTimeout(12000);
     const liveState = await page.evaluate(() => {
-      const chip = document.querySelector('#yte-controls [data-yte-action="live"]');
+      const chip = document.getElementById("yte-live-latency");
       const v = document.querySelector("#movie_player video");
       return { visible: !!chip && !chip.hidden, text: chip?.textContent || "", rate: v?.playbackRate || 0, paused: !!v?.paused, ad: !!document.getElementById("movie_player")?.classList.contains("ad-showing"), error: document.querySelector("#movie_player .ytp-error")?.textContent?.trim() || "" };
     });
@@ -278,8 +278,8 @@ try {
     } else if (liveState.ad) {
       console.log("WARN  live chip — an ad was playing on the live, skipped");
     } else {
-      check("live chip visible on a live stream", liveState.visible, liveState.text);
-      check("live catch-up keeps a gentle rate", liveState.rate >= 1 && liveState.rate <= 1.26, `rate=${liveState.rate} ${liveState.text}`);
+      check("latency button next to YouTube's 'AO VIVO' badge", liveState.visible, liveState.text);
+      check("live catch-up is off by default (1x)", Math.abs(liveState.rate - 1) < 0.01, `rate=${liveState.rate} ${liveState.text}`);
     }
     await page.screenshot({ path: join(screenshotDir, "e2e-live.png") });
   }

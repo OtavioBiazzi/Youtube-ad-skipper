@@ -1,9 +1,9 @@
 (function() {
   "use strict";
-  const PLAYER_DEFAULTS_PROFILE_VERSION = 5;
+  const PLAYER_DEFAULTS_PROFILE_VERSION = 6;
   const PLAYER_DEFAULTS_PROFILE = {
     playerSpeedEnabled: true,
-    playerSpeedStep: 0.02,
+    playerSpeedStep: 0.25,
     playerSpeedWheel: true,
     autoplayBlockBackground: false,
     autoplayAllowPlaylists: true,
@@ -171,8 +171,10 @@
     settingsMenuItemsEnabled: true,
     skipSurveysEnabled: true,
     playerEndTimeEnabled: false,
-    liveCatchUpEnabled: true,
+    liveCatchUpEnabled: false,
     liveCatchUpTarget: 3,
+    liveCatchUpMode: "balanced",
+    liveJumpEnabled: true,
     liveCatchUpMaxRate: 1.25,
     videoFilterHue: 0
   };
@@ -217,6 +219,12 @@
     5: {
       playerEndTimeEnabled: false,
       playerControlsStyle: "pill"
+    },
+    // v6: live catch-up is opt-in (configured from the button next to
+    // YouTube's "AO VIVO"); Ctrl+wheel moves in YouTube-sized speed steps.
+    6: {
+      liveCatchUpEnabled: false,
+      playerSpeedStep: 0.25
     }
   };
   function getSettingsMigrationPatch(storedVersion) {

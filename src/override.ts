@@ -4,6 +4,8 @@ import {
   MAIN_FORCE_SKIP_MESSAGE,
   MAIN_FORCE_SKIP_RESULT,
   MAIN_PLAYER_RESIZE_MESSAGE,
+  MAIN_LIVE_QUERY,
+  MAIN_LIVE_STATS,
   MAIN_PLAYER_COMMAND,
   MAIN_QUALITY_MESSAGE,
   MAIN_QUALITY_RESULT,
@@ -225,6 +227,27 @@ import { pickBestQualityLevel } from "./shared/quality";
     window.postMessage({ source: MAIN_QUALITY_RESULT, token: bridgeSessionToken, current, available, applied, query }, "*");
   }
 
+  // Live stats straight from YouTube's player ("Estatísticas para nerds").
+  function reportLiveStats() {
+    const player: any = document.getElementById("movie_player") || document.querySelector(".html5-video-player");
+    if (!player) return;
+    let latency = Number.NaN;
+    let health = Number.NaN;
+    let atLiveHead = true;
+    try {
+      const stats = typeof player.getStatsForNerds === "function" ? player.getStatsForNerds() : null;
+      if (stats) {
+        latency = Number.parseFloat(stats.live_latency_secs);
+        health = Number.parseFloat(stats.buffer_health_seconds);
+      }
+    } catch (err) {}
+    try {
+      const progress = typeof player.getProgressState === "function" ? player.getProgressState() : null;
+      if (progress && typeof progress.isAtLiveHead === "boolean") atLiveHead = progress.isAtLiveHead;
+    } catch (err) {}
+    window.postMessage({ source: MAIN_LIVE_STATS, token: bridgeSessionToken, latency, health, atLiveHead }, "*");
+  }
+
   // Small whitelist of player calls the content script needs.
   function runPlayerCommand(command, value) {
     const player: any = document.getElementById("movie_player") || document.querySelector(".html5-video-player");
@@ -232,6 +255,7 @@ import { pickBestQualityLevel } from "./shared/quality";
     try {
       if (command === "setVolume" && typeof player.setVolume === "function") player.setVolume(Math.max(0, Math.min(100, Number(value) || 0)));
       else if (command === "unMute" && typeof player.unMute === "function") player.unMute();
+      else if (command === "seekToLiveHead" && typeof player.seekToLiveHead === "function") player.seekToLiveHead();
     } catch (err) {}
   }
 
@@ -540,6 +564,10 @@ import { pickBestQualityLevel } from "./shared/quality";
     }
     if (data.source === MAIN_QUALITY_MESSAGE) {
       setPlayerQuality(data.level, data.query === true);
+      return;
+    }
+    if (data.source === MAIN_LIVE_QUERY) {
+      reportLiveStats();
       return;
     }
     if (data.source === MAIN_PLAYER_COMMAND) {

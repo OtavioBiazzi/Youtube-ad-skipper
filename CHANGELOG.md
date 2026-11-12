@@ -2,6 +2,22 @@
 
 Todas as mudancas relevantes deste projeto serao registradas aqui.
 
+## 5.2.0 — Player mais integrado ao YouTube
+
+### Adicionado
+
+- **Menu de velocidade do YouTube até 10x:** a barrinha vai até 10x, o − e o + andam de 0,25 em 0,25 acima de 2x, e o chip "3,0" (só para Premium) funciona com a extensão. Velocidades acima de 2x se mantêm mesmo quando o YouTube tenta voltar para 2x.
+- **Botão de atraso ao lado do "AO VIVO" do YouTube:** mostra a latência real da live e abre um menu no estilo do player com: Tirar atraso, Modo (Equilibrado ~4s / Perto ~3s / Extremo ~2s), Velocidade máxima, Pular para o ao vivo após 30 s, Ir para o ao vivo agora, além de atraso, buffer e velocidade atuais.
+
+### Mudado
+
+- **Lives:** o "tirar atraso" foi reescrito e vem **desligado por padrão**. Agora usa a latência real e a saúde do buffer informadas pelo próprio player do YouTube, aplica a velocidade pela API do player (que é o que funciona nas lives atuais), nunca acelera com o buffer baixo, tem uma margem para não ficar liga/desliga e não mexe quando você está assistindo atrás (DVR).
+- **Engrenagem:** Repetir vídeo e Modo cinema ficam junto dos outros liga/desliga, e Filtros de imagem fica antes dos submenus do YouTube.
+- **Ctrl + roda:** passa a andar de 0,25 em 0,25, como o YouTube (antes era 0,02).
+- O "1x" da barra tem um peso de fonte mais leve.
+- **Popup:** os três chips (Silenciar, Contagem, Pesquisas) têm o mesmo tamanho.
+- **Control Center:** texto maior e com mais contraste, fonte pixel também nos títulos dos cards, e telas largas/ultrawide usam o espaço com mais colunas.
+
 ## 5.1.0 — Estabilidade
 
 ### Corrigido

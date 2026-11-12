@@ -551,3 +551,51 @@ kbd {
 
 /* Rows hidden by the page (retired options). */
 .opt-row[hidden], .field-row[hidden] { display: none !important; }
+
+/* ── v5.2: easier to read, uses wide screens ──────────────────── */
+
+:root { --text-muted: #a8a397; --sidebar: 236px; }
+body.theme-light { --text-muted: #5f5a50; }
+
+body,
+body.theme-light { font-size: 15px; }
+
+.page--control-center { max-width: min(1840px, 100%); column-gap: 48px; }
+
+.opt-title { font-size: 15px; }
+.opt-desc { font-size: 13.5px; line-height: 1.45; }
+.field-row, .slider-row { font-size: 14.5px; }
+.control-input, .whitelist-input { font-size: 14px; min-height: 34px; }
+.module-nav a { font-size: 15px; padding: 10px 14px; }
+.section-heading h2 { font-size: 34px; }
+.section-heading p { font-size: 15px; }
+
+/* Pixel type on card titles too: short labels stay readable and give the
+   page its own voice. */
+.card-header {
+  font: 500 17px/1.2 var(--font-display);
+  letter-spacing: 0.01em;
+  padding: 15px 20px;
+}
+
+.card-body { padding: 8px 20px 18px; }
+
+/* Wide screens: cards flow into as many columns as fit. */
+@media (min-width: 1500px) {
+  .section-grid--split,
+  .section-grid--three,
+  .section-grid {
+    grid-template-columns: repeat(auto-fill, minmax(440px, 1fr));
+  }
+}
+
+/* The base sheet pins the page to 1520px; let wide screens use the room. */
+.page--control-center { width: min(100%, 2240px); max-width: none; }
+
+@media (min-width: 1500px) {
+  .section-grid--split,
+  .section-grid--three,
+  .section-grid {
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  }
+}

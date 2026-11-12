@@ -75,6 +75,31 @@ if (panelBox) {
 const after = await page.evaluate(() => document.getElementById("movie_player").getVolume?.());
 check("wheel inside the filter panel does not change volume", before === after, `${before} -> ${after}`);
 
+// YouTube's own speed panel goes past 2x through the extension.
+await page.keyboard.press("Escape");
+await page.hover("#movie_player");
+await page.click("#movie_player .ytp-settings-button").catch(() => {});
+await page.waitForTimeout(500);
+await page.click('.ytp-settings-menu .ytp-menuitem:has-text("Velocidade")').catch(() => {});
+await page.waitForTimeout(700);
+await page.evaluate(() => {
+  const s = document.querySelector(".ytp-varispeed-input-slider");
+  if (!s) return;
+  s.value = "6";
+  s.dispatchEvent(new Event("input", { bubbles: true }));
+});
+await page.waitForTimeout(2000);
+const fast = await page.evaluate(() => ({
+  max: document.querySelector(".ytp-varispeed-input-slider")?.max,
+  rate: document.querySelector("#movie_player video").playbackRate,
+}));
+check("YouTube's speed panel reaches 6x (up to 10x)", fast.max === "10" && Math.abs(fast.rate - 6) < 0.01, JSON.stringify(fast));
+await page.click('.ytp-variable-speed-panel-preset-button:has(.ytp-variable-speed-panel-premium-upsell-icon), .ytp-variable-speed-panel-preset-button:has-text("3,0")').catch(() => {});
+await page.waitForTimeout(1500);
+const three = await page.evaluate(() => document.querySelector("#movie_player video").playbackRate);
+check("Premium '3,0' chip works without Premium", Math.abs(three - 3) < 0.01, `rate=${three}`);
+await page.keyboard.press("Escape");
+
 // "Fora": the bar below the video instead of buttons in the player.
 await page.goto(`chrome-extension://${extId}/popup.html`);
 await page.evaluate(() => chrome.storage.local.set({ playerControlsEnabled: false, toolbarEnabled: true }));

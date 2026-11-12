@@ -189,9 +189,10 @@ input[type="range"]::-webkit-slider-thumb {
 }
 
 /* Chips (mute / overlay) */
-.chips { display: flex; gap: 6px; padding-top: 10px; }
+/* Three equal boxes, one line each. */
+.chips { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; padding-top: 10px; }
 
-.chip { position: relative; flex: 1; cursor: pointer; }
+.chip { position: relative; min-width: 0; cursor: pointer; }
 .chip input { position: absolute; opacity: 0; pointer-events: none; }
 
 .chip span {
@@ -202,6 +203,9 @@ input[type="range"]::-webkit-slider-thumb {
   color: var(--muted);
   font-size: 12px;
   text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .chip input:checked + span { border-color: var(--text); color: var(--text); }
