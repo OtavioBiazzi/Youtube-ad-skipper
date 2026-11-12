@@ -924,7 +924,10 @@ function importSettingsBackup(button: HTMLElement) {
 // ── Render ────────────────────────────────────────
 
 function renderDelay(v: number, aggressive: boolean, instant: boolean) {
-  delayValue.textContent = String(instant ? 0 : v);
+  const shown = instant ? 0 : v;
+  delayValue.textContent = String(shown);
+  const unit = document.getElementById("delay-unit");
+  if (unit) unit.textContent = shown === 1 ? "segundo" : "segundos";
   if (!aggressive) {
     delayHint.textContent = "Modo agressivo desligado: aguarda o botão de pular aparecer naturalmente.";
     delayHint.style.color = "hsl(45, 75%, 52%)";
@@ -1377,6 +1380,8 @@ const PLAYBACK_REASON_LABELS: Record<string, string> = {
   "autoplay-disable-all": "Autoplay desativado (todos)",
   "background-tab-playback-signal": "Outra aba começou a tocar",
   "skip-fallback": "Anúncio avançado até o fim",
+  "resume-playback": "Retomado de onde você parou",
+  "adblock-warning-removed": "Vídeo retomado após aviso de bloqueador",
 };
 
 function renderPlaybackLog() {
@@ -1411,3 +1416,37 @@ document.getElementById("playback-log-clear")?.addEventListener("click", () => {
   chrome.storage.local.set({ playbackEventLog: [] }, renderPlaybackLog);
 });
 renderPlaybackLog();
+
+// ── Layout helpers: sticky offsets and active section in the nav ─────────
+
+function syncHeaderHeight() {
+  const header = document.querySelector(".app-header") as HTMLElement | null;
+  if (header) document.documentElement.style.setProperty("--app-header-height", header.offsetHeight + "px");
+}
+syncHeaderHeight();
+window.addEventListener("resize", syncHeaderHeight);
+
+(function setupNavScrollSpy() {
+  const links = Array.from(document.querySelectorAll<HTMLAnchorElement>(".module-nav a[href^='#']"));
+  const sections = links
+    .map((link) => document.getElementById(link.getAttribute("href")!.slice(1)))
+    .filter((section): section is HTMLElement => !!section);
+  if (!sections.length || typeof IntersectionObserver === "undefined") return;
+
+  const visible = new Map<string, number>();
+  const observer = new IntersectionObserver((entries) => {
+    for (const entry of entries) visible.set(entry.target.id, entry.isIntersecting ? entry.intersectionRatio : 0);
+    let best = "";
+    let bestRatio = 0;
+    for (const section of sections) {
+      const ratio = visible.get(section.id) || 0;
+      if (ratio > bestRatio) {
+        best = section.id;
+        bestRatio = ratio;
+      }
+    }
+    if (!best) return;
+    for (const link of links) link.classList.toggle("is-active", link.getAttribute("href") === "#" + best);
+  }, { rootMargin: "-120px 0px -45% 0px", threshold: [0, 0.1, 0.25, 0.5, 0.75, 1] });
+  sections.forEach((section) => observer.observe(section));
+})();

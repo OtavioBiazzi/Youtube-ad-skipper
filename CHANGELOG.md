@@ -2,7 +2,34 @@
 
 Todas as mudancas relevantes deste projeto serao registradas aqui.
 
-## Unreleased
+## 5.1.0 — Estabilidade
+
+### Corrigido
+
+- O vídeo não pausa mais sozinho: a extensão usava o primeiro `<video>` da página (às vezes a prévia de uma miniatura) e pausava o player principal por engano.
+- O skip de anúncio não avança mais o vídeo de verdade: as ações no contexto da página conferem se o anúncio ainda está passando antes de avançar ou acelerar.
+- O bloqueio de autoplay só age no evento de play do vídeo principal, no máximo uma vez por vídeo e nunca logo depois de um anúncio. Retomar pelo fone ou pelos controles de mídia do sistema volta a funcionar.
+- O bloqueio de autoplay em abas de fundo e a ordenação automática de comentários agora vêm desligados (migração que preserva as demais escolhas).
+- O miniplayer não pisca mais ao descer para os comentários: tem margem de entrada/saída, reserva o espaço do player e funciona no modo teatro.
+- Os menus do YouTube (como "Classificar comentários") abrem por cima do miniplayer.
+- Tela preta em lives com filtros de codec ativos.
+- O modo teatro automático não dessincroniza mais o player; o modo cinema não redimensiona mais o vídeo.
+- Depois de remover o aviso de bloqueador de anúncios, o vídeo pausado pelo YouTube volta a tocar.
+
+### Adicionado
+
+- Continuar de onde parou (opcional): lembra a posição de vídeos com mais de 3 minutos.
+- Botão para fechar o miniplayer até o player voltar a aparecer na tela.
+- Diagnóstico de reprodução no Control Center: lista toda pausa/avanço feito pela extensão e o motivo.
+- Atalhos rápidos de Miniplayer e Continuar no popup.
+
+### Melhorado
+
+- Carregamento de configurações unificado (cerca de 330 linhas duplicadas a menos); contadores sincronizados entre abas.
+- Sem `MutationObserver` no documento inteiro para detectar navegação; ganchos globais de `JSON.parse` só quando há filtro de codec.
+- Control Center: acentuação revisada, textos técnicos trocados por descrições claras, cabeçalho e menu fixos sem sobreposição, seção atual destacada no menu.
+
+## 5.0.0
 
 ### Adicionado
 

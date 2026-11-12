@@ -45,6 +45,14 @@ import {
 import { normalizeQualityLevel, pickBestQualityLevel } from "./shared/quality";
 import { getAutoplayBlockReason as decideAutoplayBlock } from "./shared/autoplay";
 import { shouldFloatPlayer, shouldResetMiniplayerDismissal } from "./shared/miniplayer";
+import {
+  RESUME_STORAGE_KEY,
+  ResumeStore,
+  formatClock,
+  getResumeSaveAction,
+  getResumeTarget,
+  pruneResumeStore,
+} from "./shared/resume";
 import { getYouTubeVideoIdFromUrl, getYouTubeVideoKeyFromUrl } from "./shared/youtube";
 
 declare global {
@@ -296,6 +304,7 @@ declare global {
     config.videoFilterSepia = normalizePercent(s.videoFilterSepia, 0);
     config.codecForceStandardFps = !!s.codecForceStandardFps;
     config.codecForceAvc = !!s.codecForceAvc;
+    config.resumePlaybackEnabled = !!s.resumePlaybackEnabled;
     adState.warningCount = s.warningCount || 0;
     adState.totalSkipped = s.totalAdsSkipped || 0;
     adState.adsSkippedToday = s.adsSkippedToday || 0;
@@ -1642,7 +1651,8 @@ declare global {
 
     const kindLabel = kind === "volume" ? "Volume"
       : kind === "filters" ? "Filtros"
-      : kind === "settings" ? "Configuracoes"
+      : kind === "settings" ? "Configurações"
+      : kind === "resume" ? "Continuar"
       : kind === "popup" ? "Pop-up"
       : kind === "speed" ? "Velocidade"
       : "YouTube Extension";
@@ -2306,7 +2316,7 @@ declare global {
     if (config.playerPopupEnabled === false) return;
     const videoId = getCurrentVideoId();
     if (!videoId) {
-      showPlayerFeedback("popup", "Indisponivel", "Nao encontrei o ID do video");
+      showPlayerFeedback("popup", "Indisponível", "Não encontrei o ID do vídeo");
       return;
     }
 
@@ -3638,6 +3648,97 @@ declare global {
     });
   }
 
+  // ── Continuar de onde parou ───────────────────────────
+
+  let resumeStore: ResumeStore | null = null;
+  let resumeLoading = false;
+  let resumeLastSaveAt = 0;
+
+  function withResumeStore(callback: (store: ResumeStore) => void) {
+    if (resumeStore) {
+      callback(resumeStore);
+      return;
+    }
+    if (resumeLoading || !chrome?.storage?.local) return;
+    resumeLoading = true;
+    chrome.storage.local.get({ [RESUME_STORAGE_KEY]: {} }, (data) => {
+      resumeLoading = false;
+      const stored = data[RESUME_STORAGE_KEY];
+      resumeStore = stored && typeof stored === "object" ? (stored as ResumeStore) : {};
+      callback(resumeStore);
+    });
+  }
+
+  function hasExplicitStartTime() {
+    try {
+      const url = new URL(location.href);
+      return url.searchParams.has("t") || url.searchParams.has("start") || /(^|[#&])t=/.test(url.hash.slice(1));
+    } catch (err) {
+      return false;
+    }
+  }
+
+  // During SPA navigation the URL can change before the <video> swaps
+  // sources. The player's own title link tells which video it really holds.
+  function playerHoldsCurrentVideo(videoId: string) {
+    const link = getYouTubePlayer()?.querySelector(".ytp-title-link") as HTMLAnchorElement | null;
+    const href = link?.href || "";
+    if (!href) return true;
+    return getYouTubeVideoIdFromUrl(href) === videoId;
+  }
+
+  function runResumePlayback() {
+    if (!config.enabled || !config.resumePlaybackEnabled || !isWatchPage() || isPopupWindow()) return;
+    if (adState.active || getAdPlaying()) return;
+    const video = getMainVideo();
+    const videoId = getCurrentVideoId();
+    const key = getCurrentVideoKey();
+    if (!video || !videoId || !key || video.readyState < 1) return;
+    if (!playerHoldsCurrentVideo(videoId)) return;
+    const duration = Number(video.duration);
+
+    if (adState.resumeCheckedKey !== key) {
+      if (adState.resumeCheckStartedKey !== key) {
+        adState.resumeCheckStartedKey = key;
+        adState.resumeCheckStartedAt = Date.now();
+      }
+      withResumeStore((store) => {
+        if (adState.resumeCheckedKey === key) return;
+        const entry = store[videoId];
+        const target = getResumeTarget(entry, duration, hasExplicitStartTime());
+        if (target === null) {
+          const durationMismatch = !!entry && Math.abs(entry.d - duration) > 3;
+          if (!durationMismatch || Date.now() - adState.resumeCheckStartedAt > 15000) adState.resumeCheckedKey = key;
+          return;
+        }
+        adState.resumeCheckedKey = key;
+        if (video.currentTime >= target - 5) return;
+        try {
+          video.currentTime = target;
+          showPlayerFeedback("resume", formatClock(target), "Continuando de onde parou");
+          recordPlaybackEvent("resume-seek", "resume-playback", target);
+        } catch (err) {}
+      });
+      return;
+    }
+
+    if (video.paused || Date.now() - resumeLastSaveAt < 5000) return;
+    resumeLastSaveAt = Date.now();
+    const action = getResumeSaveAction(Number(video.currentTime), duration);
+    if (action === "skip") return;
+
+    withResumeStore((store) => {
+      if (action === "delete") {
+        if (!store[videoId]) return;
+        delete store[videoId];
+      } else {
+        store[videoId] = { t: Math.floor(video.currentTime), d: Math.round(duration), at: Date.now() };
+      }
+      resumeStore = pruneResumeStore(store);
+      chrome.storage.local.set({ [RESUME_STORAGE_KEY]: resumeStore });
+    });
+  }
+
   // ── Main loop ─────────────────────────────────────────
 
   function mainLoop() {
@@ -3674,6 +3775,7 @@ declare global {
       if (adState.active || adState.overlayEl) cleanupRuntimeState();
       enforceAutoplayGuards();
       applyPlayerPreferences();
+      runResumePlayback();
       return;
     }
 
@@ -3746,6 +3848,7 @@ declare global {
       cleanupRuntimeState();
     } else if (!adPlaying && !adState.active) {
       applyPlayerPreferences();
+      runResumePlayback();
       const orphans = document.querySelectorAll("#" + OVERLAY_ID);
       if (orphans.length > 0) orphans.forEach(el => el.remove());
     }

@@ -955,7 +955,7 @@ kbd {
 
 .toolbar-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
   gap: 8px;
 }
 
@@ -1690,4 +1690,35 @@ body.extension-disabled .status-dot {
 
 .playback-log .playback-log-empty {
   opacity: 0.75;
+}
+
+/* ── Sticky header + nav: one opaque block, no content peeking between ── */
+.app-header {
+  margin-bottom: 0;
+  background: var(--bg);
+}
+
+.module-nav {
+  top: var(--app-header-height, 82px);
+  background: var(--bg);
+  box-shadow: 0 12px 18px -14px rgba(0, 0, 0, 0.55);
+}
+
+.module-nav a.is-active {
+  color: var(--accent);
+  border-color: var(--accent-dim);
+  background: var(--accent-dim);
+  font-weight: 600;
+}
+
+.panel-section {
+  scroll-margin-top: calc(var(--app-header-height, 82px) + 72px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

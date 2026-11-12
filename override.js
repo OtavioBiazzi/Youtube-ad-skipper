@@ -4,6 +4,7 @@
   const MAIN_FORCE_SKIP_MESSAGE = "yt-ad-skipper:force-skip";
   const MAIN_SPEED_THROUGH_MESSAGE = "yt-ad-skipper:speed-through";
   const MAIN_FORCE_SKIP_RESULT = "yt-ad-skipper:force-skip-result";
+  const MAIN_PLAYER_RESIZE_MESSAGE = "youtube-extension:player-resize";
   const MAIN_QUALITY_MESSAGE = "youtube-extension:set-quality";
   const CODEC_SETTINGS_MESSAGE = "youtube-extension:codec-settings";
   const CODEC_SETTINGS_STORAGE_KEY = "youtubeExtensionCodecSettings";
@@ -93,23 +94,30 @@
       const hadVideo = list.some((format) => !isAudioFormat(format));
       return hadVideo && !keptVideo ? list : filtered;
     }
+    function isLiveResponse(response) {
+      const details = response?.videoDetails;
+      if (details?.isLive || details?.isUpcoming || details?.isPostLiveDvr) return true;
+      const streaming = response?.streamingData;
+      return !!streaming?.hlsManifestUrl && !Array.isArray(streaming?.adaptiveFormats);
+    }
     function filterStreamingData(streamingData) {
       if (!streamingData || typeof streamingData !== "object" || !hasCodecFilters()) return streamingData;
+      const before = (streamingData.adaptiveFormats || []).length + (streamingData.formats || []).length;
       if (Array.isArray(streamingData.formats)) {
         streamingData.formats = filterFormatList(streamingData.formats);
       }
       if (Array.isArray(streamingData.adaptiveFormats)) {
         streamingData.adaptiveFormats = filterFormatList(streamingData.adaptiveFormats);
       }
-      if (codecSettings.forceAvc || codecSettings.forceStandardFps) {
+      const after = (streamingData.adaptiveFormats || []).length + (streamingData.formats || []).length;
+      if (after > 0 && after < before) {
         delete streamingData.dashManifestUrl;
-        delete streamingData.hlsManifestUrl;
       }
       return streamingData;
     }
     function filterPlayerResponse(response, depth = 0) {
       if (!response || typeof response !== "object" || !hasCodecFilters() || depth > 4) return response;
-      if (response.streamingData) {
+      if (response.streamingData && !isLiveResponse(response)) {
         filterStreamingData(response.streamingData);
       }
       if (response.playerResponse && typeof response.playerResponse === "string") {
@@ -166,6 +174,7 @@
     }
     function updateCodecSettings(settings) {
       codecSettings = normalizeCodecSettings(settings);
+      ensureResponseHooks();
       try {
         localStorage.setItem(CODEC_SETTINGS_STORAGE_KEY, JSON.stringify(codecSettings));
       } catch (err) {
@@ -200,7 +209,10 @@
     function resultLooksLikePlayerResponse(result) {
       return !!result && typeof result === "object" && (!!result.streamingData || !!result.playerResponse || !!result.response?.streamingData || !!result.data?.streamingData);
     }
-    {
+    let responseHooksInstalled = false;
+    function ensureResponseHooks() {
+      if (responseHooksInstalled || false || !hasCodecFilters()) return;
+      responseHooksInstalled = true;
       JSON.parse = function(text, reviver) {
         const parsed = originalJsonParse(text, reviver);
         return textLooksLikePlayerResponse(text) ? filterPlayerResponse(parsed) : parsed;
@@ -216,6 +228,7 @@
         };
       }
     }
+    ensureResponseHooks();
     function getCapture(options) {
       return typeof options === "boolean" ? options : !!(options && options.capture);
     }
@@ -250,7 +263,18 @@
         'button, [role="button"], .ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-ad-skip-button-modern, .videoAdUiSkipButton'
       ) || el;
     }
+    function getMainVideo() {
+      const player = getPlayer();
+      if (!player) return null;
+      return player.querySelector("video.html5-main-video") || player.querySelector("video");
+    }
+    function isAdShowing() {
+      const player = getPlayer();
+      return !!player && (player.classList.contains("ad-showing") || player.classList.contains("ad-interrupting"));
+    }
     function clickSkipButton() {
+      const root = getPlayer();
+      if (!root || !isAdShowing()) return false;
       const selectors = [
         ".ytp-skip-ad-button",
         ".ytp-ad-skip-button",
@@ -265,7 +289,7 @@
         '[class*="skip"][class*="ad" i]'
       ];
       for (const selector of selectors) {
-        for (const el of document.querySelectorAll(selector)) {
+        for (const el of root.querySelectorAll(selector)) {
           const target = getClickTarget(el);
           if (!target || typeof target.click !== "function" || !isVisible(target)) continue;
           target.dispatchEvent(new MouseEvent("mouseover", { bubbles: true, cancelable: true, view: window }));
@@ -297,13 +321,17 @@
     function getPlayer() {
       return document.getElementById("movie_player") || document.querySelector(".html5-video-player");
     }
-    function forceSkipFromMainWorld(rate = 3) {
+    function forceSkipFromMainWorld(rate = 3, adSrc = "") {
+      if (!isAdShowing()) return { ok: false, method: "no-ad" };
       const speedRate = normalizeAdRate(rate);
       if (clickSkipButton()) {
         return { ok: true, method: "click" };
       }
       const player = getPlayer();
-      const video = document.querySelector("video");
+      const video = getMainVideo();
+      if (video && adSrc && video.currentSrc && video.currentSrc !== adSrc) {
+        return { ok: false, method: "source-changed" };
+      }
       let attempted = false;
       if (video) {
         const duration = Number(video.duration);
@@ -345,9 +373,10 @@
       }
       return { ok: attempted, method: attempted ? "seek" : "none" };
     }
-    function setSpeedThrough(rate) {
+    function setSpeedThrough(rate, adOnly = false) {
+      if (adOnly && !isAdShowing()) return false;
       const player = getPlayer();
-      const video = document.querySelector("video");
+      const video = getMainVideo();
       let attempted = false;
       if (video) {
         try {
@@ -366,6 +395,24 @@
       }
       return attempted;
     }
+    function resizePlayerForMiniplayer(floating, width, height) {
+      const player = getPlayer();
+      if (!player) return;
+      const notify = () => {
+        if (!floating) {
+          window.dispatchEvent(new Event("resize"));
+          return;
+        }
+        try {
+          if (width > 0 && height > 0 && typeof player.setInternalSize === "function") {
+            player.setInternalSize(Math.round(width), Math.round(height));
+          }
+        } catch (err) {
+        }
+      };
+      requestAnimationFrame(notify);
+      window.setTimeout(notify, 220);
+    }
     function isAuthorizedBridgeMessage(data) {
       return isBridgeMessage(data) && !!bridgeSessionToken && data.token === bridgeSessionToken;
     }
@@ -382,19 +429,23 @@
         return;
       }
       if (data.source === MAIN_FORCE_SKIP_MESSAGE) {
-        const result = forceSkipFromMainWorld(data.rate);
+        const result = forceSkipFromMainWorld(data.rate, typeof data.adSrc === "string" ? data.adSrc : "");
         window.postMessage({ source: MAIN_FORCE_SKIP_RESULT, token: bridgeSessionToken, ...result }, "*");
         return;
       }
       if (data.source === MAIN_SPEED_THROUGH_MESSAGE) {
-        setSpeedThrough(normalizePlaybackRate(data.rate));
+        setSpeedThrough(normalizePlaybackRate(data.rate), data.adOnly === true);
+        return;
+      }
+      if (data.source === MAIN_PLAYER_RESIZE_MESSAGE) {
+        resizePlayerForMiniplayer(data.floating === true, Number(data.width), Number(data.height));
         return;
       }
       if (data.source === MAIN_QUALITY_MESSAGE) {
         setPlayerQuality(data.level);
       }
     });
-    installPlayerResponseSetter();
+    if (hasCodecFilters()) installPlayerResponseSetter();
     applyCodecFiltersToKnownGlobals();
     document.addEventListener("yt-navigate-start", applyCodecFiltersToKnownGlobals, true);
     document.addEventListener("yt-navigate-finish", applyCodecFiltersToKnownGlobals, true);

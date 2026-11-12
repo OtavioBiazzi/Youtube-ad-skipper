@@ -1,11 +1,11 @@
 (function() {
   "use strict";
-  const PLAYER_DEFAULTS_PROFILE_VERSION = 2;
+  const PLAYER_DEFAULTS_PROFILE_VERSION = 3;
   const PLAYER_DEFAULTS_PROFILE = {
     playerSpeedEnabled: true,
     playerSpeedStep: 0.02,
     playerSpeedWheel: true,
-    autoplayBlockBackground: true,
+    autoplayBlockBackground: false,
     autoplayAllowPlaylists: true,
     miniplayerEnabled: true,
     miniplayerSize: "480x270",
@@ -77,7 +77,7 @@
     volumeBoostLevel: 2,
     volumeBoostAuto: false,
     playerWheelInvert: false,
-    autoplayBlockBackground: true,
+    autoplayBlockBackground: false,
     autoplayBlockForeground: false,
     autoplayAllowPlaylists: true,
     pauseBackgroundTabs: false,
@@ -164,7 +164,8 @@
     videoFilterContrast: 100,
     videoFilterSaturate: 100,
     videoFilterGrayscale: 0,
-    videoFilterSepia: 0
+    videoFilterSepia: 0,
+    resumePlaybackEnabled: false
   };
   const SETTINGS_EXPORT_KEYS = Object.keys(DEFAULT_SETTINGS);
   function normalizeSettings(raw = {}) {
@@ -189,13 +190,29 @@
     }
     return normalized;
   }
+  const SETTINGS_MIGRATIONS = {
+    2: PLAYER_DEFAULTS_PROFILE,
+    // v3: stability overhaul. These defaults caused surprise pauses and comment
+    // menus opening on their own.
+    3: {
+      autoplayBlockBackground: false,
+      appearanceSortNewestComments: false
+    }
+  };
+  function getSettingsMigrationPatch(storedVersion) {
+    const version = Number(storedVersion) || 0;
+    if (version >= PLAYER_DEFAULTS_PROFILE_VERSION) return null;
+    const patch = {};
+    for (let next = version + 1; next <= PLAYER_DEFAULTS_PROFILE_VERSION; next += 1) {
+      Object.assign(patch, SETTINGS_MIGRATIONS[next] || {});
+    }
+    patch.playerDefaultsProfileVersion = PLAYER_DEFAULTS_PROFILE_VERSION;
+    return patch;
+  }
   function migrateSettings(raw = {}) {
     const settings = normalizeSettings(raw);
-    if ((Number(settings.playerDefaultsProfileVersion) || 0) < PLAYER_DEFAULTS_PROFILE_VERSION) {
-      Object.assign(settings, PLAYER_DEFAULTS_PROFILE, {
-        playerDefaultsProfileVersion: PLAYER_DEFAULTS_PROFILE_VERSION
-      });
-    }
+    const patch = getSettingsMigrationPatch(raw.playerDefaultsProfileVersion);
+    if (patch) Object.assign(settings, patch);
     return settings;
   }
   function byId(id) {
@@ -333,4 +350,25 @@
   for (const id of ["btn-open-settings", "btn-open-settings-main"]) {
     byId(id).addEventListener("click", () => chrome.runtime.openOptionsPage());
   }
+  const POPUP_SETTING_MESSAGES = {
+    miniplayerEnabled: ["Miniplayer ativado.", "Miniplayer desativado."],
+    resumePlaybackEnabled: ["Vídeos vão continuar de onde pararam.", "Continuar de onde parou desativado."]
+  };
+  const popupSettingInputs = Array.from(document.querySelectorAll("[data-popup-setting]"));
+  chrome.storage.local.get(DEFAULT_SETTINGS, (settings) => {
+    const migrated = migrateSettings(settings);
+    popupSettingInputs.forEach((input) => {
+      const key = input.dataset.popupSetting || "";
+      input.checked = migrated[key] !== false && !!migrated[key];
+    });
+  });
+  popupSettingInputs.forEach((input) => {
+    input.addEventListener("change", () => {
+      const key = input.dataset.popupSetting || "";
+      if (!key) return;
+      chrome.storage.local.set({ [key]: input.checked });
+      const [on, off] = POPUP_SETTING_MESSAGES[key] || ["Configuração aplicada.", "Configuração aplicada."];
+      announceChange(input.checked ? on : off);
+    });
+  });
 })();

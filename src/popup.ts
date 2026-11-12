@@ -178,3 +178,28 @@ for (const id of ["btn-open-settings", "btn-open-settings-main"]) {
 }
 
 export {};
+
+// ── Generic quick toggles (data-popup-setting) ──────────────
+
+const POPUP_SETTING_MESSAGES: Record<string, [string, string]> = {
+  miniplayerEnabled: ["Miniplayer ativado.", "Miniplayer desativado."],
+  resumePlaybackEnabled: ["Vídeos vão continuar de onde pararam.", "Continuar de onde parou desativado."],
+};
+
+const popupSettingInputs = Array.from(document.querySelectorAll<HTMLInputElement>("[data-popup-setting]"));
+chrome.storage.local.get(DEFAULT_SETTINGS, (settings: Record<string, unknown>) => {
+  const migrated = migrateSettings(settings) as Record<string, unknown>;
+  popupSettingInputs.forEach((input) => {
+    const key = input.dataset.popupSetting || "";
+    input.checked = migrated[key] !== false && !!migrated[key];
+  });
+});
+popupSettingInputs.forEach((input) => {
+  input.addEventListener("change", () => {
+    const key = input.dataset.popupSetting || "";
+    if (!key) return;
+    chrome.storage.local.set({ [key]: input.checked });
+    const [on, off] = POPUP_SETTING_MESSAGES[key] || ["Configuração aplicada.", "Configuração aplicada."];
+    announceChange(input.checked ? on : off);
+  });
+});

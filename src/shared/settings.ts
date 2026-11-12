@@ -175,6 +175,7 @@ export const DEFAULT_SETTINGS = {
   videoFilterSaturate: 100,
   videoFilterGrayscale: 0,
   videoFilterSepia: 0,
+  resumePlaybackEnabled: false,
 };
 
 export type ExtensionSettings = typeof DEFAULT_SETTINGS;
