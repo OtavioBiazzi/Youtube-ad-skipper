@@ -788,7 +788,6 @@ function loadPlannedSettings() {
       if (!key) return;
       setPlannedControlValue(control, settings[key] ?? DEFAULT_VALUES[key] ?? "");
     });
-    updateCinemaPreview();
   });
 }
 
@@ -816,7 +815,6 @@ function bindPlannedSettingEvents() {
         control.value = String(value);
       }
       chrome.storage.local.set({ [key]: value });
-      if (key.startsWith("cinema")) updateCinemaPreview();
     };
 
     if (control instanceof HTMLInputElement && isShortcutSettingKey(key)) {
@@ -876,8 +874,7 @@ function bindPlannedSettingEvents() {
         chrome.storage.local.set(resetValues, loadPlannedSettings);
       } else if (action === "themeSave") {
         persistPlannedControls();
-        updateCinemaPreview();
-        flashBorder(button, "var(--green)");
+            flashBorder(button, "var(--green)");
       } else if (action === "shortcutEditor") {
         const firstShortcut = document.querySelector<HTMLInputElement>('[data-setting="shortcutSkipAd"]');
         firstShortcut?.focus();
@@ -908,16 +905,6 @@ function getPlannedInput(key: string) {
   return plannedControls.find(control => getPlannedKey(control) === key) || null;
 }
 
-function updateCinemaPreview() {
-  const preview = document.querySelector<HTMLElement>(".cinema-preview");
-  if (!preview) return;
-
-  const color = String((getPlannedInput("cinemaColor") as HTMLInputElement | null)?.value || DEFAULT_VALUES.cinemaColor);
-  const opacity = Number((getPlannedInput("cinemaOpacity") as HTMLInputElement | null)?.value || DEFAULT_VALUES.cinemaOpacity);
-  const alpha = Math.min(1, Math.max(0, opacity / 100));
-  preview.style.setProperty("--cinema-preview-color", color);
-  preview.style.setProperty("--cinema-preview-alpha", String(alpha));
-}
 
 function exportSettingsBackup(button: HTMLElement) {
   chrome.storage.local.get(null, (settings) => {
@@ -1405,7 +1392,6 @@ chrome.storage.onChanged.addListener((changes) => {
     const nextValue = (changes[key].newValue ?? DEFAULT_VALUES[key] ?? "") as PlannedSettingValue;
     setPlannedControlValue(control, nextValue);
   });
-  if (changes.cinemaColor || changes.cinemaOpacity) updateCinemaPreview();
   
   if (changes.totalAdsSkipped) {
     animateCounter(statTotal, Number(changes.totalAdsSkipped.newValue) || 0);

@@ -61,14 +61,6 @@ import {
   isNeutralFilter,
   normalizeVideoFilters,
 } from "./shared/videoFilters";
-import {
-  RESUME_STORAGE_KEY,
-  ResumeStore,
-  formatClock,
-  getResumeSaveAction,
-  getResumeTarget,
-  pruneResumeStore,
-} from "./shared/resume";
 import { getYouTubeVideoIdFromUrl, getYouTubeVideoKeyFromUrl } from "./shared/youtube";
 
 declare global {
@@ -153,8 +145,6 @@ declare global {
     qualityAppliedKey: "",
     fullscreenQualityMode: false,
     preFullscreenQuality: null,
-    cinemaActive: false,
-    cinemaInitialized: false,
     autoTheaterAppliedKey: "",
     autoExpandAppliedKey: "",
     commentsSortKey: "",
@@ -169,7 +159,6 @@ declare global {
   let adblockBodyWaitObserver: MutationObserver | null = null;
   let skipButtonObserver: MutationObserver | null = null;
   let appearanceSignature = "";
-  let cinemaSignature = "";
   let videoFilterSignature = "";
   let miniplayerSignature = "";
   let miniplayerUpdateRaf = 0;
@@ -276,7 +265,6 @@ declare global {
     config.shortcutSpeedUp = normalizeShortcutSetting(s.shortcutSpeedUp, "Alt+Shift+.");
     config.shortcutVolumeDown = normalizeShortcutSetting(s.shortcutVolumeDown, "Alt+Shift+ArrowDown");
     config.shortcutVolumeUp = normalizeShortcutSetting(s.shortcutVolumeUp, "Alt+Shift+ArrowUp");
-    config.shortcutCinema = normalizeShortcutSetting(s.shortcutCinema, "Alt+Shift+C");
     config.shortcutScreenshot = normalizeShortcutSetting(s.shortcutScreenshot, "Alt+Shift+P");
     config.shortcutPopup = normalizeShortcutSetting(s.shortcutPopup, "Alt+Shift+O");
     config.shortcutLoop = normalizeShortcutSetting(s.shortcutLoop, "Alt+Shift+L");
@@ -292,11 +280,6 @@ declare global {
     config.appearanceAutoTheater = !!s.appearanceAutoTheater;
     config.appearanceAutoExpandPlayer = !!s.appearanceAutoExpandPlayer;
     config.appearanceUseViewportPlayer = !!s.appearanceUseViewportPlayer;
-    config.cinemaColor = normalizeHexColor(s.cinemaColor, "#000000");
-    config.cinemaOpacity = normalizePercent(s.cinemaOpacity, 85);
-    config.cinemaDefault = !!s.cinemaDefault;
-    config.cinemaAutoResize = !!s.cinemaAutoResize;
-    config.cinemaUseYouTubeTheater = s.cinemaUseYouTubeTheater !== false;
     config.ultrawideEnabled = !!s.ultrawideEnabled;
     config.ultrawideFit = normalizeUltrawideFit(s.ultrawideFit);
     config.toolbarInsidePlayer = !!s.toolbarInsidePlayer;
@@ -330,7 +313,6 @@ declare global {
     config.videoFilterSepia = filters.sepia;
     config.codecForceStandardFps = !!s.codecForceStandardFps;
     config.codecForceAvc = !!s.codecForceAvc;
-    config.resumePlaybackEnabled = !!s.resumePlaybackEnabled;
     config.playerControlsEnabled = s.playerControlsEnabled !== false;
     config.playerControlsStyle = s.playerControlsStyle === "divider" ? "divider" : "pill";
     config.settingsMenuItemsEnabled = s.settingsMenuItemsEnabled !== false;
@@ -446,8 +428,6 @@ declare global {
       if (hasPrefix(settingChanges, "toolbar", "volumeBoost") || has(settingChanges, "playerSpeedButtonsEnabled", "playerPopupEnabled")) {
         schedulePlayerToolbarUpdate();
       }
-      if (has(settingChanges, "cinemaColor", "cinemaOpacity")) applyCinemaMode();
-      if (has(settingChanges, "cinemaDefault")) setCinemaMode(config.cinemaDefault);
       if (hasPrefix(settingChanges, "codec")) syncCodecSettingsToMainWorld();
     });
   }
@@ -1533,22 +1513,13 @@ declare global {
       if (ensureTheaterMode(true)) adState.autoTheaterAppliedKey = key;
     }
 
-    if (config.cinemaDefault && !adState.cinemaInitialized) {
-      adState.cinemaInitialized = true;
-      setCinemaMode(true);
-    }
 
-    // Cinema may ask for theater before the page is ready; keep retrying per video.
-    if (adState.cinemaActive && (config.cinemaUseYouTubeTheater || config.cinemaAutoResize) && key && adState.cinemaTheaterKey !== key) {
-      if (ensureTheaterMode(true)) adState.cinemaTheaterKey = key;
-    }
   }
 
   function runAppearanceTasks() {
     applyAppearanceFilters();
     convertShortsUrlIfNeeded();
     runAutoLayoutTasks();
-    applyCinemaMode();
   }
 
   function runVisualMaintenanceTasks(force = false) {
@@ -1589,87 +1560,6 @@ declare global {
     if (visualMaintenanceTimeout !== null) return;
     if (visualMaintenanceRaf) return;
     visualMaintenanceRaf = window.requestAnimationFrame(run);
-  }
-
-  const CINEMA_STYLE_ID = "youtube-extension-cinema-style";
-  const CINEMA_CLASS = "youtube-extension-cinema-active";
-
-  function buildCinemaCss() {
-    const color = normalizeHexColor(config.cinemaColor, "#000000");
-    const opacity = normalizePercent(config.cinemaOpacity, 85) / 100;
-    const dimOpacity = Math.max(0.45, 1 - opacity);
-    return `
-      html.${CINEMA_CLASS},
-      html.${CINEMA_CLASS} body,
-      html.${CINEMA_CLASS} ytd-app,
-      html.${CINEMA_CLASS} #page-manager {
-        background: ${color} !important;
-      }
-
-      html.${CINEMA_CLASS} ytd-watch-flexy #secondary,
-      html.${CINEMA_CLASS} ytd-watch-flexy #below,
-      html.${CINEMA_CLASS} ytd-watch-flexy ytd-watch-metadata,
-      html.${CINEMA_CLASS} ytd-comments {
-        opacity: ${dimOpacity.toFixed(2)} !important;
-        transition: opacity 180ms ease !important;
-      }
-
-      html.${CINEMA_CLASS} ytd-watch-flexy #player-container-outer,
-      html.${CINEMA_CLASS} ytd-watch-flexy #player-theater-container,
-      html.${CINEMA_CLASS} ytd-watch-flexy #player-full-bleed-container {
-        background: ${color} !important;
-        box-shadow: 0 0 0 100vmax rgba(0, 0, 0, ${Math.min(0.85, opacity).toFixed(2)}) !important;
-      }
-
-      /* Cinema only darkens the surroundings. It used to force its own size
-         on #movie_player, which fought YouTube's computed size and could crop
-         the video or push it out of view. Sizing is left to YouTube/theater. */
-
-      html.${CINEMA_CLASS}.${MINIPLAYER_ACTIVE_CLASS} ytd-watch-flexy #player-container-outer,
-      html.${CINEMA_CLASS}.${MINIPLAYER_ACTIVE_CLASS} ytd-watch-flexy #player-theater-container,
-      html.${CINEMA_CLASS}.${MINIPLAYER_ACTIVE_CLASS} ytd-watch-flexy #player-full-bleed-container {
-        box-shadow: none !important;
-      }
-    `;
-  }
-
-  function applyCinemaMode() {
-    document.documentElement.classList.toggle(CINEMA_CLASS, !!adState.cinemaActive && !!config.enabled);
-
-    const signature = [
-      config.enabled,
-      adState.cinemaActive,
-      config.cinemaColor,
-      config.cinemaOpacity,
-    ].join(":");
-
-    if (signature === cinemaSignature) return;
-    cinemaSignature = signature;
-
-    const existing = document.getElementById(CINEMA_STYLE_ID);
-    if (!config.enabled || !adState.cinemaActive) {
-      existing?.remove();
-      return;
-    }
-
-    const style = existing || document.createElement("style");
-    style.id = CINEMA_STYLE_ID;
-    style.textContent = buildCinemaCss();
-    if (!existing) (document.head || document.documentElement).appendChild(style);
-  }
-
-  function setCinemaMode(active) {
-    adState.cinemaActive = !!active;
-    adState.cinemaTheaterKey = "";
-    if (config.cinemaUseYouTubeTheater || config.cinemaAutoResize) {
-      ensureTheaterMode(adState.cinemaActive);
-    }
-    applyCinemaMode();
-    updatePlayerToolbarStates();
-  }
-
-  function toggleCinemaMode() {
-    setCinemaMode(!adState.cinemaActive);
   }
 
   const PLAYER_FEEDBACK_ID = "youtube-extension-player-feedback";
@@ -1735,7 +1625,6 @@ declare global {
     const kindLabel = kind === "volume" ? "Volume"
       : kind === "filters" ? "Filtros"
       : kind === "settings" ? "Configurações"
-      : kind === "resume" ? "Continuar"
       : kind === "popup" ? "Pop-up"
       : kind === "speed" ? "Velocidade"
       : "YouTube Extension";
@@ -2311,7 +2200,7 @@ declare global {
     pipButton?.classList.toggle("is-active", !!document.pictureInPictureElement);
 
     const theaterButton = toolbar.querySelector('[data-toolbar-action="theater"]');
-    theaterButton?.classList.toggle("is-active", !!document.querySelector("ytd-watch-flexy")?.hasAttribute("theater") || !!adState.cinemaActive);
+    theaterButton?.classList.toggle("is-active", !!document.querySelector("ytd-watch-flexy")?.hasAttribute("theater"));
 
     const boostButton = toolbar.querySelector('[data-toolbar-action="volume-boost"]');
     boostButton?.classList.toggle("is-active", shouldUseVolumeBoost());
@@ -3819,7 +3708,6 @@ declare global {
     filters: "M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z",
     pip: "M19 11h-8v6h8v-6zm4 8V4.98C23 3.88 22.1 3 21 3H3c-1.1 0-2 .88-2 1.98V19c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2zm-2 .02H3V4.97h18v14.05z",
     popup: "M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z",
-    cinema: "M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.39 5.39 0 0 1-4.4 2.26 5.4 5.4 0 0 1-3.14-9.8c-.44-.06-.9-.1-1.36-.1z",
     boost: "M3 9v6h4l5 5V4L7 9H3zm15-5-4 8h3l-1 8 5-10h-3l2-6z",
   };
 
@@ -3940,10 +3828,6 @@ declare global {
       #movie_player .ytp-variable-speed-panel-premium-upsell-icon,
       #movie_player .ytp-variable-speed-panel-premium-badge { display: none !important; }
 
-      /* Cinema only dims the page around the player: pointless in fullscreen. */
-      #movie_player.ytp-fullscreen #${PLAYER_CONTROLS_ID} [data-yte-action="cinema"] {
-        display: none;
-      }
 
       #${END_TIME_ID}:empty { display: none; }
       #movie_player.yte-no-endtime #${END_TIME_ID} { display: none; }
@@ -4145,8 +4029,8 @@ declare global {
     if (config.toolbarSpeed !== false && config.playerSpeedButtonsEnabled !== false) {
       items.push({ id: "speed", tip: "Velocidade · clique para alternar, role para ajustar, botão direito volta a 1x", text: "1x", priority: "high", className: "yte-btn--text" });
     }
-    // With the gear integration on, set-and-forget items (filters, loop,
-    // cinema) live in YouTube's settings menu; the bar keeps quick actions.
+    // With the gear integration on, set-and-forget items (filters, loop)
+    // live in YouTube's settings menu; the bar keeps quick actions.
     const inGear = config.settingsMenuItemsEnabled !== false;
     if (config.toolbarLoop !== false && !inGear) items.push({ id: "loop", tip: "Repetir vídeo", icon: "loop", priority: "mid" });
     if (config.toolbarFilters !== false && !inGear) items.push({ id: "filters", tip: "Filtros de imagem", icon: "filters", priority: "mid" });
@@ -4168,7 +4052,7 @@ declare global {
   // Hide our lower-priority buttons (then the end-time clock) only while the
   // left side of YouTube's bar (play, volume, time) would be squeezed.
   // Order in which our buttons give up their place when space is short.
-  const FIT_HIDE_ORDER = ["popup", "cinema", "screenshot", "boost", "pip", "loop", "filters"];
+  const FIT_HIDE_ORDER = ["popup", "screenshot", "boost", "pip", "loop", "filters"];
 
   function fitPlayerControls(player: HTMLElement) {
     const controls = document.getElementById(PLAYER_CONTROLS_ID);
@@ -4326,7 +4210,6 @@ declare global {
     set("loop", !!video?.loop || (adState.loopEnabled && adState.loopVideoKey === key));
     set("filters", shouldUseVideoFilters());
     set("boost", shouldUseVolumeBoost());
-    set("cinema", !!adState.cinemaActive);
     set("pip", !!document.pictureInPictureElement);
 
   }
@@ -4358,9 +4241,6 @@ declare global {
         break;
       case "boost":
         setVolumeBoostEnabled(!config.volumeBoostEnabled, video);
-        break;
-      case "cinema":
-        toggleCinemaMode();
         break;
       case "popup":
         // Leave fullscreen first, otherwise the tab stays fullscreen on a paused video.
@@ -4913,7 +4793,6 @@ declare global {
     filters: FILTER_ROW_ICONS.toggle,
     loop: "M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z",
     boost: "M7 18h2V6H7v12zm4 4h2V2h-2v20zm-8-8h2v-4H3v4zm12 4h2V6h-2v12zm4-8v4h2v-4h-2z",
-    cinema: "M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.39 5.39 0 0 1-4.4 2.26 5.4 5.4 0 0 1-3.14-9.8c-.44-.06-.9-.1-1.36-.1z",
     live: "M7.76 16.24A5.98 5.98 0 0 1 6 12c0-1.66.67-3.16 1.76-4.24l1.42 1.42A3.99 3.99 0 0 0 8 12c0 1.1.45 2.1 1.17 2.83l-1.41 1.41zm8.48 0A5.98 5.98 0 0 0 18 12c0-1.66-.67-3.16-1.76-4.24l-1.42 1.42A3.99 3.99 0 0 1 16 12c0 1.1-.45 2.1-1.17 2.83l1.41 1.41zM12 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm8 2c0 2.21-.9 4.21-2.35 5.65l1.42 1.42A9.97 9.97 0 0 0 22 12c0-2.76-1.12-5.26-2.93-7.07l-1.42 1.42A7.95 7.95 0 0 1 20 12zM6.35 6.35 4.93 4.93A9.97 9.97 0 0 0 2 12c0 2.76 1.12 5.26 2.93 7.07l1.42-1.42A7.95 7.95 0 0 1 4 12c0-2.21.9-4.21 2.35-5.65z",
   };
   let gearObserver: MutationObserver | null = null;
@@ -4955,9 +4834,6 @@ declare global {
         break;
       case "boost":
         setVolumeBoostEnabled(!config.volumeBoostEnabled, getActiveVideo());
-        break;
-      case "cinema":
-        toggleCinemaMode();
         break;
     }
     refreshGearItems();
@@ -5506,97 +5382,6 @@ declare global {
     refreshPlayerControlStates();
   }
 
-  // ── Continuar de onde parou ───────────────────────────
-
-  let resumeStore: ResumeStore | null = null;
-  let resumeLoading = false;
-  let resumeLastSaveAt = 0;
-
-  function withResumeStore(callback: (store: ResumeStore) => void) {
-    if (resumeStore) {
-      callback(resumeStore);
-      return;
-    }
-    if (resumeLoading || !chrome?.storage?.local) return;
-    resumeLoading = true;
-    chrome.storage.local.get({ [RESUME_STORAGE_KEY]: {} }, (data) => {
-      resumeLoading = false;
-      const stored = data[RESUME_STORAGE_KEY];
-      resumeStore = stored && typeof stored === "object" ? (stored as ResumeStore) : {};
-      callback(resumeStore);
-    });
-  }
-
-  function hasExplicitStartTime() {
-    try {
-      const url = new URL(location.href);
-      return url.searchParams.has("t") || url.searchParams.has("start") || /(^|[#&])t=/.test(url.hash.slice(1));
-    } catch (err) {
-      return false;
-    }
-  }
-
-  // During SPA navigation the URL can change before the <video> swaps
-  // sources. The player's own title link tells which video it really holds.
-  function playerHoldsCurrentVideo(videoId: string) {
-    const link = getYouTubePlayer()?.querySelector(".ytp-title-link") as HTMLAnchorElement | null;
-    const href = link?.href || "";
-    if (!href) return true;
-    return getYouTubeVideoIdFromUrl(href) === videoId;
-  }
-
-  function runResumePlayback() {
-    if (!config.enabled || !config.resumePlaybackEnabled || !isWatchPage() || isPopupWindow()) return;
-    if (adState.active || getAdPlaying()) return;
-    const video = getMainVideo();
-    const videoId = getCurrentVideoId();
-    const key = getCurrentVideoKey();
-    if (!video || !videoId || !key || video.readyState < 1) return;
-    if (!playerHoldsCurrentVideo(videoId)) return;
-    const duration = Number(video.duration);
-
-    if (adState.resumeCheckedKey !== key) {
-      if (adState.resumeCheckStartedKey !== key) {
-        adState.resumeCheckStartedKey = key;
-        adState.resumeCheckStartedAt = Date.now();
-      }
-      withResumeStore((store) => {
-        if (adState.resumeCheckedKey === key) return;
-        const entry = store[videoId];
-        const target = getResumeTarget(entry, duration, hasExplicitStartTime());
-        if (target === null) {
-          const durationMismatch = !!entry && Math.abs(entry.d - duration) > 3;
-          if (!durationMismatch || Date.now() - adState.resumeCheckStartedAt > 15000) adState.resumeCheckedKey = key;
-          return;
-        }
-        adState.resumeCheckedKey = key;
-        if (video.currentTime >= target - 5) return;
-        try {
-          video.currentTime = target;
-          showPlayerFeedback("resume", formatClock(target), "Continuando de onde parou");
-          recordPlaybackEvent("resume-seek", "resume-playback", target);
-        } catch (err) {}
-      });
-      return;
-    }
-
-    if (video.paused || Date.now() - resumeLastSaveAt < 5000) return;
-    resumeLastSaveAt = Date.now();
-    const action = getResumeSaveAction(Number(video.currentTime), duration);
-    if (action === "skip") return;
-
-    withResumeStore((store) => {
-      if (action === "delete") {
-        if (!store[videoId]) return;
-        delete store[videoId];
-      } else {
-        store[videoId] = { t: Math.floor(video.currentTime), d: Math.round(duration), at: Date.now() };
-      }
-      resumeStore = pruneResumeStore(store);
-      chrome.storage.local.set({ [RESUME_STORAGE_KEY]: resumeStore });
-    });
-  }
-
   // ── Main loop ─────────────────────────────────────────
 
   function mainLoop() {
@@ -5633,7 +5418,6 @@ declare global {
       if (adState.active || adState.overlayEl) cleanupRuntimeState();
       enforceAutoplayGuards();
       applyPlayerPreferences();
-      runResumePlayback();
       runPlayerUiTick();
       return;
     }
@@ -5707,7 +5491,6 @@ declare global {
       cleanupRuntimeState();
     } else if (!adPlaying && !adState.active) {
       applyPlayerPreferences();
-      runResumePlayback();
       runPlayerUiTick();
       const orphans = document.querySelectorAll("#" + OVERLAY_ID);
       if (orphans.length > 0) orphans.forEach(el => el.remove());
@@ -5735,7 +5518,6 @@ declare global {
       { combo: config.shortcutSpeedUp, action: "speed-up" },
       { combo: config.shortcutVolumeDown, action: "volume-down" },
       { combo: config.shortcutVolumeUp, action: "volume-up" },
-      { combo: config.shortcutCinema, action: "cinema" },
       { combo: config.shortcutScreenshot, action: "screenshot" },
       { combo: config.shortcutPopup, action: "popup" },
       { combo: config.shortcutLoop, action: "loop" },
@@ -5759,14 +5541,6 @@ declare global {
       const next = setUserVolume(current + direction * normalizeVolumeStep(config.playerVolumeStep), true, video);
       if (shouldUseVolumeBoost()) applyVolumeBoost(video);
       showPlayerFeedback("volume", next + "%", shouldUseVolumeBoost() ? "Boost " + normalizeVolumeBoostLevel(config.volumeBoostLevel) + "x" : "");
-      return;
-    }
-
-    if (matched.action === "cinema") {
-      toggleCinemaMode();
-      showPlayerFeedback("settings", adState.cinemaActive ? "Cinema ligado" : "Cinema desligado");
-      refreshPlayerControlStates();
-      refreshGearItems();
       return;
     }
 
@@ -5827,117 +5601,9 @@ declare global {
   window.addEventListener("scroll", scheduleMiniplayerUpdate, { passive: true });
   window.addEventListener("resize", scheduleMiniplayerUpdate);
 
+  // Cleanup ids of the retired floating PiP button.
   const PIP_BTN_ID = 'ytp-pip-float-btn';
   const PIP_STYLE_ID = 'ytp-pip-style';
-
-  function injectPipStyles() {
-    if (document.getElementById(PIP_STYLE_ID)) return;
-    const style = document.createElement('style');
-    style.id = PIP_STYLE_ID;
-    style.textContent = `
-      #${PIP_BTN_ID} {
-        position: absolute;
-        bottom: 60px;
-        right: 16px;
-        z-index: 99998;
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
-        background: rgba(0, 0, 0, 0.7);
-        border: 1.5px solid rgba(255, 255, 255, 0.2);
-        color: #fff;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        opacity: 0;
-        transition: opacity 0.3s ease, transform 0.2s ease, background 0.2s ease;
-        pointer-events: auto;
-        backdrop-filter: blur(8px);
-        -webkit-backdrop-filter: blur(8px);
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
-      }
-      .html5-video-player:hover #${PIP_BTN_ID},
-      #${PIP_BTN_ID}:focus {
-        opacity: 1;
-      }
-      #${PIP_BTN_ID}:hover {
-        background: rgba(200, 60, 60, 0.85);
-        border-color: rgba(255, 255, 255, 0.35);
-        transform: scale(1.1);
-      }
-      #${PIP_BTN_ID}:active {
-        transform: scale(0.95);
-      }
-      #${PIP_BTN_ID} svg {
-        width: 20px;
-        height: 20px;
-        pointer-events: none;
-      }
-      #${PIP_BTN_ID}.pip-active {
-        background: rgba(200, 60, 60, 0.9);
-        border-color: rgba(200, 60, 60, 0.6);
-        box-shadow: 0 0 12px rgba(200, 60, 60, 0.4);
-      }
-      .html5-video-player:hover #${PIP_BTN_ID}.pip-active {
-        opacity: 1;
-      }
-    `;
-    (document.head || document.documentElement).appendChild(style);
-  }
-
-  function createPipButton() {
-    if (document.getElementById(PIP_BTN_ID)) return;
-    injectPipStyles();
-
-    const player = document.querySelector('#movie_player') || document.querySelector('.html5-video-player');
-    if (!player) return;
-
-    const btn = document.createElement('button');
-    btn.id = PIP_BTN_ID;
-    btn.title = 'Player Flutuante (PiP)';
-    btn.innerHTML = `
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
-        <rect x="12" y="10" width="8" height="6" rx="1" ry="1" fill="currentColor" opacity="0.4"/>
-      </svg>
-    `;
-
-    btn.addEventListener('click', async (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-
-      const video = getMainVideo();
-      if (!video) return;
-
-      try {
-        if (document.pictureInPictureElement) {
-          await document.exitPictureInPicture();
-          btn.classList.remove('pip-active');
-        } else {
-          await video.requestPictureInPicture();
-          btn.classList.add('pip-active');
-        }
-      } catch (err) {
-        console.warn('[YouTube Extension] PiP error:', err);
-      }
-    });
-
-    player.appendChild(btn);
-
-    // Listen for PiP state changes to update button
-    const video = getMainVideo();
-    if (video) {
-      video.addEventListener('enterpictureinpicture', () => {
-        const b = document.getElementById(PIP_BTN_ID);
-        if (b) b.classList.add('pip-active');
-      });
-      video.addEventListener('leavepictureinpicture', () => {
-        const b = document.getElementById(PIP_BTN_ID);
-        if (b) b.classList.remove('pip-active');
-      });
-    }
-  }
 
   function removePipButton() {
     const btn = document.getElementById(PIP_BTN_ID);
