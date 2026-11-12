@@ -10,6 +10,7 @@ Todas as mudancas relevantes deste projeto serao registradas aqui.
 - **Voltar dos Filtros para a engrenagem:** a animação de voltar aparece de verdade (a cópia do menu não carrega mais os tamanhos e deslocamentos que o YouTube deixa nele).
 - **Trocar de monitor:** depois de usar o miniplayer, o player não se ajustava ao mover o navegador para outra tela e cortava os menus. Agora acompanha o tamanho da janela.
 - **Menus de filtro e da live:** mais espaço nas bordas, como os menus do YouTube.
+- **Aviso de anúncio:** textos sem reticências (não parecem mais cortados) e uma linha separando o texto do botão "Assistir".
 
 ## 5.3.3 — Animação da engrenagem
 

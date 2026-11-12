@@ -3886,7 +3886,7 @@ ${customCss}
         z-index: 60;
         display: flex;
         align-items: center;
-        gap: 4px;
+        gap: 0;
         padding: 4px 4px 4px 14px;
         border-radius: 18px;
         background: rgba(0, 0, 0, 0.6);
@@ -3915,6 +3915,14 @@ ${customCss}
       #${OVERLAY_ID}[data-state="waiting"] .yte-ad-text::before { background: rgba(255, 255, 255, 0.6); }
       #${OVERLAY_ID}[data-state="skipping"] .yte-ad-text::before { background: #3ea6ff; }
 
+      #${OVERLAY_ID} .yte-ad-text::after {
+        content: "";
+        width: 1px;
+        height: 16px;
+        margin: 0 10px 0 4px;
+        background: rgba(255, 255, 255, 0.25);
+      }
+
       #${OVERLAY_ID} button {
         height: 28px;
         padding: 0 12px;
@@ -3937,11 +3945,11 @@ ${customCss}
       if (remaining > 0) {
         return { state: "counting", text: "Pulando em " + remaining + "s" };
       }
-      if (skipButton) return { state: "skipping", text: "Pulando…" };
+      if (skipButton) return { state: "skipping", text: "Pulando anúncio" };
       if (!config.aggressiveSkip) {
         return { state: "waiting", text: "Esperando o botão Pular" };
       }
-      return { state: "skipping", text: "Acelerando o anúncio…" };
+      return { state: "skipping", text: "Acelerando anúncio" };
     }
     function renderOverlayState() {
       const overlay = document.getElementById(OVERLAY_ID);
