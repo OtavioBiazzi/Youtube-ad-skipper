@@ -2,6 +2,11 @@
 
 Todas as mudancas relevantes deste projeto serao registradas aqui.
 
+## 5.3.3 — Animação da engrenagem
+
+### Corrigido
+- **Engrenagem ⇄ Filtros:** volta a transição da 5.2.7 (o menu muda de tamanho enquanto um painel sai e o outro entra), nos dois sentidos, sem mexer por dentro do menu do YouTube (que era o que fazia ele sumir).
+
 ## 5.3.2 — Ajustes rápidos
 
 ### Corrigido

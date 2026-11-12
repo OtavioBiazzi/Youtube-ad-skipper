@@ -4538,22 +4538,7 @@ ${customCss}
     function renderFilterPanel(panel, direction = "none") {
       const host = {
         render: (dir) => renderFilterPanel(panel, dir),
-        back: () => {
-          const from = panel.getBoundingClientRect();
-          closeFilterPanel();
-          const player = getYouTubePlayer();
-          const gear = player?.querySelector(".ytp-settings-button");
-          window.setTimeout(() => {
-            gear?.click();
-            requestAnimationFrame(() => {
-              const menu = player?.querySelector(".ytp-settings-menu");
-              if (!menu || getComputedStyle(menu).display === "none") return;
-              morphPanelFrom(menu, from.width, from.height);
-              const view = menu.querySelector(".ytp-panel");
-              if (view) slidePanels(null, view, "back");
-            });
-          }, 0);
-        }
+        back: () => backToGearMenu(panel)
       };
       const panelEl = buildFilterPanelEl(host);
       const before = panel.getBoundingClientRect();
@@ -4730,15 +4715,84 @@ ${customCss}
         [{ transform: `translateX(${sign * 40}%)`, opacity: 0 }, { transform: "translateX(0)", opacity: 1 }],
         { duration: SUBMENU_ANIM_MS, easing }
       );
+      if (outgoing) {
+        outgoing.animate(
+          [{ transform: "translateX(0)", opacity: 1 }, { transform: `translateX(${-sign * 40}%)`, opacity: 0 }],
+          { duration: SUBMENU_ANIM_MS, easing, fill: "forwards" }
+        );
+      }
+    }
+    let gearSnapshot = null;
+    function crossPanels(panel, outgoing, incoming, from, to, direction, done) {
+      const content = panel.querySelector(".ytp-popup-content");
+      if (!content) {
+        done?.();
+        return;
+      }
+      const pin = (el, size) => {
+        el.style.position = "absolute";
+        el.style.right = "0";
+        el.style.bottom = "0";
+        el.style.width = size.width + "px";
+        el.style.height = size.height + "px";
+      };
+      pin(outgoing, from);
+      pin(incoming, to);
+      outgoing.style.pointerEvents = "none";
+      if (outgoing.parentElement !== content) content.appendChild(outgoing);
+      if (incoming.parentElement !== content) content.appendChild(incoming);
+      const easing = "cubic-bezier(0.4, 0, 0.2, 1)";
+      panel.animate(
+        [{ width: from.width + "px", height: from.height + "px" }, { width: to.width + "px", height: to.height + "px" }],
+        { duration: SUBMENU_ANIM_MS, easing }
+      );
+      slidePanels(outgoing, incoming, direction);
+      window.setTimeout(() => {
+        outgoing.remove();
+        incoming.style.position = "";
+        incoming.style.right = "";
+        incoming.style.bottom = "";
+        done?.();
+      }, SUBMENU_ANIM_MS);
     }
     function openGearFilterSubmenu() {
       const player = getYouTubePlayer();
       const menu = player?.querySelector(".ytp-settings-menu");
-      const from = menu && getComputedStyle(menu).display !== "none" ? menu.getBoundingClientRect() : null;
+      const visible = !!menu && getComputedStyle(menu).display !== "none";
+      const from = visible ? menu.getBoundingClientRect() : null;
+      const view = visible ? menu.querySelector(".ytp-popup-content > .ytp-panel") : null;
+      gearSnapshot = view && from ? { view: view.cloneNode(true), width: from.width, height: from.height } : null;
       closeYouTubeSettingsMenu();
-      const panel = openFilterPanel("forward");
-      if (!panel || !from || from.width <= 0) return;
-      morphPanelFrom(panel, from.width, from.height);
+      const panel = openFilterPanel("none");
+      if (!panel || !gearSnapshot) return;
+      const incoming = panel.querySelector(".ytp-popup-content > .ytp-panel");
+      if (!incoming) return;
+      const to = panel.getBoundingClientRect();
+      panel.classList.add("yte-from-gear");
+      crossPanels(panel, gearSnapshot.view.cloneNode(true), incoming, gearSnapshot, { width: to.width, height: to.height }, "forward");
+    }
+    function backToGearMenu(panel) {
+      const player = getYouTubePlayer();
+      const gear = player?.querySelector(".ytp-settings-button");
+      const ours = panel.querySelector(".ytp-popup-content > .ytp-panel");
+      const reopen = () => {
+        gear?.click();
+        window.setTimeout(() => {
+          closeFilterPanel();
+          panel.style.width = "";
+          panel.style.height = "";
+        }, 120);
+      };
+      if (!gearSnapshot || !ours) {
+        closeFilterPanel();
+        window.setTimeout(() => gear?.click(), 0);
+        return;
+      }
+      const from = panel.getBoundingClientRect();
+      const target = { width: gearSnapshot.width, height: gearSnapshot.height };
+      panel.style.width = target.width + "px";
+      panel.style.height = target.height + "px";
+      crossPanels(panel, ours, gearSnapshot.view.cloneNode(true), { width: from.width, height: from.height }, target, "back", reopen);
     }
     function morphPanelFrom(panel, fromWidth, fromHeight) {
       const to = panel.getBoundingClientRect();
