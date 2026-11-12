@@ -3854,7 +3854,7 @@
         padding: 0;
         color: #fff;
         opacity: 1;
-        font: 500 14px/1 "YouTube Sans", Roboto, Arial, sans-serif;
+        font: 600 16px/1 "YouTube Sans", Roboto, Arial, sans-serif;
         letter-spacing: 0.01em;
         transition: opacity 0.12s ease;
       }
@@ -3886,7 +3886,8 @@
 
       #${PLAYER_CONTROLS_ID} .yte-btn--text {
         width: auto;
-        min-width: 42px;
+        min-width: 48px;
+        font-size: 18px;
         padding: 0 6px;
         font-variant-numeric: tabular-nums;
       }
@@ -3894,7 +3895,7 @@
       #${PLAYER_CONTROLS_ID} .yte-live {
         gap: 6px;
         padding: 0 10px 0 8px;
-        font-size: 12px;
+        font-size: 14px;
       }
 
       #${PLAYER_CONTROLS_ID} .yte-live::before {
