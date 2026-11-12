@@ -12,8 +12,7 @@ import {
 } from "./shared/adTiming";
 import {
   DEFAULT_SETTINGS,
-  PLAYER_DEFAULTS_PROFILE,
-  PLAYER_DEFAULTS_PROFILE_VERSION,
+  getSettingsMigrationPatch,
   SETTINGS_EXPORT_KEYS,
   migrateSettings,
   type ExtensionSettings,
@@ -42,6 +41,8 @@ type OptionsSettings = ExtensionSettings;
 
 const DEFAULT = DEFAULT_SETTINGS;
 const DEFAULT_VALUES = DEFAULT_SETTINGS as unknown as Record<string, PlannedSettingValue>;
+// Declared up-front: renderToolbarControlLocks() can run from the first storage callback.
+let playerControlsEnabledState = true;
 
 
 // ── Elements ─────────────────────────────────────
@@ -202,14 +203,9 @@ function announcePreset(id: SettingsPresetId, button: HTMLButtonElement) {
 // ── Load ─────────────────────────────────────────
 
 chrome.storage.local.get(DEFAULT_VALUES, (s: any) => {
-  const storedProfileVersion = Number(s.playerDefaultsProfileVersion) || 0;
+  const migrationPatch = getSettingsMigrationPatch(s.playerDefaultsProfileVersion);
   s = migrateSettings(s);
-  if (storedProfileVersion < PLAYER_DEFAULTS_PROFILE_VERSION) {
-    chrome.storage.local.set({
-      ...PLAYER_DEFAULTS_PROFILE,
-      playerDefaultsProfileVersion: PLAYER_DEFAULTS_PROFILE_VERSION,
-    });
-  }
+  if (migrationPatch) chrome.storage.local.set(migrationPatch);
 
   initialState = JSON.parse(JSON.stringify(s));
 
@@ -615,6 +611,49 @@ optToolbarEnabled.addEventListener("change", () => {
   renderToolbarControlLocks();
 });
 
+// ── Where the player buttons live: inside YouTube's bar, below the video, both or off ──
+const optControlsPlacement = byId<HTMLSelectElement>("opt-controls-placement");
+
+function getControlsPlacement(inside: boolean, below: boolean) {
+  return inside && below ? "both" : inside ? "inside" : below ? "below" : "off";
+}
+
+function renderControlsPlacement() {
+  optControlsPlacement.value = getControlsPlacement(playerControlsEnabledState, optToolbarEnabled.checked);
+  renderToolbarControlLocks();
+}
+
+optControlsPlacement.addEventListener("change", () => {
+  const value = optControlsPlacement.value;
+  playerControlsEnabledState = value === "inside" || value === "both";
+  optToolbarEnabled.checked = value === "below" || value === "both";
+  chrome.storage.local.set({ playerControlsEnabled: playerControlsEnabledState, toolbarEnabled: optToolbarEnabled.checked });
+  renderToolbarControlLocks();
+});
+
+chrome.storage.local.get({ playerControlsEnabled: true }, (data: any) => {
+  playerControlsEnabledState = data.playerControlsEnabled !== false;
+  renderControlsPlacement();
+});
+
+// Live value next to every slider.
+function renderSliderOutputs() {
+  document.querySelectorAll<HTMLInputElement>(".slider-row input[type=range]").forEach((input) => {
+    const output = input.parentElement?.querySelector("output");
+    const unit = input.dataset.setting === "videoFilterHue" ? "°" : "%";
+    if (output) output.textContent = input.value + unit;
+  });
+}
+document.querySelectorAll<HTMLInputElement>(".slider-row input[type=range]").forEach((input) => {
+  input.addEventListener("input", renderSliderOutputs);
+  input.addEventListener("dblclick", () => {
+    input.value = input.dataset.setting === "videoFilterHue" || input.dataset.setting === "videoFilterSepia" || input.dataset.setting === "videoFilterGrayscale" ? "0" : "100";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+});
+setTimeout(renderSliderOutputs, 150);
+
 optToolbarPosition.addEventListener("change", () => {
   chrome.storage.local.set({ toolbarPosition: normalizeToolbarPosition(optToolbarPosition.value) });
 });
@@ -732,7 +771,9 @@ function readPlannedControlValue(control: HTMLInputElement | HTMLSelectElement |
     return control.checked;
   }
 
-  if (control instanceof HTMLInputElement && control.type === "number") {
+  // Numeric settings stay numbers in storage (ranges and selects included),
+  // otherwise normalizeSettings() would drop them as the wrong type.
+  if ((control instanceof HTMLInputElement && (control.type === "number" || control.type === "range")) || typeof DEFAULT_VALUES[key] === "number") {
     const value = Number(control.value);
     return Number.isFinite(value) ? value : DEFAULT_VALUES[key] || 0;
   }
@@ -930,7 +971,10 @@ function importSettingsBackup(button: HTMLElement) {
 // ── Render ────────────────────────────────────────
 
 function renderDelay(v: number, aggressive: boolean, instant: boolean) {
-  delayValue.textContent = String(instant ? 0 : v);
+  const shown = instant ? 0 : v;
+  delayValue.textContent = String(shown);
+  const unit = document.getElementById("delay-unit");
+  if (unit) unit.textContent = shown === 1 ? "segundo" : "segundos";
   if (!aggressive) {
     delayHint.textContent = "Modo agressivo desligado: aguarda o botão de pular aparecer naturalmente.";
     delayHint.style.color = "hsl(45, 75%, 52%)";
@@ -1113,9 +1157,11 @@ function renderMiniplayerControlLocks() {
 }
 
 function renderToolbarControlLocks() {
-  const disabled = !optToolbarEnabled.checked;
-  optToolbarPosition.disabled = disabled;
-  optToolbarCenter.disabled = disabled;
+  const belowEnabled = optToolbarEnabled.checked;
+  const anyEnabled = belowEnabled || playerControlsEnabledState;
+  const disabled = !anyEnabled;
+  optToolbarPosition.disabled = !belowEnabled;
+  optToolbarCenter.disabled = !belowEnabled;
   optToolbarLoop.disabled = disabled;
   optToolbarSpeed.disabled = disabled;
   optToolbarPopup.disabled = disabled;
@@ -1339,10 +1385,12 @@ chrome.storage.onChanged.addListener((changes) => {
   if (changes.miniplayerSize) optMiniplayerSize.value = normalizeMiniplayerSize(changes.miniplayerSize.newValue);
   if (changes.miniplayerPosition) optMiniplayerPosition.value = normalizeMiniplayerPosition(changes.miniplayerPosition.newValue);
   if (changes.playerPopupSize) optPlayerPopupSize.value = normalizePlayerPopupSize(changes.playerPopupSize.newValue);
-  if (changes.toolbarEnabled) {
-    optToolbarEnabled.checked = changes.toolbarEnabled.newValue !== false;
-    renderToolbarControlLocks();
+  if (changes.toolbarEnabled || changes.playerControlsEnabled) {
+    if (changes.toolbarEnabled) optToolbarEnabled.checked = changes.toolbarEnabled.newValue !== false;
+    if (changes.playerControlsEnabled) playerControlsEnabledState = changes.playerControlsEnabled.newValue !== false;
+    renderControlsPlacement();
   }
+  if (Object.keys(changes).some((key) => key.startsWith("videoFilter"))) setTimeout(renderSliderOutputs, 50);
   if (changes.toolbarPosition) optToolbarPosition.value = normalizeToolbarPosition(changes.toolbarPosition.newValue);
   if (changes.toolbarCenter) optToolbarCenter.checked = changes.toolbarCenter.newValue !== false;
   if (changes.toolbarLoop) optToolbarLoop.checked = changes.toolbarLoop.newValue !== false;
@@ -1374,3 +1422,82 @@ chrome.storage.onChanged.addListener((changes) => {
 });
 
 export {};
+
+// ── Playback diagnostics ─────────────────────────
+
+const PLAYBACK_REASON_LABELS: Record<string, string> = {
+  "background-autoplay": "Autoplay bloqueado em aba de fundo",
+  "foreground-autoplay": "Autoplay bloqueado na aba ativa",
+  "autoplay-disable-all": "Autoplay desativado (todos)",
+  "background-tab-playback-signal": "Outra aba começou a tocar",
+  "skip-fallback": "Anúncio avançado até o fim",
+  "resume-playback": "Retomado de onde você parou",
+  "adblock-warning-removed": "Vídeo retomado após aviso de bloqueador",
+};
+
+function renderPlaybackLog() {
+  const list = document.getElementById("playback-log");
+  if (!list || !chrome?.storage?.local) return;
+  chrome.storage.local.get({ playbackEventLog: [] }, (data: any) => {
+    const log = Array.isArray(data.playbackEventLog) ? data.playbackEventLog : [];
+    list.textContent = "";
+    if (!log.length) {
+      const empty = document.createElement("li");
+      empty.className = "playback-log-empty";
+      empty.textContent = "Nenhuma ação registrada. A extensão não pausou nenhum vídeo.";
+      list.appendChild(empty);
+      return;
+    }
+    for (const entry of log.slice(0, 15)) {
+      const item = document.createElement("li");
+      const when = new Date(Number(entry.at) || 0);
+      const label = PLAYBACK_REASON_LABELS[entry.reason] || String(entry.reason || entry.kind || "?");
+      const time = document.createElement("time");
+      time.textContent = when.toLocaleString();
+      const text = document.createElement("span");
+      text.textContent = `${label} · ${Number(entry.time) || 0}s${entry.hidden ? " · aba em segundo plano" : ""}${entry.video ? " · " + entry.video : ""}`;
+      item.append(time, text);
+      list.appendChild(item);
+    }
+  });
+}
+
+document.getElementById("playback-log-refresh")?.addEventListener("click", renderPlaybackLog);
+document.getElementById("playback-log-clear")?.addEventListener("click", () => {
+  chrome.storage.local.set({ playbackEventLog: [] }, renderPlaybackLog);
+});
+renderPlaybackLog();
+
+// ── Layout helpers: sticky offsets and active section in the nav ─────────
+
+function syncHeaderHeight() {
+  const header = document.querySelector(".app-header") as HTMLElement | null;
+  if (header) document.documentElement.style.setProperty("--app-header-height", header.offsetHeight + "px");
+}
+syncHeaderHeight();
+window.addEventListener("resize", syncHeaderHeight);
+
+(function setupNavScrollSpy() {
+  const links = Array.from(document.querySelectorAll<HTMLAnchorElement>(".module-nav a[href^='#']"));
+  const sections = links
+    .map((link) => document.getElementById(link.getAttribute("href")!.slice(1)))
+    .filter((section): section is HTMLElement => !!section);
+  if (!sections.length) return;
+
+  // Active = last section whose top passed a line just under the sticky header.
+  let raf = 0;
+  const update = () => {
+    raf = 0;
+    const line = (document.querySelector(".app-header") as HTMLElement | null)?.offsetHeight || 64;
+    let current = sections[0];
+    for (const section of sections) {
+      if (section.getBoundingClientRect().top - line - 120 <= 0) current = section;
+    }
+    if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4) current = sections[sections.length - 1];
+    for (const link of links) link.classList.toggle("is-active", link.getAttribute("href") === "#" + current.id);
+  };
+  const schedule = () => { if (!raf) raf = requestAnimationFrame(update); };
+  window.addEventListener("scroll", schedule, { passive: true });
+  window.addEventListener("resize", schedule);
+  update();
+})();

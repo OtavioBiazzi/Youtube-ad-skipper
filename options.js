@@ -38,12 +38,12 @@
     const safe = Number.isFinite(n) ? n : SAFE_AD_SPEED_RATE;
     return safe.toFixed(safe % 1 === 0 ? 0 : 1) + "x";
   }
-  const PLAYER_DEFAULTS_PROFILE_VERSION = 2;
+  const PLAYER_DEFAULTS_PROFILE_VERSION = 5;
   const PLAYER_DEFAULTS_PROFILE = {
     playerSpeedEnabled: true,
     playerSpeedStep: 0.02,
     playerSpeedWheel: true,
-    autoplayBlockBackground: true,
+    autoplayBlockBackground: false,
     autoplayAllowPlaylists: true,
     miniplayerEnabled: true,
     miniplayerSize: "480x270",
@@ -115,7 +115,7 @@
     volumeBoostLevel: 2,
     volumeBoostAuto: false,
     playerWheelInvert: false,
-    autoplayBlockBackground: true,
+    autoplayBlockBackground: false,
     autoplayBlockForeground: false,
     autoplayAllowPlaylists: true,
     pauseBackgroundTabs: false,
@@ -202,7 +202,17 @@
     videoFilterContrast: 100,
     videoFilterSaturate: 100,
     videoFilterGrayscale: 0,
-    videoFilterSepia: 0
+    videoFilterSepia: 0,
+    resumePlaybackEnabled: false,
+    playerControlsEnabled: true,
+    playerControlsStyle: "pill",
+    settingsMenuItemsEnabled: true,
+    skipSurveysEnabled: true,
+    playerEndTimeEnabled: false,
+    liveCatchUpEnabled: true,
+    liveCatchUpTarget: 3,
+    liveCatchUpMaxRate: 1.25,
+    videoFilterHue: 0
   };
   const SETTINGS_EXPORT_KEYS = Object.keys(DEFAULT_SETTINGS);
   function normalizeSettings(raw = {}) {
@@ -227,13 +237,40 @@
     }
     return normalized;
   }
+  const SETTINGS_MIGRATIONS = {
+    2: PLAYER_DEFAULTS_PROFILE,
+    // v3: stability overhaul. These defaults caused surprise pauses and comment
+    // menus opening on their own.
+    3: {
+      autoplayBlockBackground: false,
+      appearanceSortNewestComments: false
+    },
+    // v4: controls moved inside YouTube's own control bar; the separate bar
+    // below the video becomes optional.
+    4: {
+      playerControlsEnabled: true,
+      toolbarEnabled: false
+    },
+    // v5: the "termina às" clock is opt-in; buttons default to their own pill.
+    5: {
+      playerEndTimeEnabled: false,
+      playerControlsStyle: "pill"
+    }
+  };
+  function getSettingsMigrationPatch(storedVersion) {
+    const version = Number(storedVersion) || 0;
+    if (version >= PLAYER_DEFAULTS_PROFILE_VERSION) return null;
+    const patch = {};
+    for (let next = version + 1; next <= PLAYER_DEFAULTS_PROFILE_VERSION; next += 1) {
+      Object.assign(patch, SETTINGS_MIGRATIONS[next] || {});
+    }
+    patch.playerDefaultsProfileVersion = PLAYER_DEFAULTS_PROFILE_VERSION;
+    return patch;
+  }
   function migrateSettings(raw = {}) {
     const settings = normalizeSettings(raw);
-    if ((Number(settings.playerDefaultsProfileVersion) || 0) < PLAYER_DEFAULTS_PROFILE_VERSION) {
-      Object.assign(settings, PLAYER_DEFAULTS_PROFILE, {
-        playerDefaultsProfileVersion: PLAYER_DEFAULTS_PROFILE_VERSION
-      });
-    }
+    const patch = getSettingsMigrationPatch(raw.playerDefaultsProfileVersion);
+    if (patch) Object.assign(settings, patch);
     return settings;
   }
   const SHORTCUT_MODIFIERS = ["Ctrl", "Alt", "Shift", "Meta"];
@@ -343,6 +380,7 @@
   }
   const DEFAULT = DEFAULT_SETTINGS;
   const DEFAULT_VALUES = DEFAULT_SETTINGS;
+  let playerControlsEnabledState = true;
   function byId(id) {
     return document.getElementById(id);
   }
@@ -477,14 +515,9 @@
     }, 3500);
   }
   chrome.storage.local.get(DEFAULT_VALUES, (s) => {
-    const storedProfileVersion = Number(s.playerDefaultsProfileVersion) || 0;
+    const migrationPatch = getSettingsMigrationPatch(s.playerDefaultsProfileVersion);
     s = migrateSettings(s);
-    if (storedProfileVersion < PLAYER_DEFAULTS_PROFILE_VERSION) {
-      chrome.storage.local.set({
-        ...PLAYER_DEFAULTS_PROFILE,
-        playerDefaultsProfileVersion: PLAYER_DEFAULTS_PROFILE_VERSION
-      });
-    }
+    if (migrationPatch) chrome.storage.local.set(migrationPatch);
     initialState = JSON.parse(JSON.stringify(s));
     optEnabled.checked = s.enabled;
     optAdSkipperEnabled.checked = s.adSkipperEnabled !== false;
@@ -815,6 +848,41 @@
     chrome.storage.local.set({ toolbarEnabled: optToolbarEnabled.checked });
     renderToolbarControlLocks();
   });
+  const optControlsPlacement = byId("opt-controls-placement");
+  function getControlsPlacement(inside, below) {
+    return inside && below ? "both" : inside ? "inside" : below ? "below" : "off";
+  }
+  function renderControlsPlacement() {
+    optControlsPlacement.value = getControlsPlacement(playerControlsEnabledState, optToolbarEnabled.checked);
+    renderToolbarControlLocks();
+  }
+  optControlsPlacement.addEventListener("change", () => {
+    const value = optControlsPlacement.value;
+    playerControlsEnabledState = value === "inside" || value === "both";
+    optToolbarEnabled.checked = value === "below" || value === "both";
+    chrome.storage.local.set({ playerControlsEnabled: playerControlsEnabledState, toolbarEnabled: optToolbarEnabled.checked });
+    renderToolbarControlLocks();
+  });
+  chrome.storage.local.get({ playerControlsEnabled: true }, (data) => {
+    playerControlsEnabledState = data.playerControlsEnabled !== false;
+    renderControlsPlacement();
+  });
+  function renderSliderOutputs() {
+    document.querySelectorAll(".slider-row input[type=range]").forEach((input) => {
+      const output = input.parentElement?.querySelector("output");
+      const unit = input.dataset.setting === "videoFilterHue" ? "°" : "%";
+      if (output) output.textContent = input.value + unit;
+    });
+  }
+  document.querySelectorAll(".slider-row input[type=range]").forEach((input) => {
+    input.addEventListener("input", renderSliderOutputs);
+    input.addEventListener("dblclick", () => {
+      input.value = input.dataset.setting === "videoFilterHue" || input.dataset.setting === "videoFilterSepia" || input.dataset.setting === "videoFilterGrayscale" ? "0" : "100";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+  });
+  setTimeout(renderSliderOutputs, 150);
   optToolbarPosition.addEventListener("change", () => {
     chrome.storage.local.set({ toolbarPosition: normalizeToolbarPosition(optToolbarPosition.value) });
   });
@@ -912,7 +980,7 @@
     if (control instanceof HTMLInputElement && control.type === "checkbox") {
       return control.checked;
     }
-    if (control instanceof HTMLInputElement && control.type === "number") {
+    if (control instanceof HTMLInputElement && (control.type === "number" || control.type === "range") || typeof DEFAULT_VALUES[key] === "number") {
       const value = Number(control.value);
       return Number.isFinite(value) ? value : DEFAULT_VALUES[key] || 0;
     }
@@ -1090,7 +1158,10 @@
     input.click();
   }
   function renderDelay(v, aggressive, instant) {
-    delayValue.textContent = String(instant ? 0 : v);
+    const shown = instant ? 0 : v;
+    delayValue.textContent = String(shown);
+    const unit = document.getElementById("delay-unit");
+    if (unit) unit.textContent = shown === 1 ? "segundo" : "segundos";
     if (!aggressive) {
       delayHint.textContent = "Modo agressivo desligado: aguarda o botão de pular aparecer naturalmente.";
       delayHint.style.color = "hsl(45, 75%, 52%)";
@@ -1247,9 +1318,11 @@
     optMiniplayerPosition.disabled = !optMiniplayerEnabled.checked;
   }
   function renderToolbarControlLocks() {
-    const disabled = !optToolbarEnabled.checked;
-    optToolbarPosition.disabled = disabled;
-    optToolbarCenter.disabled = disabled;
+    const belowEnabled = optToolbarEnabled.checked;
+    const anyEnabled = belowEnabled || playerControlsEnabledState;
+    const disabled = !anyEnabled;
+    optToolbarPosition.disabled = !belowEnabled;
+    optToolbarCenter.disabled = !belowEnabled;
     optToolbarLoop.disabled = disabled;
     optToolbarSpeed.disabled = disabled;
     optToolbarPopup.disabled = disabled;
@@ -1452,10 +1525,12 @@
     if (changes.miniplayerSize) optMiniplayerSize.value = normalizeMiniplayerSize(changes.miniplayerSize.newValue);
     if (changes.miniplayerPosition) optMiniplayerPosition.value = normalizeMiniplayerPosition(changes.miniplayerPosition.newValue);
     if (changes.playerPopupSize) optPlayerPopupSize.value = normalizePlayerPopupSize(changes.playerPopupSize.newValue);
-    if (changes.toolbarEnabled) {
-      optToolbarEnabled.checked = changes.toolbarEnabled.newValue !== false;
-      renderToolbarControlLocks();
+    if (changes.toolbarEnabled || changes.playerControlsEnabled) {
+      if (changes.toolbarEnabled) optToolbarEnabled.checked = changes.toolbarEnabled.newValue !== false;
+      if (changes.playerControlsEnabled) playerControlsEnabledState = changes.playerControlsEnabled.newValue !== false;
+      renderControlsPlacement();
     }
+    if (Object.keys(changes).some((key) => key.startsWith("videoFilter"))) setTimeout(renderSliderOutputs, 50);
     if (changes.toolbarPosition) optToolbarPosition.value = normalizeToolbarPosition(changes.toolbarPosition.newValue);
     if (changes.toolbarCenter) optToolbarCenter.checked = changes.toolbarCenter.newValue !== false;
     if (changes.toolbarLoop) optToolbarLoop.checked = changes.toolbarLoop.newValue !== false;
@@ -1483,4 +1558,72 @@
     }
     checkRestartWarning();
   });
+  const PLAYBACK_REASON_LABELS = {
+    "background-autoplay": "Autoplay bloqueado em aba de fundo",
+    "foreground-autoplay": "Autoplay bloqueado na aba ativa",
+    "autoplay-disable-all": "Autoplay desativado (todos)",
+    "background-tab-playback-signal": "Outra aba começou a tocar",
+    "skip-fallback": "Anúncio avançado até o fim",
+    "resume-playback": "Retomado de onde você parou",
+    "adblock-warning-removed": "Vídeo retomado após aviso de bloqueador"
+  };
+  function renderPlaybackLog() {
+    const list = document.getElementById("playback-log");
+    if (!list || !chrome?.storage?.local) return;
+    chrome.storage.local.get({ playbackEventLog: [] }, (data) => {
+      const log = Array.isArray(data.playbackEventLog) ? data.playbackEventLog : [];
+      list.textContent = "";
+      if (!log.length) {
+        const empty = document.createElement("li");
+        empty.className = "playback-log-empty";
+        empty.textContent = "Nenhuma ação registrada. A extensão não pausou nenhum vídeo.";
+        list.appendChild(empty);
+        return;
+      }
+      for (const entry of log.slice(0, 15)) {
+        const item = document.createElement("li");
+        const when = new Date(Number(entry.at) || 0);
+        const label = PLAYBACK_REASON_LABELS[entry.reason] || String(entry.reason || entry.kind || "?");
+        const time = document.createElement("time");
+        time.textContent = when.toLocaleString();
+        const text = document.createElement("span");
+        text.textContent = `${label} · ${Number(entry.time) || 0}s${entry.hidden ? " · aba em segundo plano" : ""}${entry.video ? " · " + entry.video : ""}`;
+        item.append(time, text);
+        list.appendChild(item);
+      }
+    });
+  }
+  document.getElementById("playback-log-refresh")?.addEventListener("click", renderPlaybackLog);
+  document.getElementById("playback-log-clear")?.addEventListener("click", () => {
+    chrome.storage.local.set({ playbackEventLog: [] }, renderPlaybackLog);
+  });
+  renderPlaybackLog();
+  function syncHeaderHeight() {
+    const header = document.querySelector(".app-header");
+    if (header) document.documentElement.style.setProperty("--app-header-height", header.offsetHeight + "px");
+  }
+  syncHeaderHeight();
+  window.addEventListener("resize", syncHeaderHeight);
+  (function setupNavScrollSpy() {
+    const links = Array.from(document.querySelectorAll(".module-nav a[href^='#']"));
+    const sections = links.map((link) => document.getElementById(link.getAttribute("href").slice(1))).filter((section) => !!section);
+    if (!sections.length) return;
+    let raf = 0;
+    const update = () => {
+      raf = 0;
+      const line = document.querySelector(".app-header")?.offsetHeight || 64;
+      let current = sections[0];
+      for (const section of sections) {
+        if (section.getBoundingClientRect().top - line - 120 <= 0) current = section;
+      }
+      if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4) current = sections[sections.length - 1];
+      for (const link of links) link.classList.toggle("is-active", link.getAttribute("href") === "#" + current.id);
+    };
+    const schedule = () => {
+      if (!raf) raf = requestAnimationFrame(update);
+    };
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
+    update();
+  })();
 })();

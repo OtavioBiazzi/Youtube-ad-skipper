@@ -3,12 +3,16 @@ import {
   CODEC_SETTINGS_STORAGE_KEY,
   MAIN_FORCE_SKIP_MESSAGE,
   MAIN_FORCE_SKIP_RESULT,
+  MAIN_PLAYER_RESIZE_MESSAGE,
+  MAIN_PLAYER_COMMAND,
   MAIN_QUALITY_MESSAGE,
+  MAIN_QUALITY_RESULT,
   MAIN_SESSION_MESSAGE,
   MAIN_SPEED_THROUGH_MESSAGE,
   isBridgeMessage,
 } from "./shared/messages";
 import { getAdSeekTarget } from "./shared/adStrategy";
+import { pickBestQualityLevel } from "./shared/quality";
 
 (function() {
   const pageWindow: any = window;
@@ -87,8 +91,19 @@ import { getAdSeekTarget } from "./shared/adStrategy";
     return hadVideo && !keptVideo ? list : filtered;
   }
 
+  // Lives, premieres and post-live DVR streams are served through HLS/DASH
+  // manifests. Filtering them (or deleting the manifest URLs) left the player
+  // with nothing to play: the "black player" bug.
+  function isLiveResponse(response) {
+    const details = response?.videoDetails;
+    if (details?.isLive || details?.isUpcoming || details?.isPostLiveDvr) return true;
+    const streaming = response?.streamingData;
+    return !!streaming?.hlsManifestUrl && !Array.isArray(streaming?.adaptiveFormats);
+  }
+
   function filterStreamingData(streamingData) {
     if (!streamingData || typeof streamingData !== "object" || !hasCodecFilters()) return streamingData;
+    const before = (streamingData.adaptiveFormats || []).length + (streamingData.formats || []).length;
 
     if (Array.isArray(streamingData.formats)) {
       streamingData.formats = filterFormatList(streamingData.formats);
@@ -97,9 +112,11 @@ import { getAdSeekTarget } from "./shared/adStrategy";
       streamingData.adaptiveFormats = filterFormatList(streamingData.adaptiveFormats);
     }
 
-    if (codecSettings.forceAvc || codecSettings.forceStandardFps) {
+    // Only drop the DASH manifest (which would bypass the filtered list) when
+    // the filter actually removed something and a playable list remains.
+    const after = (streamingData.adaptiveFormats || []).length + (streamingData.formats || []).length;
+    if (after > 0 && after < before) {
       delete streamingData.dashManifestUrl;
-      delete streamingData.hlsManifestUrl;
     }
 
     return streamingData;
@@ -108,7 +125,7 @@ import { getAdSeekTarget } from "./shared/adStrategy";
   function filterPlayerResponse(response, depth = 0) {
     if (!response || typeof response !== "object" || !hasCodecFilters() || depth > 4) return response;
 
-    if (response.streamingData) {
+    if (response.streamingData && !isLiveResponse(response)) {
       filterStreamingData(response.streamingData);
     }
 
@@ -170,28 +187,51 @@ import { getAdSeekTarget } from "./shared/adStrategy";
 
   function updateCodecSettings(settings) {
     codecSettings = normalizeCodecSettings(settings);
+    ensureResponseHooks();
     try {
       localStorage.setItem(CODEC_SETTINGS_STORAGE_KEY, JSON.stringify(codecSettings));
     } catch (err) {}
     applyCodecFiltersToKnownGlobals();
   }
 
-  function setPlayerQuality(level) {
-    const target = String(level || "");
-    if (!target) return;
+  // Quality lives in the page's player API, which the content script cannot
+  // reach. Pick the best available level here and report what is playing.
+  function setPlayerQuality(level, query = false) {
     const player: any = document.getElementById("movie_player") || document.querySelector(".html5-video-player");
     if (!player) return;
-
+    let available: string[] = [];
     try {
-      if (typeof player.setPlaybackQualityRange === "function") {
-        target === "auto" ? player.setPlaybackQualityRange("auto") : player.setPlaybackQualityRange(target, target);
-      }
+      if (typeof player.getAvailableQualityLevels === "function") available = player.getAvailableQualityLevels() || [];
     } catch (err) {}
 
+    let applied = "";
+    const target = String(level || "");
+    if (target && !query) {
+      applied = pickBestQualityLevel(target, available);
+      try {
+        if (typeof player.setPlaybackQualityRange === "function") {
+          applied === "auto" ? player.setPlaybackQualityRange("auto") : player.setPlaybackQualityRange(applied, applied);
+        }
+      } catch (err) {}
+      try {
+        if (typeof player.setPlaybackQuality === "function") player.setPlaybackQuality(applied);
+      } catch (err) {}
+    }
+
+    let current = "";
     try {
-      if (typeof player.setPlaybackQuality === "function") {
-        player.setPlaybackQuality(target);
-      }
+      if (typeof player.getPlaybackQuality === "function") current = String(player.getPlaybackQuality() || "");
+    } catch (err) {}
+    window.postMessage({ source: MAIN_QUALITY_RESULT, token: bridgeSessionToken, current, available, applied, query }, "*");
+  }
+
+  // Small whitelist of player calls the content script needs.
+  function runPlayerCommand(command, value) {
+    const player: any = document.getElementById("movie_player") || document.querySelector(".html5-video-player");
+    if (!player) return;
+    try {
+      if (command === "setVolume" && typeof player.setVolume === "function") player.setVolume(Math.max(0, Math.min(100, Number(value) || 0)));
+      else if (command === "unMute" && typeof player.unMute === "function") player.unMute();
     } catch (err) {}
   }
 
@@ -219,7 +259,13 @@ import { getAdSeekTarget } from "./shared/adStrategy";
     );
   }
 
-  if (OVERRIDE_FEATURES.codecResponseFilters) {
+  let responseHooksInstalled = false;
+
+  // The global JSON.parse / Response.json hooks are only installed when a codec
+  // filter is actually enabled, so users without filters pay nothing.
+  function ensureResponseHooks() {
+    if (responseHooksInstalled || !OVERRIDE_FEATURES.codecResponseFilters || !hasCodecFilters()) return;
+    responseHooksInstalled = true;
     JSON.parse = function(text, reviver) {
       const parsed = originalJsonParse(text, reviver);
       return textLooksLikePlayerResponse(text) ? filterPlayerResponse(parsed) : parsed;
@@ -236,6 +282,8 @@ import { getAdSeekTarget } from "./shared/adStrategy";
       };
     }
   }
+
+  ensureResponseHooks();
 
   function getCapture(options) {
     return typeof options === "boolean" ? options : !!(options && options.capture);
@@ -277,7 +325,26 @@ import { getAdSeekTarget } from "./shared/adStrategy";
     ) || el;
   }
 
-  function clickSkipButton() {
+  function getMainVideo(): HTMLVideoElement | null {
+    const player = getPlayer();
+    if (!player) return null;
+    return (player.querySelector("video.html5-main-video") || player.querySelector("video")) as HTMLVideoElement | null;
+  }
+
+  // Messages from the content script arrive asynchronously. By the time one is
+  // handled the ad may already be over and the same <video> element may be
+  // playing the real content, so every destructive action re-checks this.
+  function isAdShowing() {
+    const player = getPlayer();
+    if (!player) return false;
+    if (player.classList.contains("ad-showing") || player.classList.contains("ad-interrupting")) return true;
+    const survey = player.querySelector(".ytp-ad-survey, .ytp-ad-survey-interstitial, .ytp-ad-survey-question") as HTMLElement | null;
+    return !!survey && (survey.offsetWidth > 0 || survey.offsetHeight > 0);
+  }
+
+  function clickSkipButton(skipSurveys = true) {
+    const root = getPlayer();
+    if (!root || !isAdShowing()) return false;
     const selectors = [
       ".ytp-skip-ad-button",
       ".ytp-ad-skip-button",
@@ -290,10 +357,14 @@ import { getAdSeekTarget } from "./shared/adStrategy";
       '[title*="Skip" i]',
       '[title*="Pular" i]',
       '[class*="skip"][class*="ad" i]',
+      ".ytp-ad-survey .ytp-ad-skip-button-modern",
+      '.ytp-ad-survey [class*="skip"] button',
+      '.ytp-ad-survey-interstitial [class*="skip"] button',
     ];
 
     for (const selector of selectors) {
-      for (const el of document.querySelectorAll(selector)) {
+      for (const el of root.querySelectorAll(selector)) {
+        if (!skipSurveys && el.closest(".ytp-ad-survey, .ytp-ad-survey-interstitial, .ytp-ad-survey-question")) continue;
         const target = getClickTarget(el);
         if (!target || typeof target.click !== "function" || !isVisible(target)) continue;
         target.dispatchEvent(new MouseEvent("mouseover", { bubbles: true, cancelable: true, view: window }));
@@ -336,14 +407,18 @@ import { getAdSeekTarget } from "./shared/adStrategy";
     return document.getElementById("movie_player") || document.querySelector(".html5-video-player");
   }
 
-  function forceSkipFromMainWorld(rate = 3) {
+  function forceSkipFromMainWorld(rate = 3, adSrc = "", skipSurveys = true) {
+    if (!isAdShowing()) return { ok: false, method: "no-ad" };
     const speedRate = normalizeAdRate(rate);
-    if (clickSkipButton()) {
+    if (clickSkipButton(skipSurveys)) {
       return { ok: true, method: "click" };
     }
 
     const player: any = getPlayer();
-    const video = document.querySelector("video");
+    const video = getMainVideo();
+    if (video && adSrc && video.currentSrc && video.currentSrc !== adSrc) {
+      return { ok: false, method: "source-changed" };
+    }
     let attempted = false;
 
     if (video) {
@@ -388,9 +463,11 @@ import { getAdSeekTarget } from "./shared/adStrategy";
     return { ok: attempted, method: attempted ? "seek" : "none" };
   }
 
-  function setSpeedThrough(rate) {
+  function setSpeedThrough(rate, adOnly = false) {
+    // Ad speed-through (> normal rates) must never leak into the real video.
+    if (adOnly && !isAdShowing()) return false;
     const player: any = getPlayer();
-    const video = document.querySelector("video");
+    const video = getMainVideo();
     let attempted = false;
 
     if (video) {
@@ -411,6 +488,26 @@ import { getAdSeekTarget } from "./shared/adStrategy";
     return attempted;
   }
 
+  // Tell YouTube's player its new size so controls/progress bar are laid out
+  // for the floating box; on exit a resize makes ytd-player recompute it.
+  function resizePlayerForMiniplayer(floating: boolean, width: number, height: number) {
+    const player: any = getPlayer();
+    if (!player) return;
+    const notify = () => {
+      if (!floating) {
+        window.dispatchEvent(new Event("resize"));
+        return;
+      }
+      try {
+        if (width > 0 && height > 0 && typeof player.setInternalSize === "function") {
+          player.setInternalSize(Math.round(width), Math.round(height));
+        }
+      } catch (err) {}
+    };
+    requestAnimationFrame(notify);
+    window.setTimeout(notify, 220);
+  }
+
   function isAuthorizedBridgeMessage(data) {
     return isBridgeMessage(data) && !!bridgeSessionToken && data.token === bridgeSessionToken;
   }
@@ -429,20 +526,28 @@ import { getAdSeekTarget } from "./shared/adStrategy";
       return;
     }
     if (data.source === MAIN_FORCE_SKIP_MESSAGE) {
-      const result = forceSkipFromMainWorld(data.rate);
+      const result = forceSkipFromMainWorld(data.rate, typeof data.adSrc === "string" ? data.adSrc : "", data.skipSurveys !== false);
       window.postMessage({ source: MAIN_FORCE_SKIP_RESULT, token: bridgeSessionToken, ...result }, "*");
       return;
     }
     if (data.source === MAIN_SPEED_THROUGH_MESSAGE) {
-      setSpeedThrough(normalizePlaybackRate(data.rate));
+      setSpeedThrough(normalizePlaybackRate(data.rate), data.adOnly === true);
+      return;
+    }
+    if (data.source === MAIN_PLAYER_RESIZE_MESSAGE) {
+      resizePlayerForMiniplayer(data.floating === true, Number(data.width), Number(data.height));
       return;
     }
     if (data.source === MAIN_QUALITY_MESSAGE) {
-      setPlayerQuality(data.level);
+      setPlayerQuality(data.level, data.query === true);
+      return;
+    }
+    if (data.source === MAIN_PLAYER_COMMAND) {
+      runPlayerCommand(String(data.command || ""), data.value);
     }
   });
 
-  installPlayerResponseSetter();
+  if (hasCodecFilters()) installPlayerResponseSetter();
   applyCodecFiltersToKnownGlobals();
   document.addEventListener("yt-navigate-start", applyCodecFiltersToKnownGlobals, true);
   document.addEventListener("yt-navigate-finish", applyCodecFiltersToKnownGlobals, true);

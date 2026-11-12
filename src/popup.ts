@@ -1,4 +1,4 @@
-import { DEFAULT_SETTINGS, migrateSettings } from "./shared/settings";
+import { DEFAULT_SETTINGS, getSettingsMigrationPatch, migrateSettings } from "./shared/settings";
 
 function byId<T extends HTMLElement>(id: string): T {
   const element = document.getElementById(id);
@@ -100,7 +100,11 @@ try {
 }
 
 chrome.storage.local.get(DEFAULT_SETTINGS, (settings: PopupSettings) => {
-  settings = migrateSettings(settings) as unknown as PopupSettings;
+  // Persist the first-run/upgrade patch here too: otherwise a toggle changed
+  // in the popup before YouTube is opened would be overwritten by it later.
+  const migrationPatch = getSettingsMigrationPatch((settings as unknown as Record<string, unknown>).playerDefaultsProfileVersion);
+  if (migrationPatch) chrome.storage.local.set(migrationPatch);
+  settings = migrateSettings(settings as unknown as Record<string, unknown>) as unknown as PopupSettings;
   elements.enabled.checked = settings.enabled;
   elements.skipper.checked = settings.adSkipperEnabled !== false;
   elements.aggressive.checked = settings.aggressiveSkip;
@@ -178,3 +182,88 @@ for (const id of ["btn-open-settings", "btn-open-settings-main"]) {
 }
 
 export {};
+
+// ── Generic quick toggles (data-popup-setting) ──────────────
+
+const POPUP_SETTING_MESSAGES: Record<string, [string, string]> = {
+  miniplayerEnabled: ["Miniplayer ativado.", "Miniplayer desativado."],
+  resumePlaybackEnabled: ["Vídeos vão continuar de onde pararam.", "Continuar de onde parou desativado."],
+  liveCatchUpEnabled: ["Lives sem atraso: acelera de leve quando atrasar.", "Lives no ritmo normal."],
+  skipSurveysEnabled: ["Pesquisas serão puladas automaticamente.", "Pesquisas não serão puladas."],
+};
+
+const popupSettingInputs = Array.from(document.querySelectorAll<HTMLInputElement>("[data-popup-setting]"));
+chrome.storage.local.get(DEFAULT_SETTINGS, (settings: Record<string, unknown>) => {
+  const migrated = migrateSettings(settings) as Record<string, unknown>;
+  popupSettingInputs.forEach((input) => {
+    const key = input.dataset.popupSetting || "";
+    input.checked = migrated[key] !== false && !!migrated[key];
+  });
+});
+popupSettingInputs.forEach((input) => {
+  input.addEventListener("change", () => {
+    const key = input.dataset.popupSetting || "";
+    if (!key) return;
+    chrome.storage.local.set({ [key]: input.checked });
+    const [on, off] = POPUP_SETTING_MESSAGES[key] || ["Configuração aplicada.", "Configuração aplicada."];
+    announceChange(input.checked ? on : off);
+  });
+});
+
+// ── Where the player buttons live (segmented: Dentro / Fora / Off) ──────────
+
+const placementButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-placement]"));
+
+function renderPlacement(inside: boolean, below: boolean) {
+  const current = inside ? "inside" : below ? "below" : "off";
+  placementButtons.forEach((button) => button.setAttribute("aria-checked", String(button.dataset.placement === current)));
+}
+
+chrome.storage.local.get(DEFAULT_SETTINGS, (settings: Record<string, unknown>) => {
+  const migrated = migrateSettings(settings) as Record<string, unknown>;
+  renderPlacement(migrated.playerControlsEnabled !== false, migrated.toolbarEnabled !== false);
+});
+
+placementButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    const value = button.dataset.placement;
+    const inside = value === "inside";
+    const below = value === "below";
+    chrome.storage.local.set({ playerControlsEnabled: inside, toolbarEnabled: below });
+    renderPlacement(inside, below);
+    announceChange(inside ? "Botões dentro do player." : below ? "Botões numa barra abaixo do vídeo." : "Botões escondidos.");
+  });
+});
+
+// ── Visual of the in-player buttons (A/B: separate pill or divider) ─────────
+
+const styleButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-controls-style]"));
+const styleRow = document.getElementById("style-row");
+
+function renderControlsStyle(style: string, inside: boolean) {
+  const current = style === "divider" ? "divider" : "pill";
+  styleButtons.forEach((button) => button.setAttribute("aria-checked", String(button.dataset.controlsStyle === current)));
+  if (styleRow) styleRow.hidden = !inside;
+}
+
+chrome.storage.local.get(DEFAULT_SETTINGS, (settings: Record<string, unknown>) => {
+  const migrated = migrateSettings(settings) as Record<string, unknown>;
+  renderControlsStyle(String(migrated.playerControlsStyle), migrated.playerControlsEnabled !== false);
+});
+
+styleButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    const style = button.dataset.controlsStyle === "divider" ? "divider" : "pill";
+    chrome.storage.local.set({ playerControlsStyle: style });
+    renderControlsStyle(style, true);
+    announceChange(style === "pill" ? "Botões numa caixa própria." : "Botões junto com os do YouTube.");
+  });
+});
+
+chrome.storage.onChanged.addListener((changes) => {
+  if (!changes.playerControlsEnabled && !changes.playerControlsStyle) return;
+  chrome.storage.local.get(DEFAULT_SETTINGS, (settings: Record<string, unknown>) => {
+    const migrated = migrateSettings(settings) as Record<string, unknown>;
+    renderControlsStyle(String(migrated.playerControlsStyle), migrated.playerControlsEnabled !== false);
+  });
+});

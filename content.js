@@ -118,10 +118,20 @@
     '[title*="Skip" i]',
     '[title*="Pular" i]',
     '[class*="skip"][class*="ad" i]',
-    ".ytp-ad-overlay-close-button"
+    ".ytp-ad-overlay-close-button",
+    // Survey ads ("Pular pesquisa") use their own containers.
+    ".ytp-ad-survey .ytp-ad-skip-button-modern",
+    '.ytp-ad-survey [class*="skip"] button',
+    '.ytp-ad-survey-interstitial [class*="skip"] button'
   ];
+  const AD_SURVEY_SELECTORS = ".ytp-ad-survey, .ytp-ad-survey-interstitial, .ytp-ad-survey-question";
   function getYouTubePlayer(doc = document) {
     return doc.getElementById("movie_player") || doc.querySelector(".html5-video-player");
+  }
+  function getMainVideo(doc = document) {
+    const player = getYouTubePlayer(doc);
+    if (!player) return null;
+    return player.querySelector("video.html5-main-video") || player.querySelector("video");
   }
   function getClickableTarget(element) {
     if (!element) return null;
@@ -148,27 +158,39 @@
       return true;
     }
     const root = player || doc;
+    const survey = root.querySelector(AD_SURVEY_SELECTORS);
+    if (survey && (survey.offsetWidth > 0 || survey.offsetHeight > 0)) return true;
     const badges = root.querySelectorAll(
       ".ytp-ad-badge, .ytp-ad-visit-advertiser-button, .ytp-visit-advertiser-link"
     );
     return Array.from(badges).some((badge) => badge.offsetWidth > 0 || badge.offsetHeight > 0);
   }
+  let surveySkipEnabled = true;
+  function setSurveySkipEnabled(enabled) {
+    surveySkipEnabled = enabled;
+  }
+  function isSurveyElement(element) {
+    return !!element.closest(AD_SURVEY_SELECTORS);
+  }
   function findSkipAdButton(doc = document) {
     const root = getYouTubePlayer(doc) || doc.documentElement;
     for (const className of SKIP_BUTTON_CLASSES) {
       for (const element of root.getElementsByClassName(className)) {
+        if (!surveySkipEnabled && isSurveyElement(element)) continue;
         const target = getClickableTarget(element);
         if (isClickableVisible(target)) return target;
       }
     }
     for (const selector of SKIP_BUTTON_SELECTORS) {
       for (const element of root.querySelectorAll(selector)) {
+        if (!surveySkipEnabled && isSurveyElement(element)) continue;
         const target = getClickableTarget(element);
         if (isClickableVisible(target)) return target;
       }
     }
     for (const element of root.querySelectorAll("button, [role='button'], a")) {
       const label = [element.textContent, element.getAttribute("aria-label"), element.getAttribute("title")].filter(Boolean).join(" ");
+      if (!surveySkipEnabled && isSurveyElement(element)) continue;
       const target = getClickableTarget(element);
       if (isLikelySkipControlText(label) && isClickableVisible(target)) return target;
     }
@@ -181,7 +203,10 @@
   const MAIN_FORCE_SKIP_MESSAGE = "yt-ad-skipper:force-skip";
   const MAIN_SPEED_THROUGH_MESSAGE = "yt-ad-skipper:speed-through";
   const MAIN_FORCE_SKIP_RESULT = "yt-ad-skipper:force-skip-result";
+  const MAIN_PLAYER_RESIZE_MESSAGE = "youtube-extension:player-resize";
   const MAIN_QUALITY_MESSAGE = "youtube-extension:set-quality";
+  const MAIN_QUALITY_RESULT = "youtube-extension:quality-result";
+  const MAIN_PLAYER_COMMAND = "youtube-extension:player-command";
   const CODEC_SETTINGS_MESSAGE = "youtube-extension:codec-settings";
   const CODEC_SETTINGS_STORAGE_KEY = "youtubeExtensionCodecSettings";
   function createBridgeSessionToken() {
@@ -241,12 +266,12 @@
     const wanted = normalizeShortcutCombo(combo);
     return !!wanted && eventToShortcutCombo(event) === wanted;
   }
-  const PLAYER_DEFAULTS_PROFILE_VERSION = 2;
+  const PLAYER_DEFAULTS_PROFILE_VERSION = 5;
   const PLAYER_DEFAULTS_PROFILE = {
     playerSpeedEnabled: true,
     playerSpeedStep: 0.02,
     playerSpeedWheel: true,
-    autoplayBlockBackground: true,
+    autoplayBlockBackground: false,
     autoplayAllowPlaylists: true,
     miniplayerEnabled: true,
     miniplayerSize: "480x270",
@@ -318,7 +343,7 @@
     volumeBoostLevel: 2,
     volumeBoostAuto: false,
     playerWheelInvert: false,
-    autoplayBlockBackground: true,
+    autoplayBlockBackground: false,
     autoplayBlockForeground: false,
     autoplayAllowPlaylists: true,
     pauseBackgroundTabs: false,
@@ -405,7 +430,17 @@
     videoFilterContrast: 100,
     videoFilterSaturate: 100,
     videoFilterGrayscale: 0,
-    videoFilterSepia: 0
+    videoFilterSepia: 0,
+    resumePlaybackEnabled: false,
+    playerControlsEnabled: true,
+    playerControlsStyle: "pill",
+    settingsMenuItemsEnabled: true,
+    skipSurveysEnabled: true,
+    playerEndTimeEnabled: false,
+    liveCatchUpEnabled: true,
+    liveCatchUpTarget: 3,
+    liveCatchUpMaxRate: 1.25,
+    videoFilterHue: 0
   };
   const SETTINGS_EXPORT_KEYS = Object.keys(DEFAULT_SETTINGS);
   function normalizeSettings(raw = {}) {
@@ -430,13 +465,40 @@
     }
     return normalized;
   }
+  const SETTINGS_MIGRATIONS = {
+    2: PLAYER_DEFAULTS_PROFILE,
+    // v3: stability overhaul. These defaults caused surprise pauses and comment
+    // menus opening on their own.
+    3: {
+      autoplayBlockBackground: false,
+      appearanceSortNewestComments: false
+    },
+    // v4: controls moved inside YouTube's own control bar; the separate bar
+    // below the video becomes optional.
+    4: {
+      playerControlsEnabled: true,
+      toolbarEnabled: false
+    },
+    // v5: the "termina às" clock is opt-in; buttons default to their own pill.
+    5: {
+      playerEndTimeEnabled: false,
+      playerControlsStyle: "pill"
+    }
+  };
+  function getSettingsMigrationPatch(storedVersion) {
+    const version = Number(storedVersion) || 0;
+    if (version >= PLAYER_DEFAULTS_PROFILE_VERSION) return null;
+    const patch = {};
+    for (let next = version + 1; next <= PLAYER_DEFAULTS_PROFILE_VERSION; next += 1) {
+      Object.assign(patch, SETTINGS_MIGRATIONS[next] || {});
+    }
+    patch.playerDefaultsProfileVersion = PLAYER_DEFAULTS_PROFILE_VERSION;
+    return patch;
+  }
   function migrateSettings(raw = {}) {
     const settings = normalizeSettings(raw);
-    if ((Number(settings.playerDefaultsProfileVersion) || 0) < PLAYER_DEFAULTS_PROFILE_VERSION) {
-      Object.assign(settings, PLAYER_DEFAULTS_PROFILE, {
-        playerDefaultsProfileVersion: PLAYER_DEFAULTS_PROFILE_VERSION
-      });
-    }
+    const patch = getSettingsMigrationPatch(raw.playerDefaultsProfileVersion);
+    if (patch) Object.assign(settings, patch);
     return settings;
   }
   const QUALITY_ORDER = ["tiny", "small", "medium", "large", "hd720", "hd1080", "hd1440", "hd2160", "hd2880", "highres"];
@@ -463,6 +525,150 @@
     }
     if (best) return best;
     return normalizedAvailable.slice().sort((a, b) => QUALITY_ORDER.indexOf(b) - QUALITY_ORDER.indexOf(a))[0] || normalizedTarget;
+  }
+  const AUTOPLAY_START_WINDOW_SECONDS = 4;
+  const AUTOPLAY_AD_END_GRACE_MS = 6e3;
+  function getAutoplayBlockReason(ctx) {
+    if (!ctx.enabled || ctx.adActive || !ctx.isMainVideo) return "";
+    if (ctx.alreadyBlockedThisVideo) return "";
+    const time = Number(ctx.currentTime);
+    if (Number.isFinite(time) && time >= AUTOPLAY_START_WINDOW_SECONDS) return "";
+    if (ctx.msSinceAdEnded >= 0 && ctx.msSinceAdEnded < AUTOPLAY_AD_END_GRACE_MS) return "";
+    if (ctx.ignorePopup && ctx.isPopup) return "";
+    if (ctx.allowPlaylists && ctx.isPlaylist) return "";
+    if (ctx.recentIntent) return "";
+    if (ctx.disableAll) return "autoplay-disable-all";
+    if (ctx.hidden && ctx.blockBackground) return "background-autoplay";
+    if (!ctx.hidden && ctx.blockForeground) return "foreground-autoplay";
+    return "";
+  }
+  const MINIPLAYER_ENTER_MARGIN = 40;
+  const MINIPLAYER_EXIT_MARGIN = 140;
+  function shouldFloatPlayer(input) {
+    if (!input.eligible || input.dismissed) return false;
+    if (!Number.isFinite(input.slotBottom)) return input.currentlyActive;
+    const enterAt = input.mastheadHeight + MINIPLAYER_ENTER_MARGIN;
+    const exitAt = enterAt + MINIPLAYER_EXIT_MARGIN;
+    return input.currentlyActive ? input.slotBottom < exitAt : input.slotBottom < enterAt;
+  }
+  function shouldResetMiniplayerDismissal(slotBottom, mastheadHeight) {
+    return Number.isFinite(slotBottom) && slotBottom > mastheadHeight + MINIPLAYER_ENTER_MARGIN + MINIPLAYER_EXIT_MARGIN;
+  }
+  const LIVE_JUMP_THRESHOLD_SECONDS = 30;
+  function decideLiveRate(input) {
+    const target = Math.max(0.5, Number(input.target) || 3);
+    const ahead = Number(input.bufferAhead);
+    const maxRate = Math.min(2, Math.max(1.05, Number(input.maxRate) || 1.25));
+    if (!Number.isFinite(ahead) || ahead <= 0) return { rate: 1, jumpBy: 0 };
+    if (ahead > LIVE_JUMP_THRESHOLD_SECONDS) {
+      return { rate: 1, jumpBy: Math.max(0, ahead - target) };
+    }
+    const excess = ahead - target;
+    const catchingUp = input.currentRate > 1.001;
+    if (excess <= (catchingUp ? 0 : 1)) return { rate: 1, jumpBy: 0 };
+    const rate = Math.min(maxRate, 1 + Math.max(0.05, excess * 0.04));
+    return { rate: Math.round(rate * 100) / 100, jumpBy: 0 };
+  }
+  function getBufferAhead(video) {
+    const ranges = video.buffered;
+    const time = video.currentTime;
+    for (let i = ranges.length - 1; i >= 0; i -= 1) {
+      if (ranges.start(i) <= time + 0.5 && ranges.end(i) >= time) return ranges.end(i) - time;
+    }
+    return 0;
+  }
+  const VIDEO_FILTER_DEFAULTS = {
+    brightness: 100,
+    contrast: 100,
+    saturate: 100,
+    grayscale: 0,
+    sepia: 0,
+    hue: 0
+  };
+  const VIDEO_FILTER_LIMITS = {
+    brightness: { min: 50, max: 150, step: 1, label: "Brilho", unit: "%" },
+    contrast: { min: 50, max: 150, step: 1, label: "Contraste", unit: "%" },
+    saturate: { min: 0, max: 200, step: 1, label: "Saturação", unit: "%" },
+    hue: { min: -30, max: 30, step: 1, label: "Tom", unit: "°" },
+    sepia: { min: 0, max: 100, step: 1, label: "Quente", unit: "%" },
+    grayscale: { min: 0, max: 100, step: 1, label: "Preto e branco", unit: "%" }
+  };
+  const VIDEO_FILTER_PRESETS = [
+    { id: "normal", label: "Normal", values: { ...VIDEO_FILTER_DEFAULTS } },
+    { id: "vivid", label: "Vívido", values: { brightness: 103, contrast: 112, saturate: 135, grayscale: 0, sepia: 0, hue: 0 } },
+    { id: "cinema", label: "Cinema", values: { brightness: 96, contrast: 118, saturate: 90, grayscale: 0, sepia: 8, hue: 0 } },
+    { id: "night", label: "Noite", values: { brightness: 88, contrast: 100, saturate: 90, grayscale: 0, sepia: 35, hue: -6 } },
+    { id: "bright", label: "Clarear", values: { brightness: 122, contrast: 106, saturate: 105, grayscale: 0, sepia: 0, hue: 0 } },
+    { id: "mono", label: "P&B", values: { brightness: 100, contrast: 115, saturate: 100, grayscale: 100, sepia: 0, hue: 0 } }
+  ];
+  function clamp(value, key) {
+    const limits = VIDEO_FILTER_LIMITS[key];
+    const n = Number(value);
+    if (!Number.isFinite(n)) return VIDEO_FILTER_DEFAULTS[key];
+    return Math.min(limits.max, Math.max(limits.min, Math.round(n)));
+  }
+  function normalizeVideoFilters(raw) {
+    return {
+      brightness: clamp(raw.brightness, "brightness"),
+      contrast: clamp(raw.contrast, "contrast"),
+      saturate: clamp(raw.saturate, "saturate"),
+      grayscale: clamp(raw.grayscale, "grayscale"),
+      sepia: clamp(raw.sepia, "sepia"),
+      hue: clamp(raw.hue, "hue")
+    };
+  }
+  function isNeutralFilter(values) {
+    return Object.keys(VIDEO_FILTER_DEFAULTS).every((key) => values[key] === VIDEO_FILTER_DEFAULTS[key]);
+  }
+  function buildFilterCss(values) {
+    const parts = [
+      `brightness(${values.brightness}%)`,
+      `contrast(${values.contrast}%)`,
+      `saturate(${values.saturate}%)`
+    ];
+    if (values.hue) parts.push(`hue-rotate(${values.hue}deg)`);
+    if (values.sepia) parts.push(`sepia(${values.sepia}%)`);
+    if (values.grayscale) parts.push(`grayscale(${values.grayscale}%)`);
+    return parts.join(" ");
+  }
+  function findPresetId(values) {
+    return VIDEO_FILTER_PRESETS.find(
+      (preset) => Object.keys(preset.values).every((key) => preset.values[key] === values[key])
+    )?.id || "";
+  }
+  const RESUME_STORAGE_KEY = "resumePositions";
+  const RESUME_MAX_ENTRIES = 300;
+  const RESUME_MIN_DURATION_SECONDS = 180;
+  const RESUME_MIN_POSITION_SECONDS = 30;
+  const RESUME_END_MARGIN_SECONDS = 25;
+  function isTrackableDuration(duration) {
+    return Number.isFinite(duration) && duration >= RESUME_MIN_DURATION_SECONDS;
+  }
+  function getResumeSaveAction(currentTime, duration) {
+    if (!isTrackableDuration(duration) || !Number.isFinite(currentTime)) return "skip";
+    if (currentTime >= duration - RESUME_END_MARGIN_SECONDS) return "delete";
+    if (currentTime < RESUME_MIN_POSITION_SECONDS) return "skip";
+    return "save";
+  }
+  function getResumeTarget(entry, duration, hasExplicitStart) {
+    if (!entry || hasExplicitStart || !isTrackableDuration(duration)) return null;
+    if (!Number.isFinite(entry.d) || Math.abs(entry.d - duration) > 3) return null;
+    if (entry.t < RESUME_MIN_POSITION_SECONDS || entry.t >= duration - RESUME_END_MARGIN_SECONDS) return null;
+    return Math.max(0, entry.t - 2);
+  }
+  function pruneResumeStore(store, max = RESUME_MAX_ENTRIES) {
+    const entries = Object.entries(store || {}).filter(([, entry]) => entry && Number.isFinite(entry.t));
+    if (entries.length <= max) return Object.fromEntries(entries);
+    entries.sort((a, b) => (b[1].at || 0) - (a[1].at || 0));
+    return Object.fromEntries(entries.slice(0, max));
+  }
+  function formatClock(seconds) {
+    const total = Math.max(0, Math.floor(seconds));
+    const h = Math.floor(total / 3600);
+    const m = Math.floor(total % 3600 / 60);
+    const s = total % 60;
+    const mm = h ? String(m).padStart(2, "0") : String(m);
+    return (h ? h + ":" : "") + mm + ":" + String(s).padStart(2, "0");
   }
   function getYouTubeVideoIdFromUrl(input) {
     let url;
@@ -491,6 +697,11 @@
     return url.pathname + url.search;
   }
   (function() {
+    try {
+      if (window.self !== window.top && !/^\/embed\//.test(location.pathname)) return;
+    } catch (err) {
+      return;
+    }
     let config = { ...DEFAULT_SETTINGS };
     const CHECK_INTERVAL = 500;
     const FORCE_SKIP_RETRY_MS = 250;
@@ -587,141 +798,152 @@
       const jitter = baseMs * (0.85 + Math.random() * 0.3);
       return Math.round(jitter);
     }
+    let rawSettings = { ...DEFAULT_SETTINGS };
+    function applySettingsToConfig(s) {
+      config.enabled = !!s.enabled;
+      config.adSkipperEnabled = s.adSkipperEnabled !== false;
+      config.skipDelay = normalizeSkipDelay$1(s.skipDelay);
+      config.muteAds = !!s.muteAds;
+      config.showOverlay = !!s.showOverlay;
+      config.aggressiveSkip = !!s.aggressiveSkip;
+      config.instantSkip = !!s.instantSkip;
+      config.showToast = !!s.showToast;
+      config.shortcutEnabled = !!s.shortcutEnabled;
+      config.listMode = s.listMode === "blacklist" ? "blacklist" : "whitelist";
+      config.whitelist = Array.isArray(s.whitelist) ? s.whitelist : [];
+      config.pipEnabled = !!s.pipEnabled;
+      config.adSpeedRate = normalizeSpeedRate$1(s.adSpeedRate);
+      config.customSpeedEnabled = !!s.customSpeedEnabled;
+      config.adaptiveSpeedEnabled = !!s.adaptiveSpeedEnabled;
+      config.playerSpeedEnabled = !!s.playerSpeedEnabled;
+      config.playerSpeedDefault = normalizeUserPlaybackRate(s.playerSpeedDefault, 1);
+      config.playerSpeedStep = normalizePlayerSpeedStep(s.playerSpeedStep);
+      config.playerSpeedWheel = !!s.playerSpeedWheel;
+      config.playerSpeedWheelRightButton = !!s.playerSpeedWheelRightButton;
+      config.playerVolumeEnabled = !!s.playerVolumeEnabled;
+      config.playerVolumeDefault = normalizeVolumePercent(s.playerVolumeDefault);
+      config.playerVolumeStep = normalizeVolumeStep(s.playerVolumeStep);
+      config.playerVolumeWheel = !!s.playerVolumeWheel;
+      config.playerVolumeWheelRightButton = !!s.playerVolumeWheelRightButton;
+      config.volumeBoostEnabled = !!s.volumeBoostEnabled;
+      config.volumeBoostLevel = normalizeVolumeBoostLevel(s.volumeBoostLevel);
+      config.volumeBoostAuto = !!s.volumeBoostAuto;
+      config.playerWheelInvert = !!s.playerWheelInvert;
+      config.autoplayBlockBackground = !!s.autoplayBlockBackground;
+      config.autoplayBlockForeground = !!s.autoplayBlockForeground;
+      config.autoplayAllowPlaylists = s.autoplayAllowPlaylists !== false;
+      config.pauseBackgroundTabs = !!s.pauseBackgroundTabs;
+      config.qualityEnabled = !!s.qualityEnabled;
+      config.qualityVideo = normalizeQualityLevel(s.qualityVideo, "hd720");
+      config.qualityPlaylist = normalizeQualityLevel(s.qualityPlaylist, "hd720");
+      config.qualityFullscreenEnabled = !!s.qualityFullscreenEnabled;
+      config.qualityFullscreenVideo = normalizeQualityLevel(s.qualityFullscreenVideo, "hd1080");
+      config.qualityFullscreenPlaylist = normalizeQualityLevel(s.qualityFullscreenPlaylist, "hd1080");
+      config.qualityPopup = normalizeQualityLevel(s.qualityPopup, "medium");
+      config.qualityFullscreenPopup = normalizeQualityLevel(s.qualityFullscreenPopup, "hd1080");
+      config.qualityRestoreOnExit = s.qualityRestoreOnExit !== false;
+      config.appearanceConvertShorts = !!s.appearanceConvertShorts;
+      config.appearanceHideShorts = !!s.appearanceHideShorts;
+      config.appearanceHideRelated = !!s.appearanceHideRelated;
+      config.appearanceHideChat = !!s.appearanceHideChat;
+      config.appearanceHideComments = !!s.appearanceHideComments;
+      config.appearanceHideEndcards = !!s.appearanceHideEndcards;
+      config.appearanceLayoutRowsEnabled = !!s.appearanceLayoutRowsEnabled;
+      config.appearanceSortNewestComments = !!s.appearanceSortNewestComments;
+      config.appearanceAutoApplyFilters = !!s.appearanceAutoApplyFilters;
+      config.miniplayerEnabled = s.miniplayerEnabled !== false;
+      config.miniplayerSize = normalizeMiniplayerSize(s.miniplayerSize);
+      config.miniplayerPosition = normalizeMiniplayerPosition(s.miniplayerPosition);
+      config.playerPopupSize = normalizePlayerPopupSize(s.playerPopupSize);
+      config.toolbarEnabled = s.toolbarEnabled !== false;
+      config.toolbarPosition = normalizeToolbarPosition(s.toolbarPosition);
+      config.toolbarCenter = s.toolbarCenter !== false;
+      config.toolbarLoop = s.toolbarLoop !== false;
+      config.toolbarSpeed = s.toolbarSpeed !== false;
+      config.toolbarPopup = s.toolbarPopup !== false;
+      config.toolbarPip = s.toolbarPip !== false;
+      config.toolbarScreenshot = s.toolbarScreenshot !== false;
+      config.toolbarTheater = s.toolbarTheater !== false;
+      config.toolbarSettings = s.toolbarSettings !== false;
+      config.toolbarVolumeBoost = s.toolbarVolumeBoost !== false;
+      config.toolbarFilters = s.toolbarFilters !== false;
+      config.playerSpeedButtonsEnabled = s.playerSpeedButtonsEnabled !== false;
+      config.shortcutSkipAd = normalizeShortcutSetting(s.shortcutSkipAd, "Alt+Shift+S");
+      config.shortcutSpeedDown = normalizeShortcutSetting(s.shortcutSpeedDown, "Alt+Shift+,");
+      config.shortcutSpeedUp = normalizeShortcutSetting(s.shortcutSpeedUp, "Alt+Shift+.");
+      config.shortcutVolumeDown = normalizeShortcutSetting(s.shortcutVolumeDown, "Alt+Shift+ArrowDown");
+      config.shortcutVolumeUp = normalizeShortcutSetting(s.shortcutVolumeUp, "Alt+Shift+ArrowUp");
+      config.shortcutCinema = normalizeShortcutSetting(s.shortcutCinema, "Alt+Shift+C");
+      config.shortcutScreenshot = normalizeShortcutSetting(s.shortcutScreenshot, "Alt+Shift+P");
+      config.shortcutPopup = normalizeShortcutSetting(s.shortcutPopup, "Alt+Shift+O");
+      config.shortcutLoop = normalizeShortcutSetting(s.shortcutLoop, "Alt+Shift+L");
+      config.autoplayDisableAll = !!s.autoplayDisableAll;
+      config.autoplayStopPreload = !!s.autoplayStopPreload;
+      config.autoplayIgnorePopup = s.autoplayIgnorePopup !== false;
+      config.playerPopupEnabled = s.playerPopupEnabled !== false;
+      config.layoutVideosPerRow = normalizeGridCount(s.layoutVideosPerRow, 4, 1, 8);
+      config.layoutChannelVideosPerRow = normalizeGridCount(s.layoutChannelVideosPerRow, 4, 1, 8);
+      config.layoutShortsPerRow = normalizeGridCount(s.layoutShortsPerRow, 8, 1, 12);
+      config.layoutChannelShortsPerRow = normalizeGridCount(s.layoutChannelShortsPerRow, 5, 1, 12);
+      config.layoutPostsPerRow = normalizeGridCount(s.layoutPostsPerRow, 4, 1, 8);
+      config.appearanceAutoTheater = !!s.appearanceAutoTheater;
+      config.appearanceAutoExpandPlayer = !!s.appearanceAutoExpandPlayer;
+      config.appearanceUseViewportPlayer = !!s.appearanceUseViewportPlayer;
+      config.cinemaColor = normalizeHexColor(s.cinemaColor, "#000000");
+      config.cinemaOpacity = normalizePercent(s.cinemaOpacity, 85);
+      config.cinemaDefault = !!s.cinemaDefault;
+      config.cinemaAutoResize = !!s.cinemaAutoResize;
+      config.cinemaUseYouTubeTheater = s.cinemaUseYouTubeTheater !== false;
+      config.ultrawideEnabled = !!s.ultrawideEnabled;
+      config.ultrawideFit = normalizeUltrawideFit(s.ultrawideFit);
+      config.toolbarInsidePlayer = !!s.toolbarInsidePlayer;
+      config.toolbarAlwaysVisible = !!s.toolbarAlwaysVisible;
+      config.themeEngine = normalizeThemeEngine(s.themeEngine);
+      config.themeVariant = normalizeThemeVariant(s.themeVariant);
+      config.themeDeepDarkCustom = !!s.themeDeepDarkCustom;
+      config.themeCustomAccent = normalizeHexColor(s.themeCustomAccent, "#ff334b");
+      config.themeCustomBackground = normalizeHexColor(s.themeCustomBackground, "#0f0f0f");
+      config.themeCustomSurface = normalizeHexColor(s.themeCustomSurface, "#17191f");
+      config.themeCustomSurfaceRaised = normalizeHexColor(s.themeCustomSurfaceRaised, "#20232b");
+      config.themeCustomText = normalizeHexColor(s.themeCustomText, "#f4f5f7");
+      config.themeCustomMuted = normalizeHexColor(s.themeCustomMuted, "#a9adb8");
+      config.themeCustomBorder = normalizeHexColor(s.themeCustomBorder, "#343741");
+      config.themeCustomCss = String(s.themeCustomCss || "");
+      config.videoFiltersEnabled = !!s.videoFiltersEnabled;
+      config.videoFilterBrightness = normalizePercent(s.videoFilterBrightness, 100);
+      config.videoFilterContrast = normalizePercent(s.videoFilterContrast, 100);
+      config.videoFilterSaturate = normalizePercent(s.videoFilterSaturate, 100);
+      config.videoFilterGrayscale = normalizePercent(s.videoFilterGrayscale, 0);
+      config.videoFilterSepia = normalizePercent(s.videoFilterSepia, 0);
+      config.codecForceStandardFps = !!s.codecForceStandardFps;
+      config.codecForceAvc = !!s.codecForceAvc;
+      config.resumePlaybackEnabled = !!s.resumePlaybackEnabled;
+      config.playerControlsEnabled = s.playerControlsEnabled !== false;
+      config.playerControlsStyle = s.playerControlsStyle === "divider" ? "divider" : "pill";
+      config.settingsMenuItemsEnabled = s.settingsMenuItemsEnabled !== false;
+      config.skipSurveysEnabled = s.skipSurveysEnabled !== false;
+      setSurveySkipEnabled(config.skipSurveysEnabled);
+      config.playerEndTimeEnabled = s.playerEndTimeEnabled === true;
+      config.liveCatchUpEnabled = s.liveCatchUpEnabled !== false;
+      config.liveCatchUpTarget = Number(s.liveCatchUpTarget) > 0 ? Number(s.liveCatchUpTarget) : 3;
+      config.liveCatchUpMaxRate = Math.min(1.5, Math.max(1.05, Number(s.liveCatchUpMaxRate) || 1.25));
+      config.videoFilterHue = Number(s.videoFilterHue) || 0;
+      adState.warningCount = s.warningCount || 0;
+      adState.totalSkipped = s.totalAdsSkipped || 0;
+      adState.adsSkippedToday = s.adsSkippedToday || 0;
+      adState.todayDate = s.todayDate || null;
+    }
     function loadSettings() {
       return new Promise((resolve) => {
         if (chrome?.storage?.local) {
           chrome.storage.local.get(
             DEFAULT_SETTINGS,
             (s) => {
-              const storedProfileVersion = Number(s.playerDefaultsProfileVersion) || 0;
+              const migrationPatch = getSettingsMigrationPatch(s.playerDefaultsProfileVersion);
               s = migrateSettings(s);
-              if (storedProfileVersion < PLAYER_DEFAULTS_PROFILE_VERSION) {
-                chrome.storage.local.set({
-                  ...PLAYER_DEFAULTS_PROFILE,
-                  playerDefaultsProfileVersion: PLAYER_DEFAULTS_PROFILE_VERSION
-                });
-              }
-              config.enabled = !!s.enabled;
-              config.adSkipperEnabled = s.adSkipperEnabled !== false;
-              config.skipDelay = normalizeSkipDelay$1(s.skipDelay);
-              config.muteAds = !!s.muteAds;
-              config.showOverlay = !!s.showOverlay;
-              config.aggressiveSkip = !!s.aggressiveSkip;
-              config.instantSkip = !!s.instantSkip;
-              config.showToast = !!s.showToast;
-              config.shortcutEnabled = !!s.shortcutEnabled;
-              config.listMode = s.listMode === "blacklist" ? "blacklist" : "whitelist";
-              config.whitelist = Array.isArray(s.whitelist) ? s.whitelist : [];
-              config.pipEnabled = !!s.pipEnabled;
-              config.adSpeedRate = normalizeSpeedRate$1(s.adSpeedRate);
-              config.customSpeedEnabled = !!s.customSpeedEnabled;
-              config.adaptiveSpeedEnabled = !!s.adaptiveSpeedEnabled;
-              config.playerSpeedEnabled = !!s.playerSpeedEnabled;
-              config.playerSpeedDefault = normalizeUserPlaybackRate(s.playerSpeedDefault, 1);
-              config.playerSpeedStep = normalizePlayerSpeedStep(s.playerSpeedStep);
-              config.playerSpeedWheel = !!s.playerSpeedWheel;
-              config.playerSpeedWheelRightButton = !!s.playerSpeedWheelRightButton;
-              config.playerVolumeEnabled = !!s.playerVolumeEnabled;
-              config.playerVolumeDefault = normalizeVolumePercent(s.playerVolumeDefault);
-              config.playerVolumeStep = normalizeVolumeStep(s.playerVolumeStep);
-              config.playerVolumeWheel = !!s.playerVolumeWheel;
-              config.playerVolumeWheelRightButton = !!s.playerVolumeWheelRightButton;
-              config.volumeBoostEnabled = !!s.volumeBoostEnabled;
-              config.volumeBoostLevel = normalizeVolumeBoostLevel(s.volumeBoostLevel);
-              config.volumeBoostAuto = !!s.volumeBoostAuto;
-              config.playerWheelInvert = !!s.playerWheelInvert;
-              config.autoplayBlockBackground = !!s.autoplayBlockBackground;
-              config.autoplayBlockForeground = !!s.autoplayBlockForeground;
-              config.autoplayAllowPlaylists = s.autoplayAllowPlaylists !== false;
-              config.pauseBackgroundTabs = !!s.pauseBackgroundTabs;
-              config.qualityEnabled = !!s.qualityEnabled;
-              config.qualityVideo = normalizeQualityLevel(s.qualityVideo, "hd720");
-              config.qualityPlaylist = normalizeQualityLevel(s.qualityPlaylist, "hd720");
-              config.qualityFullscreenEnabled = !!s.qualityFullscreenEnabled;
-              config.qualityFullscreenVideo = normalizeQualityLevel(s.qualityFullscreenVideo, "hd1080");
-              config.qualityFullscreenPlaylist = normalizeQualityLevel(s.qualityFullscreenPlaylist, "hd1080");
-              config.qualityPopup = normalizeQualityLevel(s.qualityPopup, "medium");
-              config.qualityFullscreenPopup = normalizeQualityLevel(s.qualityFullscreenPopup, "hd1080");
-              config.qualityRestoreOnExit = s.qualityRestoreOnExit !== false;
-              config.appearanceConvertShorts = !!s.appearanceConvertShorts;
-              config.appearanceHideShorts = !!s.appearanceHideShorts;
-              config.appearanceHideRelated = !!s.appearanceHideRelated;
-              config.appearanceHideChat = !!s.appearanceHideChat;
-              config.appearanceHideComments = !!s.appearanceHideComments;
-              config.appearanceHideEndcards = !!s.appearanceHideEndcards;
-              config.appearanceLayoutRowsEnabled = !!s.appearanceLayoutRowsEnabled;
-              config.appearanceSortNewestComments = !!s.appearanceSortNewestComments;
-              config.appearanceAutoApplyFilters = !!s.appearanceAutoApplyFilters;
-              config.miniplayerEnabled = s.miniplayerEnabled !== false;
-              config.miniplayerSize = normalizeMiniplayerSize(s.miniplayerSize);
-              config.miniplayerPosition = normalizeMiniplayerPosition(s.miniplayerPosition);
-              config.playerPopupSize = normalizePlayerPopupSize(s.playerPopupSize);
-              config.toolbarEnabled = s.toolbarEnabled !== false;
-              config.toolbarPosition = normalizeToolbarPosition(s.toolbarPosition);
-              config.toolbarCenter = s.toolbarCenter !== false;
-              config.toolbarLoop = s.toolbarLoop !== false;
-              config.toolbarSpeed = s.toolbarSpeed !== false;
-              config.toolbarPopup = s.toolbarPopup !== false;
-              config.toolbarPip = s.toolbarPip !== false;
-              config.toolbarScreenshot = s.toolbarScreenshot !== false;
-              config.toolbarTheater = s.toolbarTheater !== false;
-              config.toolbarSettings = s.toolbarSettings !== false;
-              config.toolbarVolumeBoost = s.toolbarVolumeBoost !== false;
-              config.toolbarFilters = s.toolbarFilters !== false;
-              config.playerSpeedButtonsEnabled = s.playerSpeedButtonsEnabled !== false;
-              config.shortcutSkipAd = normalizeShortcutSetting(s.shortcutSkipAd, "Alt+Shift+S");
-              config.shortcutSpeedDown = normalizeShortcutSetting(s.shortcutSpeedDown, "Alt+Shift+,");
-              config.shortcutSpeedUp = normalizeShortcutSetting(s.shortcutSpeedUp, "Alt+Shift+.");
-              config.shortcutVolumeDown = normalizeShortcutSetting(s.shortcutVolumeDown, "Alt+Shift+ArrowDown");
-              config.shortcutVolumeUp = normalizeShortcutSetting(s.shortcutVolumeUp, "Alt+Shift+ArrowUp");
-              config.shortcutCinema = normalizeShortcutSetting(s.shortcutCinema, "Alt+Shift+C");
-              config.shortcutScreenshot = normalizeShortcutSetting(s.shortcutScreenshot, "Alt+Shift+P");
-              config.shortcutPopup = normalizeShortcutSetting(s.shortcutPopup, "Alt+Shift+O");
-              config.shortcutLoop = normalizeShortcutSetting(s.shortcutLoop, "Alt+Shift+L");
-              config.autoplayDisableAll = !!s.autoplayDisableAll;
-              config.autoplayStopPreload = !!s.autoplayStopPreload;
-              config.autoplayIgnorePopup = s.autoplayIgnorePopup !== false;
-              config.playerPopupEnabled = s.playerPopupEnabled !== false;
-              config.layoutVideosPerRow = normalizeGridCount(s.layoutVideosPerRow, 4, 1, 8);
-              config.layoutChannelVideosPerRow = normalizeGridCount(s.layoutChannelVideosPerRow, 4, 1, 8);
-              config.layoutShortsPerRow = normalizeGridCount(s.layoutShortsPerRow, 8, 1, 12);
-              config.layoutChannelShortsPerRow = normalizeGridCount(s.layoutChannelShortsPerRow, 5, 1, 12);
-              config.layoutPostsPerRow = normalizeGridCount(s.layoutPostsPerRow, 4, 1, 8);
-              config.appearanceAutoTheater = !!s.appearanceAutoTheater;
-              config.appearanceAutoExpandPlayer = !!s.appearanceAutoExpandPlayer;
-              config.appearanceUseViewportPlayer = !!s.appearanceUseViewportPlayer;
-              config.cinemaColor = normalizeHexColor(s.cinemaColor, "#000000");
-              config.cinemaOpacity = normalizePercent(s.cinemaOpacity, 85);
-              config.cinemaDefault = !!s.cinemaDefault;
-              config.cinemaAutoResize = !!s.cinemaAutoResize;
-              config.cinemaUseYouTubeTheater = s.cinemaUseYouTubeTheater !== false;
-              config.ultrawideEnabled = !!s.ultrawideEnabled;
-              config.ultrawideFit = normalizeUltrawideFit(s.ultrawideFit);
-              config.toolbarInsidePlayer = !!s.toolbarInsidePlayer;
-              config.toolbarAlwaysVisible = !!s.toolbarAlwaysVisible;
-              config.themeEngine = normalizeThemeEngine(s.themeEngine);
-              config.themeVariant = normalizeThemeVariant(s.themeVariant);
-              config.themeDeepDarkCustom = !!s.themeDeepDarkCustom;
-              config.themeCustomAccent = normalizeHexColor(s.themeCustomAccent, "#ff334b");
-              config.themeCustomBackground = normalizeHexColor(s.themeCustomBackground, "#0f0f0f");
-              config.themeCustomSurface = normalizeHexColor(s.themeCustomSurface, "#17191f");
-              config.themeCustomSurfaceRaised = normalizeHexColor(s.themeCustomSurfaceRaised, "#20232b");
-              config.themeCustomText = normalizeHexColor(s.themeCustomText, "#f4f5f7");
-              config.themeCustomMuted = normalizeHexColor(s.themeCustomMuted, "#a9adb8");
-              config.themeCustomBorder = normalizeHexColor(s.themeCustomBorder, "#343741");
-              config.themeCustomCss = String(s.themeCustomCss || "");
-              config.videoFiltersEnabled = !!s.videoFiltersEnabled;
-              config.videoFilterBrightness = normalizePercent(s.videoFilterBrightness, 100);
-              config.videoFilterContrast = normalizePercent(s.videoFilterContrast, 100);
-              config.videoFilterSaturate = normalizePercent(s.videoFilterSaturate, 100);
-              config.videoFilterGrayscale = normalizePercent(s.videoFilterGrayscale, 0);
-              config.videoFilterSepia = normalizePercent(s.videoFilterSepia, 0);
-              config.codecForceStandardFps = !!s.codecForceStandardFps;
-              config.codecForceAvc = !!s.codecForceAvc;
-              adState.warningCount = s.warningCount || 0;
-              adState.totalSkipped = s.totalAdsSkipped || 0;
-              adState.adsSkippedToday = s.adsSkippedToday || 0;
-              adState.todayDate = s.todayDate || null;
+              if (migrationPatch) chrome.storage.local.set(migrationPatch);
+              rawSettings = { ...s };
+              applySettingsToConfig(s);
               resolve();
             }
           );
@@ -730,22 +952,26 @@
         }
       });
     }
+    const has = (changes, ...keys) => keys.some((key) => key in changes);
+    const hasPrefix = (changes, ...prefixes) => Object.keys(changes).some((key) => prefixes.some((prefix) => key.startsWith(prefix)));
     if (chrome?.storage?.onChanged) {
-      chrome.storage.onChanged.addListener((changes) => {
-        if (changes.enabled) {
-          config.enabled = !!changes.enabled.newValue;
-          if (config.enabled) {
-            if (isAdSkipperActive()) startAdblockProtection();
-            if (config.pipEnabled) injectPipButton();
-          } else {
-            cleanupRuntimeState();
-            stopAdblockProtection();
-            removePipButton();
-          }
-          scheduleVisualMaintenanceTasks(true);
+      chrome.storage.onChanged.addListener((changes, areaName) => {
+        if (areaName && areaName !== "local") return;
+        if (changes.tubeShieldActivePlayback) {
+          handleExternalPlaybackSignal(changes.tubeShieldActivePlayback.newValue);
         }
-        if (changes.adSkipperEnabled) {
-          config.adSkipperEnabled = changes.adSkipperEnabled.newValue !== false;
+        const settingChanges = {};
+        for (const [key, change] of Object.entries(changes)) {
+          if (key in DEFAULT_SETTINGS) settingChanges[key] = change.newValue;
+        }
+        if (!Object.keys(settingChanges).length) return;
+        const wasEnabled = !!config.enabled;
+        const wasSkipperActive = isAdSkipperActive();
+        for (const [key, value] of Object.entries(settingChanges)) {
+          rawSettings[key] = value === void 0 ? DEFAULT_SETTINGS[key] : value;
+        }
+        applySettingsToConfig(rawSettings);
+        if (config.enabled !== wasEnabled || isAdSkipperActive() !== wasSkipperActive) {
           if (isAdSkipperActive()) {
             startAdblockProtection();
             scheduleAdWatchdogTick();
@@ -754,342 +980,57 @@
             stopAdblockProtection();
           }
         }
-        if (changes.skipDelay) {
-          config.skipDelay = normalizeSkipDelay$1(changes.skipDelay.newValue);
+        if (config.enabled !== wasEnabled) {
+          if (config.enabled && config.pipEnabled) injectPipButton();
+          if (!config.enabled) removePipButton();
+          scheduleVisualMaintenanceTasks(true);
         }
-        if (changes.muteAds) config.muteAds = !!changes.muteAds.newValue;
-        if (changes.showOverlay) {
-          config.showOverlay = !!changes.showOverlay.newValue;
-          if (!config.showOverlay) removeOverlay();
+        if (has(settingChanges, "showOverlay") && !config.showOverlay) removeOverlay();
+        if (has(settingChanges, "pipEnabled")) {
+          if (config.enabled && config.pipEnabled) injectPipButton();
+          else removePipButton();
         }
-        if (changes.aggressiveSkip) config.aggressiveSkip = !!changes.aggressiveSkip.newValue;
-        if (changes.instantSkip) config.instantSkip = !!changes.instantSkip.newValue;
-        if (changes.showToast) config.showToast = !!changes.showToast.newValue;
-        if (changes.shortcutEnabled) config.shortcutEnabled = !!changes.shortcutEnabled.newValue;
-        if (changes.listMode) config.listMode = changes.listMode.newValue === "blacklist" ? "blacklist" : "whitelist";
-        if (changes.whitelist) config.whitelist = Array.isArray(changes.whitelist.newValue) ? changes.whitelist.newValue : [];
-        if (changes.pipEnabled) {
-          config.pipEnabled = !!changes.pipEnabled.newValue;
-          if (config.enabled && config.pipEnabled) {
-            injectPipButton();
-          } else {
-            removePipButton();
-          }
-        }
-        if (changes.adSpeedRate) config.adSpeedRate = normalizeSpeedRate$1(changes.adSpeedRate.newValue);
-        if (changes.customSpeedEnabled) config.customSpeedEnabled = !!changes.customSpeedEnabled.newValue;
-        if (changes.adaptiveSpeedEnabled) config.adaptiveSpeedEnabled = !!changes.adaptiveSpeedEnabled.newValue;
-        if (changes.playerSpeedEnabled) {
-          config.playerSpeedEnabled = !!changes.playerSpeedEnabled.newValue;
-          if (config.playerSpeedEnabled) adState.defaultSpeedAppliedKey = "";
-        }
-        if (changes.playerSpeedDefault) {
-          config.playerSpeedDefault = normalizeUserPlaybackRate(changes.playerSpeedDefault.newValue, 1);
-          adState.defaultSpeedAppliedKey = "";
-        }
-        if (changes.playerSpeedStep) config.playerSpeedStep = normalizePlayerSpeedStep(changes.playerSpeedStep.newValue);
-        if (changes.playerSpeedWheel) config.playerSpeedWheel = !!changes.playerSpeedWheel.newValue;
-        if (changes.playerSpeedWheelRightButton) config.playerSpeedWheelRightButton = !!changes.playerSpeedWheelRightButton.newValue;
-        if (changes.playerVolumeEnabled) {
-          config.playerVolumeEnabled = !!changes.playerVolumeEnabled.newValue;
-          if (config.playerVolumeEnabled) adState.defaultVolumeAppliedKey = "";
-        }
-        if (changes.playerVolumeDefault) {
-          config.playerVolumeDefault = normalizeVolumePercent(changes.playerVolumeDefault.newValue);
-          adState.defaultVolumeAppliedKey = "";
-        }
-        if (changes.playerVolumeStep) config.playerVolumeStep = normalizeVolumeStep(changes.playerVolumeStep.newValue);
-        if (changes.playerVolumeWheel) config.playerVolumeWheel = !!changes.playerVolumeWheel.newValue;
-        if (changes.playerVolumeWheelRightButton) config.playerVolumeWheelRightButton = !!changes.playerVolumeWheelRightButton.newValue;
-        if (changes.volumeBoostEnabled) {
-          config.volumeBoostEnabled = !!changes.volumeBoostEnabled.newValue;
-          applyVolumeBoost();
-          schedulePlayerToolbarUpdate();
-        }
-        if (changes.volumeBoostLevel) {
-          config.volumeBoostLevel = normalizeVolumeBoostLevel(changes.volumeBoostLevel.newValue);
-          applyVolumeBoost();
-        }
-        if (changes.volumeBoostAuto) {
-          config.volumeBoostAuto = !!changes.volumeBoostAuto.newValue;
-          applyVolumeBoost();
-        }
-        if (changes.playerWheelInvert) config.playerWheelInvert = !!changes.playerWheelInvert.newValue;
-        if (changes.autoplayBlockBackground) config.autoplayBlockBackground = !!changes.autoplayBlockBackground.newValue;
-        if (changes.autoplayBlockForeground) config.autoplayBlockForeground = !!changes.autoplayBlockForeground.newValue;
-        if (changes.autoplayAllowPlaylists) config.autoplayAllowPlaylists = changes.autoplayAllowPlaylists.newValue !== false;
-        if (changes.pauseBackgroundTabs) config.pauseBackgroundTabs = !!changes.pauseBackgroundTabs.newValue;
-        if (changes.qualityEnabled) {
-          config.qualityEnabled = !!changes.qualityEnabled.newValue;
-          resetQualityState();
-        }
-        if (changes.qualityVideo) {
-          config.qualityVideo = normalizeQualityLevel(changes.qualityVideo.newValue, "hd720");
-          resetQualityState();
-        }
-        if (changes.qualityPlaylist) {
-          config.qualityPlaylist = normalizeQualityLevel(changes.qualityPlaylist.newValue, "hd720");
-          resetQualityState();
-        }
-        if (changes.qualityFullscreenEnabled) {
-          config.qualityFullscreenEnabled = !!changes.qualityFullscreenEnabled.newValue;
-          resetQualityState();
-        }
-        if (changes.qualityFullscreenVideo) {
-          config.qualityFullscreenVideo = normalizeQualityLevel(changes.qualityFullscreenVideo.newValue, "hd1080");
-          resetQualityState();
-        }
-        if (changes.qualityFullscreenPlaylist) {
-          config.qualityFullscreenPlaylist = normalizeQualityLevel(changes.qualityFullscreenPlaylist.newValue, "hd1080");
-          resetQualityState();
-        }
-        if (changes.qualityPopup) {
-          config.qualityPopup = normalizeQualityLevel(changes.qualityPopup.newValue, "medium");
-          resetQualityState();
-        }
-        if (changes.qualityFullscreenPopup) {
-          config.qualityFullscreenPopup = normalizeQualityLevel(changes.qualityFullscreenPopup.newValue, "hd1080");
-          resetQualityState();
-        }
-        if (changes.qualityRestoreOnExit) config.qualityRestoreOnExit = changes.qualityRestoreOnExit.newValue !== false;
-        if (changes.appearanceConvertShorts) {
-          config.appearanceConvertShorts = !!changes.appearanceConvertShorts.newValue;
-          convertShortsUrlIfNeeded();
-        }
-        if (changes.appearanceHideShorts) {
-          config.appearanceHideShorts = !!changes.appearanceHideShorts.newValue;
+        if (has(settingChanges, "playerSpeedEnabled", "playerSpeedDefault")) adState.defaultSpeedAppliedKey = "";
+        if (has(settingChanges, "playerVolumeEnabled", "playerVolumeDefault")) adState.defaultVolumeAppliedKey = "";
+        if (hasPrefix(settingChanges, "volumeBoost")) applyVolumeBoost();
+        if (hasPrefix(settingChanges, "quality")) resetQualityState();
+        if (has(settingChanges, "appearanceConvertShorts")) convertShortsUrlIfNeeded();
+        if (hasPrefix(settingChanges, "appearanceHide", "layout", "theme", "ultrawide", "skipSurveys") || has(settingChanges, "appearanceLayoutRowsEnabled", "appearanceUseViewportPlayer")) {
           applyAppearanceFilters();
         }
-        if (changes.appearanceHideRelated) {
-          config.appearanceHideRelated = !!changes.appearanceHideRelated.newValue;
-          applyAppearanceFilters();
-        }
-        if (changes.appearanceHideChat) {
-          config.appearanceHideChat = !!changes.appearanceHideChat.newValue;
-          applyAppearanceFilters();
-        }
-        if (changes.appearanceHideComments) {
-          config.appearanceHideComments = !!changes.appearanceHideComments.newValue;
-          applyAppearanceFilters();
-        }
-        if (changes.appearanceHideEndcards) {
-          config.appearanceHideEndcards = !!changes.appearanceHideEndcards.newValue;
-          applyAppearanceFilters();
-        }
-        if (changes.appearanceLayoutRowsEnabled) {
-          config.appearanceLayoutRowsEnabled = !!changes.appearanceLayoutRowsEnabled.newValue;
-          applyAppearanceFilters();
-          scheduleYouTubeLayoutRefresh();
-        }
-        if (changes.appearanceSortNewestComments) {
-          config.appearanceSortNewestComments = !!changes.appearanceSortNewestComments.newValue;
+        if (has(settingChanges, "appearanceLayoutRowsEnabled")) scheduleYouTubeLayoutRefresh();
+        if (has(settingChanges, "appearanceSortNewestComments")) {
           adState.commentsSortKey = "";
           adState.commentsSortAttemptAt = 0;
         }
-        if (changes.appearanceAutoApplyFilters) {
-          config.appearanceAutoApplyFilters = !!changes.appearanceAutoApplyFilters.newValue;
+        if (hasPrefix(settingChanges, "videoFilter") || has(settingChanges, "appearanceAutoApplyFilters")) {
           applyVideoFilters();
+          syncFilterPanel();
         }
-        if (changes.miniplayerEnabled) {
-          config.miniplayerEnabled = changes.miniplayerEnabled.newValue !== false;
-          scheduleMiniplayerUpdate();
+        if (hasPrefix(settingChanges, "toolbar", "playerControls", "playerEndTime", "liveCatchUp", "settingsMenu") || has(settingChanges, "playerSpeedButtonsEnabled", "playerPopupEnabled")) {
+          updatePlayerControls();
         }
-        if (changes.miniplayerSize) {
-          config.miniplayerSize = normalizeMiniplayerSize(changes.miniplayerSize.newValue);
-          scheduleMiniplayerUpdate();
-        }
-        if (changes.miniplayerPosition) {
-          config.miniplayerPosition = normalizeMiniplayerPosition(changes.miniplayerPosition.newValue);
-          scheduleMiniplayerUpdate();
-        }
-        if (changes.playerPopupSize) config.playerPopupSize = normalizePlayerPopupSize(changes.playerPopupSize.newValue);
-        if (changes.toolbarEnabled) {
-          config.toolbarEnabled = changes.toolbarEnabled.newValue !== false;
+        if (hasPrefix(settingChanges, "miniplayer")) scheduleMiniplayerUpdate();
+        if (hasPrefix(settingChanges, "toolbar", "volumeBoost") || has(settingChanges, "playerSpeedButtonsEnabled", "playerPopupEnabled")) {
           schedulePlayerToolbarUpdate();
         }
-        if (changes.toolbarPosition) {
-          config.toolbarPosition = normalizeToolbarPosition(changes.toolbarPosition.newValue);
-          schedulePlayerToolbarUpdate();
-        }
-        if (changes.toolbarCenter) {
-          config.toolbarCenter = changes.toolbarCenter.newValue !== false;
-          schedulePlayerToolbarUpdate();
-        }
-        if (changes.toolbarLoop) {
-          config.toolbarLoop = changes.toolbarLoop.newValue !== false;
-          schedulePlayerToolbarUpdate();
-        }
-        if (changes.toolbarSpeed) {
-          config.toolbarSpeed = changes.toolbarSpeed.newValue !== false;
-          schedulePlayerToolbarUpdate();
-        }
-        if (changes.toolbarPopup) {
-          config.toolbarPopup = changes.toolbarPopup.newValue !== false;
-          schedulePlayerToolbarUpdate();
-        }
-        if (changes.toolbarPip) {
-          config.toolbarPip = changes.toolbarPip.newValue !== false;
-          schedulePlayerToolbarUpdate();
-        }
-        if (changes.toolbarScreenshot) {
-          config.toolbarScreenshot = changes.toolbarScreenshot.newValue !== false;
-          schedulePlayerToolbarUpdate();
-        }
-        if (changes.toolbarTheater) {
-          config.toolbarTheater = changes.toolbarTheater.newValue !== false;
-          schedulePlayerToolbarUpdate();
-        }
-        if (changes.toolbarSettings) {
-          config.toolbarSettings = changes.toolbarSettings.newValue !== false;
-          schedulePlayerToolbarUpdate();
-        }
-        if (changes.toolbarVolumeBoost) {
-          config.toolbarVolumeBoost = changes.toolbarVolumeBoost.newValue !== false;
-          schedulePlayerToolbarUpdate();
-        }
-        if (changes.toolbarFilters) {
-          config.toolbarFilters = changes.toolbarFilters.newValue !== false;
-          schedulePlayerToolbarUpdate();
-        }
-        if (changes.playerSpeedButtonsEnabled) {
-          config.playerSpeedButtonsEnabled = changes.playerSpeedButtonsEnabled.newValue !== false;
-          schedulePlayerToolbarUpdate();
-        }
-        if (changes.playerPopupEnabled) {
-          config.playerPopupEnabled = changes.playerPopupEnabled.newValue !== false;
-          schedulePlayerToolbarUpdate();
-        }
-        const shortcutKeys = [
-          "shortcutSkipAd",
-          "shortcutSpeedDown",
-          "shortcutSpeedUp",
-          "shortcutVolumeDown",
-          "shortcutVolumeUp",
-          "shortcutCinema",
-          "shortcutScreenshot",
-          "shortcutPopup",
-          "shortcutLoop"
-        ];
-        shortcutKeys.forEach((key) => {
-          if (changes[key]) config[key] = normalizeShortcutText(changes[key].newValue, "");
-        });
-        if (changes.autoplayDisableAll) config.autoplayDisableAll = !!changes.autoplayDisableAll.newValue;
-        if (changes.autoplayStopPreload) config.autoplayStopPreload = !!changes.autoplayStopPreload.newValue;
-        if (changes.autoplayIgnorePopup) config.autoplayIgnorePopup = changes.autoplayIgnorePopup.newValue !== false;
-        const layoutKeys = [
-          ["layoutVideosPerRow", 4, 1, 8],
-          ["layoutChannelVideosPerRow", 4, 1, 8],
-          ["layoutShortsPerRow", 8, 1, 12],
-          ["layoutChannelShortsPerRow", 5, 1, 12],
-          ["layoutPostsPerRow", 4, 1, 8]
-        ];
-        let layoutChanged = false;
-        layoutKeys.forEach(([key, fallback, min, max]) => {
-          if (changes[key]) {
-            config[key] = normalizeGridCount(changes[key].newValue, fallback, min, max);
-            layoutChanged = true;
-          }
-        });
-        if (layoutChanged) applyAppearanceFilters();
-        if (changes.appearanceAutoTheater) config.appearanceAutoTheater = !!changes.appearanceAutoTheater.newValue;
-        if (changes.appearanceAutoExpandPlayer) config.appearanceAutoExpandPlayer = !!changes.appearanceAutoExpandPlayer.newValue;
-        if (changes.appearanceUseViewportPlayer) {
-          config.appearanceUseViewportPlayer = !!changes.appearanceUseViewportPlayer.newValue;
-          applyAppearanceFilters();
-        }
-        if (changes.cinemaColor) {
-          config.cinemaColor = normalizeHexColor(changes.cinemaColor.newValue, "#000000");
-          applyCinemaMode();
-        }
-        if (changes.cinemaOpacity) {
-          config.cinemaOpacity = normalizePercent(changes.cinemaOpacity.newValue, 85);
-          applyCinemaMode();
-        }
-        if (changes.cinemaDefault) {
-          config.cinemaDefault = !!changes.cinemaDefault.newValue;
-          setCinemaMode(config.cinemaDefault);
-        }
-        if (changes.cinemaAutoResize) config.cinemaAutoResize = !!changes.cinemaAutoResize.newValue;
-        if (changes.cinemaUseYouTubeTheater) config.cinemaUseYouTubeTheater = changes.cinemaUseYouTubeTheater.newValue !== false;
-        if (changes.ultrawideEnabled) {
-          config.ultrawideEnabled = !!changes.ultrawideEnabled.newValue;
-          applyAppearanceFilters();
-        }
-        if (changes.ultrawideFit) {
-          config.ultrawideFit = normalizeUltrawideFit(changes.ultrawideFit.newValue);
-          applyAppearanceFilters();
-        }
-        if (changes.toolbarInsidePlayer) {
-          config.toolbarInsidePlayer = !!changes.toolbarInsidePlayer.newValue;
-          schedulePlayerToolbarUpdate();
-        }
-        if (changes.toolbarAlwaysVisible) {
-          config.toolbarAlwaysVisible = !!changes.toolbarAlwaysVisible.newValue;
-          schedulePlayerToolbarUpdate();
-        }
-        const themeKeys = [
-          "themeEngine",
-          "themeVariant",
-          "themeDeepDarkCustom",
-          "themeCustomAccent",
-          "themeCustomBackground",
-          "themeCustomSurface",
-          "themeCustomSurfaceRaised",
-          "themeCustomText",
-          "themeCustomMuted",
-          "themeCustomBorder",
-          "themeCustomCss"
-        ];
-        let themeChanged = false;
-        themeKeys.forEach((key) => {
-          if (!changes[key]) return;
-          if (key === "themeEngine") config.themeEngine = normalizeThemeEngine(changes[key].newValue);
-          else if (key === "themeVariant") config.themeVariant = normalizeThemeVariant(changes[key].newValue);
-          else if (key === "themeDeepDarkCustom") config.themeDeepDarkCustom = !!changes[key].newValue;
-          else if (key === "themeCustomAccent") config.themeCustomAccent = normalizeHexColor(changes[key].newValue, "#ff334b");
-          else if (key === "themeCustomBackground") config.themeCustomBackground = normalizeHexColor(changes[key].newValue, "#0f0f0f");
-          else if (key === "themeCustomSurface") config.themeCustomSurface = normalizeHexColor(changes[key].newValue, "#17191f");
-          else if (key === "themeCustomSurfaceRaised") config.themeCustomSurfaceRaised = normalizeHexColor(changes[key].newValue, "#20232b");
-          else if (key === "themeCustomText") config.themeCustomText = normalizeHexColor(changes[key].newValue, "#f4f5f7");
-          else if (key === "themeCustomMuted") config.themeCustomMuted = normalizeHexColor(changes[key].newValue, "#a9adb8");
-          else if (key === "themeCustomBorder") config.themeCustomBorder = normalizeHexColor(changes[key].newValue, "#343741");
-          else if (key === "themeCustomCss") config.themeCustomCss = String(changes[key].newValue || "");
-          themeChanged = true;
-        });
-        if (themeChanged) applyAppearanceFilters();
-        const videoFilterKeys = [
-          "videoFiltersEnabled",
-          "videoFilterBrightness",
-          "videoFilterContrast",
-          "videoFilterSaturate",
-          "videoFilterGrayscale",
-          "videoFilterSepia"
-        ];
-        let videoFiltersChanged = false;
-        videoFilterKeys.forEach((key) => {
-          if (!changes[key]) return;
-          if (key === "videoFiltersEnabled") config.videoFiltersEnabled = !!changes[key].newValue;
-          else config[key] = normalizePercent(changes[key].newValue, key === "videoFilterBrightness" || key === "videoFilterContrast" || key === "videoFilterSaturate" ? 100 : 0);
-          videoFiltersChanged = true;
-        });
-        if (videoFiltersChanged) applyVideoFilters();
-        if (changes.codecForceStandardFps) {
-          config.codecForceStandardFps = !!changes.codecForceStandardFps.newValue;
-          syncCodecSettingsToMainWorld();
-        }
-        if (changes.codecForceAvc) {
-          config.codecForceAvc = !!changes.codecForceAvc.newValue;
-          syncCodecSettingsToMainWorld();
-        }
-        if (changes.tubeShieldActivePlayback) {
-          handleExternalPlaybackSignal(changes.tubeShieldActivePlayback.newValue);
-        }
+        if (has(settingChanges, "cinemaColor", "cinemaOpacity")) applyCinemaMode();
+        if (has(settingChanges, "cinemaDefault")) setCinemaMode(config.cinemaDefault);
+        if (hasPrefix(settingChanges, "codec")) syncCodecSettingsToMainWorld();
       });
     }
     window.addEventListener("message", (event) => {
       if (event.source !== window) return;
       const data = event.data || {};
       if (!isBridgeMessage(data)) return;
+      if (data.source === MAIN_QUALITY_RESULT && data.token === mainWorldSessionToken) {
+        adState.qualityCurrent = typeof data.current === "string" ? data.current : "";
+        if (Array.isArray(data.available)) adState.qualityAvailable = data.available.filter((level) => typeof level === "string");
+        if (data.query && adState.fullscreenQualityMode && adState.preFullscreenQuality === null) {
+          adState.preFullscreenQuality = adState.qualityCurrent || "";
+        }
+        return;
+      }
       if (data.source !== MAIN_FORCE_SKIP_RESULT || data.token !== mainWorldSessionToken || !data.ok) return;
       if (data.method === "click") {
         finishSkipClick();
@@ -1242,7 +1183,7 @@
       };
     }
     function getActiveVideo() {
-      return document.querySelector("video");
+      return getMainVideo();
     }
     function getCurrentVideoKey() {
       return getYouTubeVideoKeyFromUrl(location.href);
@@ -1288,11 +1229,17 @@
           }
         }
       };
+      const handlePause = () => {
+        adState.lastNativePauseAt = Date.now();
+        adState.lastNativePauseWasUser = hasRecentPlaybackIntent(1500);
+      };
+      video.addEventListener("pause", handlePause, true);
       video.addEventListener("loadedmetadata", reapply, true);
       video.addEventListener("durationchange", reapply, true);
       video.addEventListener("emptied", reapply, true);
       video.addEventListener("ended", handleEnded, true);
       playerStateCleanup = () => {
+        video.removeEventListener("pause", handlePause, true);
         video.removeEventListener("loadedmetadata", reapply, true);
         video.removeEventListener("durationchange", reapply, true);
         video.removeEventListener("emptied", reapply, true);
@@ -1327,25 +1274,31 @@
         } catch (err) {
         }
       }
-      const player = getYouTubePlayer();
-      try {
-        if (player && typeof player.setVolume === "function") {
-          player.setVolume(target);
-        }
-        if (unmute && target > 0 && player && typeof player.unMute === "function") {
-          player.unMute();
-        }
-      } catch (err) {
-      }
+      postMainWorldMessage({ source: MAIN_PLAYER_COMMAND, command: "setVolume", value: target });
+      if (unmute && target > 0) postMainWorldMessage({ source: MAIN_PLAYER_COMMAND, command: "unMute" });
       return target;
     }
     function shouldUseVolumeBoost() {
       return !!config.enabled && !!config.volumeBoostEnabled && normalizeVolumeBoostLevel(config.volumeBoostLevel) > 1;
     }
+    function hasUserActivation() {
+      try {
+        const activation = navigator.userActivation;
+        if (activation && typeof activation.hasBeenActive === "boolean") return activation.hasBeenActive;
+      } catch (err) {
+      }
+      return !!adState.lastUserPlaybackIntentAt;
+    }
+    function resumeSuspendedBoost() {
+      const graph = volumeBoostGraphs.get(getActiveVideo());
+      if (graph && graph.context.state === "suspended") graph.context.resume().catch(() => {
+      });
+    }
     function ensureVolumeBoostGraph(video) {
       if (!video) return null;
       const existing = volumeBoostGraphs.get(video);
       if (existing) return existing;
+      if (!hasUserActivation()) return null;
       const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
       if (!AudioContextCtor) return null;
       const context = new AudioContextCtor();
@@ -1376,7 +1329,7 @@
         return enabled;
       } catch (err) {
         console.warn("[YouTube Extension] Volume boost unavailable:", err);
-        if (showFeedback) showPlayerFeedback("volume", "Boost indisponivel", "O navegador bloqueou o audio graph");
+        if (showFeedback) showPlayerFeedback("volume", "Boost indisponível", "O navegador bloqueou o processamento de áudio");
         return false;
       }
     }
@@ -1389,23 +1342,8 @@
       return applyVolumeBoost(video, true);
     }
     const VIDEO_FILTER_STYLE_ID = "youtube-extension-video-filter-style";
-    function getVideoFilterValue() {
-      return [
-        "brightness(" + normalizePercent(config.videoFilterBrightness, 100) + "%)",
-        "contrast(" + normalizePercent(config.videoFilterContrast, 100) + "%)",
-        "saturate(" + normalizePercent(config.videoFilterSaturate, 100) + "%)",
-        "grayscale(" + normalizePercent(config.videoFilterGrayscale, 0) + "%)",
-        "sepia(" + normalizePercent(config.videoFilterSepia, 0) + "%)"
-      ].join(" ");
-    }
     function shouldUseVideoFilters() {
-      if (!config.enabled) return false;
-      const key = getCurrentVideoKey();
-      if (!config.appearanceAutoApplyFilters && adState.videoFiltersSessionKey && adState.videoFiltersSessionKey !== key) {
-        adState.videoFiltersSessionKey = "";
-        adState.videoFiltersSessionEnabled = false;
-      }
-      return config.appearanceAutoApplyFilters ? !!config.videoFiltersEnabled : !!adState.videoFiltersSessionEnabled;
+      return !!config.enabled && !!config.videoFiltersEnabled && !isNeutralFilter(getVideoFilterValues());
     }
     function applyVideoFilters() {
       const existing = document.getElementById(VIDEO_FILTER_STYLE_ID);
@@ -1413,38 +1351,32 @@
         existing?.remove();
         videoFilterSignature = "";
         updatePlayerToolbarStates();
+        refreshPlayerControlStates();
         return;
       }
-      const filterValue = getVideoFilterValue();
-      if (existing && videoFilterSignature === filterValue) {
-        updatePlayerToolbarStates();
-        return;
-      }
+      const filterValue = buildFilterCss(getVideoFilterValues());
+      if (existing && videoFilterSignature === filterValue) return;
       const style = existing || document.createElement("style");
       style.id = VIDEO_FILTER_STYLE_ID;
       style.textContent = `
-      #movie_player video.html5-main-video,
-      .html5-video-container video {
+      #movie_player video.html5-main-video {
         filter: ${filterValue} !important;
       }
     `;
       if (!existing) (document.head || document.documentElement).appendChild(style);
       videoFilterSignature = filterValue;
       updatePlayerToolbarStates();
+      refreshPlayerControlStates();
     }
     function setVideoFiltersEnabled(enabled) {
-      if (config.appearanceAutoApplyFilters) {
-        config.videoFiltersEnabled = !!enabled;
-        try {
-          chrome.storage.local.set({ videoFiltersEnabled: config.videoFiltersEnabled });
-        } catch (err) {
-        }
-      } else {
-        adState.videoFiltersSessionKey = getCurrentVideoKey();
-        adState.videoFiltersSessionEnabled = !!enabled;
+      config.videoFiltersEnabled = !!enabled;
+      try {
+        chrome.storage.local.set({ videoFiltersEnabled: config.videoFiltersEnabled });
+      } catch (err) {
       }
       applyVideoFilters();
-      showPlayerFeedback("filters", enabled ? "Filtros on" : "Filtros off", config.appearanceAutoApplyFilters ? "Aplicacao automatica" : "Somente neste video");
+      syncFilterPanel();
+      showPlayerFeedback("filters", enabled ? "Filtros ligados" : "Filtros desligados");
     }
     function resetQualityState() {
       adState.qualityRequestKey = "";
@@ -1453,57 +1385,22 @@
       adState.qualityAppliedKey = "";
     }
     function getCurrentQualityLevel() {
-      const player = getYouTubePlayer();
-      try {
-        if (player && typeof player.getPlaybackQuality === "function") {
-          return normalizeQualityLevel(player.getPlaybackQuality(), "");
-        }
-      } catch (err) {
-      }
-      return "";
+      return normalizeQualityLevel(adState.qualityCurrent, "");
     }
     function getAvailableQualityLevels() {
-      const player = getYouTubePlayer();
-      try {
-        if (player && typeof player.getAvailableQualityLevels === "function") {
-          const levels = player.getAvailableQualityLevels();
-          if (Array.isArray(levels)) {
-            return levels.map((level) => normalizeQualityLevel(level, "")).filter((level) => level && level !== "auto");
-          }
-        }
-      } catch (err) {
-      }
-      return [];
+      const levels = Array.isArray(adState.qualityAvailable) ? adState.qualityAvailable : [];
+      return levels.map((level) => normalizeQualityLevel(level, "")).filter((level) => level && level !== "auto");
     }
     function pickAvailableQuality(target) {
       return pickBestQualityLevel(target, getAvailableQualityLevels());
     }
     function setPlaybackQuality(target) {
-      const player = getYouTubePlayer();
-      if (!player) return false;
-      const level = pickAvailableQuality(target);
-      let attempted = false;
-      try {
-        if (typeof player.setPlaybackQualityRange === "function") {
-          if (level === "auto") {
-            player.setPlaybackQualityRange("auto");
-          } else {
-            player.setPlaybackQualityRange(level, level);
-          }
-          attempted = true;
-        }
-      } catch (err) {
-      }
-      try {
-        if (typeof player.setPlaybackQuality === "function") {
-          player.setPlaybackQuality(level);
-          attempted = true;
-        }
-      } catch (err) {
-      }
-      requestMainWorldQuality(level);
-      attempted = true;
-      return attempted;
+      if (!getYouTubePlayer()) return false;
+      requestMainWorldQuality(target);
+      return true;
+    }
+    function queryMainWorldQuality() {
+      postMainWorldMessage({ source: MAIN_QUALITY_MESSAGE, level: "", query: true });
     }
     function isFullscreenMode() {
       const player = getYouTubePlayer();
@@ -1557,7 +1454,8 @@
       if (fullscreen && config.qualityFullscreenEnabled) {
         if (!adState.fullscreenQualityMode) {
           adState.fullscreenQualityMode = true;
-          adState.preFullscreenQuality = getCurrentQualityLevel();
+          adState.preFullscreenQuality = null;
+          queryMainWorldQuality();
           resetQualityState();
         }
         applyQualityTarget(getQualityTarget(true), key + ":fullscreen");
@@ -1724,6 +1622,13 @@
       if (config.appearanceHideShorts) {
         blocks.push(`
         ytd-reel-shelf-renderer,
+        ytd-rich-shelf-renderer[is-shorts],
+        ytd-rich-section-renderer:has(ytd-rich-shelf-renderer[is-shorts]),
+        grid-shelf-view-model:has(ytm-shorts-lockup-view-model),
+        ytm-shorts-lockup-view-model,
+        yt-tab-shape[tab-title="Shorts"],
+        ytd-guide-entry-renderer:has(a[title="Shorts"]),
+        ytd-mini-guide-entry-renderer[aria-label="Shorts"],
         ytd-rich-section-renderer:has(a[href^="/shorts/"]),
         ytd-rich-item-renderer:has(a[href^="/shorts/"]),
         ytd-video-renderer:has(a[href^="/shorts/"]),
@@ -1732,6 +1637,20 @@
         ytd-guide-entry-renderer:has(a[href^="/shorts"]),
         ytd-mini-guide-entry-renderer:has(a[href^="/shorts"]),
         ytd-browse[page-subtype="shorts"] {
+          display: none !important;
+        }
+      `);
+      }
+      if (config.skipSurveysEnabled !== false) {
+        blocks.push(`
+        ytd-inline-survey-renderer,
+        ytd-single-option-survey-renderer,
+        ytd-rich-section-renderer:has(ytd-inline-survey-renderer),
+        ytd-item-section-renderer:has(> #contents > ytd-inline-survey-renderer),
+        yt-survey-renderer,
+        ytd-feedback-survey-renderer,
+        .ytp-survey-container,
+        .ytp-player-survey {
           display: none !important;
         }
       `);
@@ -1846,8 +1765,8 @@
         blocks.push(`
         ytd-watch-flexy #movie_player {
           width: 100% !important;
+          height: 100% !important;
           max-width: none !important;
-          aspect-ratio: 16 / 9 !important;
           overflow: hidden !important;
         }
 
@@ -1898,22 +1817,28 @@
         config.themeCustomMuted,
         config.themeCustomBorder,
         config.themeCustomCss,
-        location.pathname
+        config.skipSurveysEnabled,
+        // Only what the CSS depends on; the full path rebuilt it (and fired
+        // three layout refreshes) on every video navigation.
+        isChannelPage(),
+        isPopupWindow()
       ].join(":");
       if (signature === appearanceSignature) return;
+      const layoutKeyOf = (sig) => sig.split(":").slice(6, 15).join(":") + ":" + isChannelPage();
+      const layoutChanged = !appearanceSignature || layoutKeyOf(appearanceSignature) !== layoutKeyOf(signature);
       appearanceSignature = signature;
       const css = config.enabled ? buildAppearanceCss() : "";
       const existing = document.getElementById(APPEARANCE_STYLE_ID);
       if (!css) {
         existing?.remove();
-        scheduleYouTubeLayoutRefresh();
+        if (layoutChanged) scheduleYouTubeLayoutRefresh();
         return;
       }
       const style = existing || document.createElement("style");
       style.id = APPEARANCE_STYLE_ID;
-      style.textContent = css;
+      if (style.textContent !== css) style.textContent = css;
       if (!existing) (document.head || document.documentElement).appendChild(style);
-      scheduleYouTubeLayoutRefresh();
+      if (layoutChanged) scheduleYouTubeLayoutRefresh();
     }
     function scheduleYouTubeLayoutRefresh() {
       window.dispatchEvent(new Event("resize"));
@@ -1940,54 +1865,67 @@
     }
     function sortCommentsNewestIfNeeded() {
       if (!config.enabled || !config.appearanceSortNewestComments || config.appearanceHideComments || !isWatchPage()) return;
+      if (document.hidden) return;
       const key = getCurrentVideoKey();
-      if (adState.commentsSortKey === key) return;
+      if (!key || adState.commentsSortKey === key) return;
       const now = Date.now();
       if (now - adState.commentsSortAttemptAt < 2500) return;
+      const sortMenu = document.querySelector("ytd-comments #sort-menu");
+      const trigger = sortMenu?.querySelector("#trigger, tp-yt-paper-button, button");
+      if (!sortMenu || !trigger || trigger.getBoundingClientRect().height <= 0) return;
       adState.commentsSortAttemptAt = now;
-      const comments = document.querySelector("ytd-comments, #comments");
-      if (!comments) return;
-      const sortButton = comments.querySelector(
-        '#sort-menu button, #sort-menu [role="button"], [aria-label*="Classificar" i], [aria-label*="Ordenar" i], [aria-label*="Sort" i]'
-      );
-      if (!sortButton || !clickElement(sortButton)) return;
-      window.setTimeout(() => {
-        const candidates = Array.from(document.querySelectorAll("ytd-menu-service-item-renderer, tp-yt-paper-item, yt-formatted-string, [role='menuitem']"));
-        const newest = candidates.find((item) => {
-          const text = (item.textContent || "").toLowerCase();
-          return text.includes("mais recentes") || text.includes("newest first") || text.includes("newest");
-        });
-        if (newest && clickElement(newest)) {
-          adState.commentsSortKey = key;
-        }
-      }, 180);
-    }
-    function ensureTheaterMode(active) {
-      const watchFlexy = document.querySelector("ytd-watch-flexy");
-      const currentlyTheater = !!watchFlexy?.hasAttribute("theater");
-      if (currentlyTheater === active) return;
-      const theaterButton = document.querySelector(".ytp-size-button, button.ytp-size-button");
-      if (theaterButton) {
-        theaterButton.click();
+      adState.commentsSortAttempts = (adState.commentsSortKeyAttempts === key ? adState.commentsSortAttempts || 0 : 0) + 1;
+      adState.commentsSortKeyAttempts = key;
+      if (adState.commentsSortAttempts > 3) {
+        adState.commentsSortKey = key;
         return;
       }
-      if (!watchFlexy) return;
-      if (active) {
-        watchFlexy.setAttribute("theater", "");
-      } else {
-        watchFlexy.removeAttribute("theater");
-      }
+      const scrollX = window.scrollX;
+      const scrollY = window.scrollY;
+      const restoreScroll = () => {
+        if (Math.abs(window.scrollY - scrollY) > 2) window.scrollTo(scrollX, scrollY);
+      };
+      trigger.click();
+      window.setTimeout(() => {
+        const items = Array.from(sortMenu.querySelectorAll("tp-yt-paper-listbox a, tp-yt-paper-listbox tp-yt-paper-item"));
+        const newest = items[1] || null;
+        if (newest) {
+          newest.click();
+          adState.commentsSortKey = key;
+        } else {
+          document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+        }
+        restoreScroll();
+        requestAnimationFrame(restoreScroll);
+      }, 200);
+    }
+    let theaterToggleAt = 0;
+    function ensureTheaterMode(active) {
+      const watchFlexy = document.querySelector("ytd-watch-flexy");
+      if (!watchFlexy || watchFlexy.hidden) return false;
+      const currentlyTheater = watchFlexy.hasAttribute("theater");
+      if (currentlyTheater === active) return true;
+      if (document.fullscreenElement || miniplayerActive) return false;
+      if (Date.now() - theaterToggleAt < 1500) return false;
+      const player = getYouTubePlayer();
+      const theaterButton = player?.querySelector(".ytp-size-button");
+      if (!theaterButton || theaterButton.getBoundingClientRect().width <= 0) return false;
+      theaterToggleAt = Date.now();
+      theaterButton.click();
+      return false;
     }
     function runAutoLayoutTasks() {
       if (!config.enabled || !isWatchPage()) return;
       const key = getCurrentVideoKey();
-      if ((config.appearanceAutoTheater || config.appearanceAutoExpandPlayer) && adState.autoTheaterAppliedKey !== key) {
-        adState.autoTheaterAppliedKey = key;
-        setTimeout(() => ensureTheaterMode(true), 300);
+      if ((config.appearanceAutoTheater || config.appearanceAutoExpandPlayer) && key && adState.autoTheaterAppliedKey !== key) {
+        if (ensureTheaterMode(true)) adState.autoTheaterAppliedKey = key;
       }
       if (config.cinemaDefault && !adState.cinemaInitialized) {
         adState.cinemaInitialized = true;
         setCinemaMode(true);
+      }
+      if (adState.cinemaActive && (config.cinemaUseYouTubeTheater || config.cinemaAutoResize) && key && adState.cinemaTheaterKey !== key) {
+        if (ensureTheaterMode(true)) adState.cinemaTheaterKey = key;
       }
     }
     function runAppearanceTasks() {
@@ -2008,6 +1946,7 @@
         playerUiTasksLastRunAt = now;
         updateMiniplayer();
         updatePlayerToolbar();
+        updatePlayerControls();
       }
     }
     function scheduleVisualMaintenanceTasks(force = false, delay = 0) {
@@ -2057,23 +1996,14 @@
         box-shadow: 0 0 0 100vmax rgba(0, 0, 0, ${Math.min(0.85, opacity).toFixed(2)}) !important;
       }
 
-      /* Cinema owns the available width; keep a stable 16:9 stage so ultrawide
-         screens do not collapse the player into YouTube's regular max-width. */
-      html.${CINEMA_CLASS} ytd-watch-flexy #player-container-outer,
-      html.${CINEMA_CLASS} ytd-watch-flexy #player-theater-container,
-      html.${CINEMA_CLASS} ytd-watch-flexy #player-full-bleed-container {
-        width: 100% !important;
-        max-width: none !important;
-        margin-inline: auto !important;
-      }
+      /* Cinema only darkens the surroundings. It used to force its own size
+         on #movie_player, which fought YouTube's computed size and could crop
+         the video or push it out of view. Sizing is left to YouTube/theater. */
 
-      html.${CINEMA_CLASS} ytd-watch-flexy #movie_player {
-        width: min(100vw, calc((100vh - 72px) * 16 / 9)) !important;
-        max-width: 100% !important;
-        height: auto !important;
-        aspect-ratio: 16 / 9 !important;
-        margin-inline: auto !important;
-        overflow: hidden !important;
+      html.${CINEMA_CLASS}.${MINIPLAYER_ACTIVE_CLASS} ytd-watch-flexy #player-container-outer,
+      html.${CINEMA_CLASS}.${MINIPLAYER_ACTIVE_CLASS} ytd-watch-flexy #player-theater-container,
+      html.${CINEMA_CLASS}.${MINIPLAYER_ACTIVE_CLASS} ytd-watch-flexy #player-full-bleed-container {
+        box-shadow: none !important;
       }
     `;
     }
@@ -2099,11 +2029,15 @@
     }
     function setCinemaMode(active) {
       adState.cinemaActive = !!active;
+      adState.cinemaTheaterKey = "";
       if (config.cinemaUseYouTubeTheater || config.cinemaAutoResize) {
         ensureTheaterMode(adState.cinemaActive);
       }
       applyCinemaMode();
       updatePlayerToolbarStates();
+    }
+    function toggleCinemaMode() {
+      setCinemaMode(!adState.cinemaActive);
     }
     const PLAYER_FEEDBACK_ID = "youtube-extension-player-feedback";
     const PLAYER_FEEDBACK_STYLE_ID = "youtube-extension-player-feedback-style";
@@ -2115,43 +2049,35 @@
       #${PLAYER_FEEDBACK_ID} {
         position: fixed !important;
         z-index: 2147483600 !important;
-        min-width: 132px !important;
-        max-width: min(260px, calc(100vw - 32px)) !important;
-        padding: 10px 14px !important;
-        border-radius: 999px !important;
-        border: 1px solid rgba(255, 255, 255, 0.18) !important;
-        background: rgba(10, 10, 12, 0.84) !important;
+        display: flex !important;
+        align-items: baseline !important;
+        gap: 8px !important;
+        max-width: min(360px, calc(100vw - 32px)) !important;
+        padding: 9px 16px !important;
+        border-radius: 20px !important;
+        background: rgba(0, 0, 0, 0.6) !important;
         color: #fff !important;
-        box-shadow: 0 18px 50px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
-        backdrop-filter: blur(14px) saturate(1.1) !important;
-        -webkit-backdrop-filter: blur(14px) saturate(1.1) !important;
-        font: 700 13px/1.15 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
-        letter-spacing: 0 !important;
-        text-align: center !important;
+        font: 500 14px/1.2 Roboto, Arial, sans-serif !important;
+        white-space: nowrap !important;
         pointer-events: none !important;
         opacity: 0 !important;
-        transform: translate(-50%, -50%) scale(0.96) !important;
-        transition: opacity 150ms ease, transform 150ms ease !important;
+        transform: translate(-50%, -50%) !important;
+        transition: opacity 120ms ease !important;
       }
 
-      #${PLAYER_FEEDBACK_ID}.is-visible {
-        opacity: 1 !important;
-        transform: translate(-50%, -50%) scale(1) !important;
-      }
+      #${PLAYER_FEEDBACK_ID}.is-visible { opacity: 1 !important; }
 
       #${PLAYER_FEEDBACK_ID} .feedback-label {
-        display: block !important;
-        color: rgba(255, 255, 255, 0.68) !important;
-        font-size: 10px !important;
-        font-weight: 650 !important;
-        text-transform: uppercase !important;
+        color: rgba(255, 255, 255, 0.7) !important;
+        font-size: 13px !important;
+        font-weight: 400 !important;
       }
 
+      #${PLAYER_FEEDBACK_ID} .feedback-label:first-child { display: none !important; }
+
       #${PLAYER_FEEDBACK_ID} .feedback-value {
-        display: block !important;
-        margin-top: 2px !important;
-        color: #fff !important;
-        font-size: 18px !important;
+        font-size: 15px !important;
+        font-weight: 500 !important;
       }
     `;
       (document.head || document.documentElement).appendChild(style);
@@ -2167,14 +2093,14 @@
         feedback.id = PLAYER_FEEDBACK_ID;
         document.body.appendChild(feedback);
       }
-      const kindLabel = kind === "volume" ? "Volume" : kind === "filters" ? "Filtros" : kind === "settings" ? "Configuracoes" : kind === "popup" ? "Pop-up" : kind === "speed" ? "Velocidade" : "YouTube Extension";
+      const kindLabel = kind === "volume" ? "Volume" : kind === "filters" ? "Filtros" : kind === "settings" ? "Configurações" : kind === "resume" ? "Continuar" : kind === "popup" ? "Pop-up" : kind === "speed" ? "Velocidade" : "YouTube Extension";
       feedback.innerHTML = `
       <span class="feedback-label">${kindLabel}</span>
       <span class="feedback-value">${value}</span>
       ${label ? `<span class="feedback-label">${label}</span>` : ""}
     `;
       feedback.style.left = Math.round(rect.left + rect.width / 2) + "px";
-      feedback.style.top = Math.round(rect.top + rect.height * 0.23) + "px";
+      feedback.style.top = Math.round(rect.top + Math.min(64, rect.height * 0.12)) + "px";
       feedback.classList.add("is-visible");
       if (playerFeedbackTimer) window.clearTimeout(playerFeedbackTimer);
       playerFeedbackTimer = window.setTimeout(() => {
@@ -2183,8 +2109,28 @@
     }
     const MINIPLAYER_STYLE_ID = "tube-shield-miniplayer-style";
     const MINIPLAYER_ACTIVE_CLASS = "tube-shield-miniplayer-active";
-    function getPlayerAnchor() {
-      return document.querySelector("#player-container-outer") || document.querySelector("#player") || document.querySelector("ytd-player") || getYouTubePlayer();
+    const MINIPLAYER_SLOT_ATTR = "data-yte-mini-slot";
+    const MINIPLAYER_CLOSE_ID = "yte-miniplayer-close";
+    const MINIPLAYER_SLOT_SELECTORS = [
+      "#player-full-bleed-container",
+      "#full-bleed-container",
+      "#player-theater-container",
+      "#player-container-outer",
+      "#player-container",
+      "#player"
+    ];
+    let miniplayerActive = false;
+    let miniplayerDismissedKey = "";
+    let miniplayerSlot = null;
+    function getPlayerSlot() {
+      const flexy = document.querySelector("ytd-watch-flexy");
+      const player = getYouTubePlayer();
+      if (!flexy || !player) return null;
+      for (const selector of MINIPLAYER_SLOT_SELECTORS) {
+        const el = flexy.querySelector(selector);
+        if (el && el.contains(player) && el.getBoundingClientRect().height > 0) return el;
+      }
+      return null;
     }
     function getMastheadHeight() {
       const masthead = document.querySelector("ytd-masthead, #masthead-container");
@@ -2209,16 +2155,23 @@
     function buildMiniplayerCss() {
       const size = parseMiniplayerSize();
       return `
+      [${MINIPLAYER_SLOT_ATTR}] {
+        min-height: var(--yte-mini-slot-height, 0px) !important;
+      }
+
       html.${MINIPLAYER_ACTIVE_CLASS} ytd-watch-flexy #player,
       html.${MINIPLAYER_ACTIVE_CLASS} ytd-watch-flexy #player-container-outer,
+      html.${MINIPLAYER_ACTIVE_CLASS} ytd-watch-flexy #player-container-inner,
+      html.${MINIPLAYER_ACTIVE_CLASS} ytd-watch-flexy #player-container,
       html.${MINIPLAYER_ACTIVE_CLASS} ytd-watch-flexy #player-theater-container,
       html.${MINIPLAYER_ACTIVE_CLASS} ytd-watch-flexy #player-full-bleed-container,
+      html.${MINIPLAYER_ACTIVE_CLASS} ytd-watch-flexy #full-bleed-container,
       html.${MINIPLAYER_ACTIVE_CLASS} ytd-watch-flexy ytd-player {
-        position: relative !important;
-        z-index: 2147482500 !important;
+        z-index: 2010 !important;
         overflow: visible !important;
         transform: none !important;
         contain: none !important;
+        filter: none !important;
       }
 
       html.${MINIPLAYER_ACTIVE_CLASS} #movie_player.html5-video-player {
@@ -2226,13 +2179,17 @@
         ${getMiniplayerPositionCss()}
         width: min(${size.width}px, calc(100vw - 36px)) !important;
         height: min(${size.height}px, calc(100vh - 90px)) !important;
-        z-index: 2147483600 !important;
-        border-radius: 10px !important;
+        z-index: 2010 !important;
+        border-radius: 12px !important;
         overflow: hidden !important;
         box-shadow: 0 22px 60px rgba(0, 0, 0, 0.48), 0 0 0 1px rgba(255, 255, 255, 0.14) !important;
         background: #000 !important;
-        transform: translateZ(0) !important;
-        isolation: isolate !important;
+        animation: yte-mini-in 180ms ease-out;
+      }
+
+      @keyframes yte-mini-in {
+        from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+        to { opacity: 1; transform: none; }
       }
 
       html.${MINIPLAYER_ACTIVE_CLASS} #movie_player .html5-video-container,
@@ -2247,6 +2204,59 @@
         top: 0 !important;
         object-fit: contain !important;
         transform: none !important;
+      }
+
+      /* YouTube sizes the control bar in px for the docked player. */
+      html.${MINIPLAYER_ACTIVE_CLASS} #movie_player .ytp-chrome-bottom {
+        width: calc(100% - 24px) !important;
+        left: 12px !important;
+      }
+
+      html.${MINIPLAYER_ACTIVE_CLASS} #movie_player .ytp-ce-element,
+      html.${MINIPLAYER_ACTIVE_CLASS} #movie_player .ytp-cards-teaser,
+      html.${MINIPLAYER_ACTIVE_CLASS} #movie_player .ytp-size-button,
+      html.${MINIPLAYER_ACTIVE_CLASS} #movie_player .ytp-miniplayer-button,
+      html.${MINIPLAYER_ACTIVE_CLASS} #movie_player .ytp-chapter-container {
+        display: none !important;
+      }
+
+      #${MINIPLAYER_CLOSE_ID} {
+        display: none;
+      }
+
+      html.${MINIPLAYER_ACTIVE_CLASS} #${MINIPLAYER_CLOSE_ID} {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        z-index: 80;
+        display: grid;
+        place-items: center;
+        width: 30px;
+        height: 30px;
+        border: 0;
+        border-radius: 999px;
+        background: rgba(0, 0, 0, 0.62);
+        color: #fff;
+        cursor: pointer;
+        opacity: 0;
+        transition: opacity 140ms ease, background 140ms ease;
+      }
+
+      html.${MINIPLAYER_ACTIVE_CLASS} #movie_player:hover #${MINIPLAYER_CLOSE_ID},
+      html.${MINIPLAYER_ACTIVE_CLASS} #${MINIPLAYER_CLOSE_ID}:focus-visible {
+        opacity: 1;
+      }
+
+      #${MINIPLAYER_CLOSE_ID}:hover {
+        background: rgba(255, 51, 75, 0.9);
+      }
+
+      #${MINIPLAYER_CLOSE_ID} svg {
+        width: 16px;
+        height: 16px;
+        stroke: currentColor;
+        stroke-width: 2.4;
+        fill: none;
       }
     `;
     }
@@ -2269,28 +2279,88 @@
     function isChannelPage() {
       return /^\/(@|channel\/|c\/|user\/)/.test(location.pathname);
     }
-    function shouldUseMiniplayer() {
+    function isMiniplayerEligible() {
       if (!config.enabled || !config.miniplayerEnabled || !isWatchPage()) return false;
       if (document.fullscreenElement || document.pictureInPictureElement) return false;
+      if (isPopupWindow()) return false;
+      return !!getYouTubePlayer() && !!getActiveVideo();
+    }
+    function ensureMiniplayerCloseButton() {
       const player = getYouTubePlayer();
-      const video = getActiveVideo();
-      const anchor = getPlayerAnchor();
-      if (!player || !video || !anchor?.getBoundingClientRect) return false;
-      const rect = anchor.getBoundingClientRect();
-      const activationOffset = Math.max(80, getMastheadHeight() + 16);
-      return window.scrollY > 320 && rect.bottom < activationOffset;
+      if (!player || player.querySelector("#" + MINIPLAYER_CLOSE_ID)) return;
+      const button = document.createElement("button");
+      button.id = MINIPLAYER_CLOSE_ID;
+      button.type = "button";
+      button.title = "Fechar miniplayer";
+      button.setAttribute("aria-label", "Fechar miniplayer");
+      button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>';
+      const stop = (event) => event.stopPropagation();
+      button.addEventListener("mousedown", stop, true);
+      button.addEventListener("pointerdown", stop, true);
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        miniplayerDismissedKey = getCurrentVideoKey();
+        updateMiniplayer();
+      });
+      player.appendChild(button);
+    }
+    function releaseMiniplayerSlot() {
+      if (!miniplayerSlot) return;
+      miniplayerSlot.removeAttribute(MINIPLAYER_SLOT_ATTR);
+      miniplayerSlot.style.removeProperty("--yte-mini-slot-height");
+      miniplayerSlot = null;
+    }
+    function requestMainWorldPlayerResize(floating) {
+      const size = parseMiniplayerSize();
+      postMainWorldMessage({
+        source: MAIN_PLAYER_RESIZE_MESSAGE,
+        floating,
+        width: Math.min(size.width, window.innerWidth - 36),
+        height: Math.min(size.height, window.innerHeight - 90)
+      });
+    }
+    function setMiniplayerActive(active, slot) {
+      if (active === miniplayerActive && (!active || slot === miniplayerSlot)) return;
+      if (active && slot) {
+        if (miniplayerSlot && miniplayerSlot !== slot) releaseMiniplayerSlot();
+        const height = Math.round(slot.getBoundingClientRect().height);
+        slot.style.setProperty("--yte-mini-slot-height", height + "px");
+        slot.setAttribute(MINIPLAYER_SLOT_ATTR, "");
+        miniplayerSlot = slot;
+        ensureMiniplayerCloseButton();
+      } else {
+        releaseMiniplayerSlot();
+      }
+      const changed = active !== miniplayerActive;
+      miniplayerActive = active;
+      document.documentElement.classList.toggle(MINIPLAYER_ACTIVE_CLASS, active);
+      if (changed) requestMainWorldPlayerResize(active);
     }
     function updateMiniplayer() {
-      const root = document.documentElement;
-      const active = shouldUseMiniplayer();
       if (!config.enabled || !config.miniplayerEnabled) {
-        root.classList.remove(MINIPLAYER_ACTIVE_CLASS);
+        setMiniplayerActive(false, null);
         document.getElementById(MINIPLAYER_STYLE_ID)?.remove();
         miniplayerSignature = "";
         return;
       }
       ensureMiniplayerStyle();
-      root.classList.toggle(MINIPLAYER_ACTIVE_CLASS, active);
+      const eligible = isMiniplayerEligible();
+      const slot = miniplayerActive && miniplayerSlot?.isConnected ? miniplayerSlot : getPlayerSlot();
+      const slotBottom = slot ? slot.getBoundingClientRect().bottom : Number.NaN;
+      const mastheadHeight = getMastheadHeight();
+      const key = getCurrentVideoKey();
+      if (miniplayerDismissedKey && (miniplayerDismissedKey !== key || shouldResetMiniplayerDismissal(slotBottom, mastheadHeight))) {
+        miniplayerDismissedKey = "";
+      }
+      const active = !!slot && shouldFloatPlayer({
+        eligible,
+        currentlyActive: miniplayerActive,
+        dismissed: !!key && miniplayerDismissedKey === key,
+        slotBottom,
+        mastheadHeight
+      });
+      setMiniplayerActive(active, active ? slot : null);
     }
     function scheduleMiniplayerUpdate() {
       if (miniplayerUpdateRaf) return;
@@ -2320,8 +2390,8 @@
       if (config.toolbarPopup && config.playerPopupEnabled !== false) actions.push({ action: "popup", title: "Abrir em pop-up", icon: "popup" });
       if (config.toolbarPip) actions.push({ action: "pip", title: "Picture-in-Picture", icon: "pip" });
       if (config.toolbarScreenshot) actions.push({ action: "screenshot", title: "Capturar frame", icon: "camera" });
-      if (config.toolbarFilters) actions.push({ action: "filters", title: "Filtros de video", icon: "filters" });
-      if (config.toolbarSettings) actions.push({ action: "settings", title: "Configuracoes", icon: "settings" });
+      if (config.toolbarFilters) actions.push({ action: "filters", title: "Filtros de vídeo", icon: "filters" });
+      if (config.toolbarSettings) actions.push({ action: "settings", title: "Configurações", icon: "settings" });
       return actions;
     }
     function buildPlayerToolbarCss() {
@@ -2432,8 +2502,10 @@
         vector-effect: non-scaling-stroke;
       }
 
+      /* visibility (not display) so hiding it does not shift the page */
       html.${MINIPLAYER_ACTIVE_CLASS} #${PLAYER_TOOLBAR_ID} {
-        display: none !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
       }
 
       @media (max-width: 720px) {
@@ -2610,7 +2682,7 @@
       if (config.playerPopupEnabled === false) return;
       const videoId = getCurrentVideoId();
       if (!videoId) {
-        showPlayerFeedback("popup", "Indisponivel", "Nao encontrei o ID do video");
+        showPlayerFeedback("popup", "Indisponível", "Não encontrei o ID do vídeo");
         return;
       }
       const size = parsePlayerPopupSize();
@@ -2781,9 +2853,22 @@
         adState.defaultSpeedAppliedKey = "";
         adState.defaultVolumeAppliedKey = "";
       }
-      if (config.playerSpeedEnabled && adState.defaultSpeedAppliedKey !== key) {
-        setUserPlaybackRate(config.playerSpeedDefault, video);
-        adState.defaultSpeedAppliedKey = key;
+      if (config.playerSpeedEnabled && adState.defaultSpeedAppliedKey !== key && !isLiveStream()) {
+        if (adState.defaultSpeedPendingKey !== key) {
+          adState.defaultSpeedPendingKey = key;
+          adState.defaultSpeedPendingSince = Date.now();
+          adState.defaultSpeedStableTicks = 0;
+        }
+        const target = normalizeUserPlaybackRate(config.playerSpeedDefault, 1);
+        if (Math.abs(video.playbackRate - target) > 1e-3) {
+          adState.defaultSpeedStableTicks = 0;
+          if (video.readyState >= 1) setUserPlaybackRate(target, video);
+        } else {
+          adState.defaultSpeedStableTicks = (adState.defaultSpeedStableTicks || 0) + 1;
+        }
+        if (adState.defaultSpeedStableTicks >= 3 || Date.now() - adState.defaultSpeedPendingSince > 6e3) {
+          adState.defaultSpeedAppliedKey = key;
+        }
       }
       if (config.playerVolumeEnabled && adState.defaultVolumeAppliedKey !== key) {
         setUserVolume(config.playerVolumeDefault, false, video);
@@ -2797,6 +2882,7 @@
     }
     function isPointerInsidePlayer(target) {
       if (!target || !(target instanceof Element)) return false;
+      if (target.closest(".ytp-popup, .ytp-settings-menu, #" + FILTER_PANEL_ID + ", #" + PLAYER_CONTROLS_ID)) return false;
       const player = getYouTubePlayer();
       if (player && player.contains(target)) return true;
       return !!target.closest("#movie_player, .html5-video-player");
@@ -2836,7 +2922,10 @@
         if (url.searchParams.has("list")) return true;
       } catch (err) {
       }
-      return !!document.querySelector("ytd-playlist-panel-renderer, ytd-playlist-video-list-renderer");
+      const panel = document.querySelector("ytd-watch-flexy ytd-playlist-panel-renderer");
+      if (!panel || panel.hidden || panel.hasAttribute("hidden")) return false;
+      const rect = panel.getBoundingClientRect();
+      return rect.height > 0 && !!panel.querySelector("ytd-playlist-panel-video-renderer");
     }
     function isDiagnosticsEnabled() {
       try {
@@ -2849,16 +2938,33 @@
       if (!isDiagnosticsEnabled()) return;
       console.debug("[YouTube Extension][playback]", message, data);
     }
+    const PLAYBACK_EVENT_LOG_KEY = "playbackEventLog";
+    const PLAYBACK_EVENT_LOG_LIMIT = 30;
+    function recordPlaybackEvent(kind, reason, currentTime = 0) {
+      if (!chrome?.storage?.local) return;
+      const entry = {
+        at: Date.now(),
+        kind,
+        reason,
+        time: Math.round(currentTime * 10) / 10,
+        hidden: document.hidden,
+        video: getCurrentVideoId() || ""
+      };
+      try {
+        chrome.storage.local.get({ [PLAYBACK_EVENT_LOG_KEY]: [] }, (data) => {
+          const log = Array.isArray(data[PLAYBACK_EVENT_LOG_KEY]) ? data[PLAYBACK_EVENT_LOG_KEY] : [];
+          log.unshift(entry);
+          chrome.storage.local.set({ [PLAYBACK_EVENT_LOG_KEY]: log.slice(0, PLAYBACK_EVENT_LOG_LIMIT) });
+        });
+      } catch (err) {
+      }
+    }
     function markUserPlaybackIntent(reason = "user") {
       adState.lastUserPlaybackIntentAt = Date.now();
       adState.lastUserPlaybackIntentReason = reason;
     }
     function hasRecentPlaybackIntent(windowMs = USER_PLAYBACK_INTENT_WINDOW_MS) {
       return Date.now() - (adState.lastUserPlaybackIntentAt || 0) < windowMs;
-    }
-    function isNearVideoStart(video) {
-      const current = Number(video?.currentTime || 0);
-      return !Number.isFinite(current) || current < 4;
     }
     function isPopupWindow() {
       try {
@@ -2867,18 +2973,30 @@
       }
       return window.name === "youtubeExtensionPlayerPopup" || !!window.opener && window.outerWidth <= 1040 && window.outerHeight <= 680;
     }
-    function getAutoplayBlockReason(video = getActiveVideo()) {
-      if (!video || !config.enabled || adState.active || getAdPlaying()) return "";
-      if (!isNearVideoStart(video)) return "";
-      if (config.autoplayIgnorePopup && isPopupWindow()) return "";
-      if (config.autoplayAllowPlaylists && isPlaylistContext()) return "";
-      if (document.hidden && isAdSkipperActive() && isWatchPage()) return "";
-      const intentWindow = document.hidden ? BACKGROUND_PLAYBACK_INTENT_WINDOW_MS : USER_PLAYBACK_INTENT_WINDOW_MS;
-      if (hasRecentPlaybackIntent(intentWindow)) return "";
-      if (config.autoplayDisableAll) return "autoplay-disable-all";
-      if (document.hidden && config.autoplayBlockBackground) return "background-autoplay";
-      if (!document.hidden && config.autoplayBlockForeground) return "foreground-autoplay";
-      return "";
+    function getAutoplayBlockReason$1(video = getActiveVideo()) {
+      if (!video) return "";
+      const key = getCurrentVideoKey();
+      return getAutoplayBlockReason({
+        enabled: !!config.enabled,
+        adActive: !!adState.active || getAdPlaying(),
+        isMainVideo: video === getMainVideo(),
+        currentTime: Number(video.currentTime || 0),
+        hidden: document.hidden,
+        isPopup: isPopupWindow(),
+        ignorePopup: !!config.autoplayIgnorePopup,
+        isPlaylist: isPlaylistContext(),
+        allowPlaylists: !!config.autoplayAllowPlaylists,
+        recentIntent: hasRecentPlaybackIntent(document.hidden ? BACKGROUND_PLAYBACK_INTENT_WINDOW_MS : USER_PLAYBACK_INTENT_WINDOW_MS),
+        alreadyBlockedThisVideo: !!key && adState.autoplayBlockedKey === key,
+        msSinceAdEnded: adState.lastAdEndedAt ? Date.now() - adState.lastAdEndedAt : Number.POSITIVE_INFINITY,
+        disableAll: !!config.autoplayDisableAll,
+        blockBackground: !!config.autoplayBlockBackground,
+        blockForeground: !!config.autoplayBlockForeground
+      });
+    }
+    function blockAutoplay(video, reason) {
+      adState.autoplayBlockedKey = getCurrentVideoKey();
+      pauseVideo(video, reason);
     }
     function resumeAdPlaybackIfNeeded() {
       if (!isAdSkipperActive() || !(adState.active || getAdPlaying())) return;
@@ -2907,6 +3025,7 @@
       } catch (err) {
       }
       if (paused) {
+        recordPlaybackEvent("pause", reason, Number(video.currentTime || 0));
         adState.lastPlaybackPauseReason = reason;
         adState.lastPlaybackPauseAt = Date.now();
         debugPlayback("paused video", {
@@ -2924,6 +3043,9 @@
     function announceForegroundPlayback() {
       if (!config.enabled || !config.pauseBackgroundTabs || document.hidden || adState.active || getAdPlaying()) return;
       if (!chrome?.storage?.local) return;
+      const now = Date.now();
+      if (now - (adState.lastPlaybackAnnounceAt || 0) < 2e3) return;
+      adState.lastPlaybackAnnounceAt = now;
       chrome.storage.local.set({
         tubeShieldActivePlayback: {
           token: adState.tabPlaybackToken,
@@ -2932,12 +3054,12 @@
         }
       });
     }
-    function handleVideoPlayEvent() {
+    function handleVideoPlayEvent(event) {
       const video = getActiveVideo();
-      if (!video) return;
-      const blockReason = getAutoplayBlockReason(video);
+      if (!video || event && event.target !== video) return;
+      const blockReason = getAutoplayBlockReason$1(video);
       if (blockReason) {
-        pauseVideo(video, blockReason);
+        blockAutoplay(video, blockReason);
         return;
       }
       announceForegroundPlayback();
@@ -2972,9 +3094,9 @@
       adState.autoplayVideo = video;
       video.addEventListener("play", handleVideoPlayEvent, true);
       video.addEventListener("playing", handleVideoPlayEvent, true);
-      const initialBlockReason = getAutoplayBlockReason(video);
+      const initialBlockReason = getAutoplayBlockReason$1(video);
       if (!video.paused && initialBlockReason) {
-        pauseVideo(video, initialBlockReason);
+        blockAutoplay(video, initialBlockReason);
       }
     }
     function enforceAutoplayGuards() {
@@ -2982,19 +3104,14 @@
       resumeAdPlaybackIfNeeded();
       const video = getActiveVideo();
       if (!video) return;
-      const blockReason = getAutoplayBlockReason(video);
+      const blockReason = getAutoplayBlockReason$1(video);
       if (config.autoplayStopPreload && blockReason) {
         try {
           video.preload = "none";
         } catch (err) {
         }
       }
-      if (video.paused) return;
-      if (blockReason) {
-        pauseVideo(video, blockReason);
-      } else {
-        announceForegroundPlayback();
-      }
+      if (!video.paused && !blockReason) announceForegroundPlayback();
     }
     function getSpeedThroughRate() {
       if (isInstantSkipEnabled()) return INSTANT_SPEED_THROUGH_RATE;
@@ -3006,17 +3123,26 @@
       postMainWorldMessage({
         source: MAIN_FORCE_SKIP_MESSAGE,
         targetTime: adState.skipTargetTime || Date.now(),
-        rate: getSpeedThroughRate()
+        rate: getSpeedThroughRate(),
+        adSrc: adState.adSrc || "",
+        skipSurveys: config.skipSurveysEnabled !== false
       });
     }
-    function requestMainWorldSpeedThrough(rate = getSpeedThroughRate()) {
+    function requestMainWorldSpeedThrough(rate = getSpeedThroughRate(), adOnly = false) {
       postMainWorldMessage({
         source: MAIN_SPEED_THROUGH_MESSAGE,
-        rate
+        rate,
+        adOnly
       });
     }
-    function forceSkipAd(video = document.querySelector("video")) {
+    function isSameAdSource(video) {
+      if (!video) return false;
+      if (!adState.adSrc || !video.currentSrc) return true;
+      return video.currentSrc === adState.adSrc;
+    }
+    function forceSkipAd(video = getMainVideo()) {
       if (!isAdSkipperActive() || !config.aggressiveSkip || adState.watching) return false;
+      if (!getAdPlaying() || !isSameAdSource(video)) return false;
       requestMainWorldSkip();
       const player = getYouTubePlayer();
       let attempted = false;
@@ -3064,7 +3190,7 @@
       }
       adState.forceSkipStartedAt = null;
     }
-    function getCurrentPlaybackRate(video = document.querySelector("video")) {
+    function getCurrentPlaybackRate(video = getMainVideo()) {
       const player = getYouTubePlayer();
       try {
         if (player && typeof player.getPlaybackRate === "function") {
@@ -3088,10 +3214,11 @@
       adState.preAdPlaybackRate = getCurrentPlaybackRate();
       stopPlaybackRateRestore();
     }
-    function applySpeedThrough(video = document.querySelector("video")) {
+    function applySpeedThrough(video = getMainVideo()) {
       if (!isAdSkipperActive() || !config.aggressiveSkip || adState.watching) return false;
+      if (!getAdPlaying() || !isSameAdSource(video)) return false;
       const rate = getSpeedThroughRate();
-      requestMainWorldSpeedThrough(rate);
+      requestMainWorldSpeedThrough(rate, true);
       let attempted = false;
       if (video) {
         try {
@@ -3131,7 +3258,7 @@
     }
     function restorePlaybackRate(rate = adState.preAdPlaybackRate || 1) {
       const targetRate = normalizePlaybackRate(rate || 1);
-      const video = document.querySelector("video");
+      const video = getMainVideo();
       if (video) {
         try {
           if (video.playbackRate !== targetRate) video.playbackRate = targetRate;
@@ -3199,7 +3326,7 @@
     }
     function attemptScheduledSkip() {
       if (!isAdSkipperActive() || !adState.active || adState.watching) return false;
-      const video = document.querySelector("video");
+      const video = getMainVideo();
       const skipButton = findSkipAdButton();
       const action = chooseAdSkipAction({
         adConfirmed: getAdPlaying(),
@@ -3215,6 +3342,7 @@
         return true;
       }
       if (action === "seek-end") {
+        if (!adState.forceSkipInterval) recordPlaybackEvent("ad-seek", "skip-fallback", Number(video?.currentTime || 0));
         forceSkipAd(video);
         startForceSkipBurst(video);
       } else if (action === "speed-through") {
@@ -3222,7 +3350,7 @@
       }
       return false;
     }
-    function startForceSkipBurst(video = document.querySelector("video")) {
+    function startForceSkipBurst(video = getMainVideo()) {
       if (!isAdSkipperActive() || !config.aggressiveSkip || adState.forceSkipInterval) return;
       adState.forceSkipStartedAt = Date.now();
       const tick = () => {
@@ -3234,7 +3362,7 @@
           finishSkipClick();
           return;
         }
-        forceSkipAd(video);
+        forceSkipAd(getMainVideo());
         if (Date.now() - adState.forceSkipStartedAt >= FORCE_SKIP_WINDOW_MS) {
           stopForceSkipBurst();
         }
@@ -3330,12 +3458,25 @@
         document.documentElement.style.overflow = "";
       }, 0);
     }
+    function resumeAfterAdblockWarning() {
+      const video = getMainVideo();
+      if (!video || !video.paused || video.ended) return;
+      if (adState.lastNativePauseWasUser) return;
+      if (Date.now() - (adState.lastNativePauseAt || 0) > 4e3) return;
+      window.setTimeout(() => {
+        if (!video.paused || hasRecentPlaybackIntent(1500)) return;
+        video.play().catch(() => {
+        });
+        recordPlaybackEvent("resume", "adblock-warning-removed", Number(video.currentTime || 0));
+      }, 150);
+    }
     function nukeAdblockElement(el) {
       if (!isAdSkipperActive() || !el) return;
       const target = el.closest?.("tp-yt-paper-dialog") || el;
       const shouldCount = target.isConnected !== false;
       target.remove();
       removeOrphanedAdblockBackdrops();
+      resumeAfterAdblockWarning();
       if (!shouldCount) return;
       adState.warningCount++;
       if (chrome?.storage?.local) {
@@ -3429,84 +3570,110 @@
       style.textContent = `
       #${OVERLAY_ID} {
         position: absolute;
-        top: 24px;
-        right: 24px;
-        z-index: 99999;
-        background: rgba(0, 0, 0, 0.65);
-        border: 1px solid rgba(255, 255, 255, 0.15);
-        border-radius: 4px;
-        padding: 8px 12px;
+        top: 12px;
+        right: 12px;
+        z-index: 60;
         display: flex;
-        flex-direction: column;
-        gap: 3px;
-        font-family: "Roboto", "Arial", sans-serif;
+        align-items: center;
+        gap: 4px;
+        padding: 4px 4px 4px 14px;
+        border-radius: 18px;
+        background: rgba(0, 0, 0, 0.6);
         color: #fff;
-        min-width: 140px;
+        font: 500 13px/1 Roboto, Arial, sans-serif;
         pointer-events: auto;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+        text-shadow: none;
       }
 
-      #${OVERLAY_ID} .ytp-ad-text {
-        font-size: 13px; font-weight: 500; text-align: center;
-        opacity: 0.9; margin-bottom: 2px;
+      #${OVERLAY_ID} .yte-ad-text {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        white-space: nowrap;
+        font-variant-numeric: tabular-nums;
       }
 
-      #${OVERLAY_ID} .ytp-ad-timer-text {
-        font-size: 16px; font-weight: 600; text-align: center;
+      #${OVERLAY_ID} .yte-ad-text::before {
+        content: "";
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #fc0;
       }
+
+      #${OVERLAY_ID}[data-state="waiting"] .yte-ad-text::before { background: rgba(255, 255, 255, 0.6); }
+      #${OVERLAY_ID}[data-state="skipping"] .yte-ad-text::before { background: #3ea6ff; }
 
       #${OVERLAY_ID} button {
-        border: none; border-radius: 4px; padding: 6px 12px;
-        font-size: 12px; font-weight: 500; cursor: pointer;
-        font-family: inherit; width: 100%;
-        background: rgba(255,255,255,0.15); color: #fff;
-        transition: background 0.2s;
+        height: 28px;
+        padding: 0 12px;
+        border: 0;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.15);
+        color: #fff;
+        font: 500 12px Roboto, Arial, sans-serif;
+        cursor: pointer;
+        transition: background 0.15s ease;
       }
 
-      #${OVERLAY_ID} button:hover {
-        background: rgba(255,255,255,0.25);
-      }
+      #${OVERLAY_ID} button:hover { background: rgba(255, 255, 255, 0.28); }
     `;
-      document.head.appendChild(style);
+      (document.head || document.documentElement).appendChild(style);
+    }
+    function getOverlayState() {
+      const remaining = adState.skipTargetTime ? Math.max(0, Math.ceil((adState.skipTargetTime - Date.now()) / 1e3)) : 0;
+      const skipButton = !!findSkipAdButton();
+      if (remaining > 0) {
+        return { state: "counting", text: "Pulando em " + remaining + "s" };
+      }
+      if (skipButton) return { state: "skipping", text: "Pulando…" };
+      if (!config.aggressiveSkip) {
+        return { state: "waiting", text: "Esperando o botão Pular" };
+      }
+      return { state: "skipping", text: "Acelerando o anúncio…" };
+    }
+    function renderOverlayState() {
+      const overlay = document.getElementById(OVERLAY_ID);
+      const label = document.getElementById(TIMER_ID);
+      if (!overlay || !label) return;
+      const { state, text } = getOverlayState();
+      if (overlay.dataset.state !== state) overlay.dataset.state = state;
+      if (label.textContent !== text) label.textContent = text;
     }
     function createOverlay() {
       removeOverlay();
       injectStyles();
-      const player = document.querySelector("#movie_player") || document.querySelector(".html5-video-player");
+      const player = getYouTubePlayer();
       if (!player) return;
       const overlay = document.createElement("div");
       overlay.id = OVERLAY_ID;
-      const delay = getEffectiveDelay();
-      const initialRemaining = adState.skipTargetTime ? Math.max(0, Math.ceil((adState.skipTargetTime - Date.now()) / 1e3)) : delay;
-      overlay.innerHTML = `
-      <div class="ytp-ad-text">Auto Pular Anuncio</div>
-      <div class="ytp-ad-timer-text" id="${TIMER_ID}">${initialRemaining}s</div>
-      <button class="ytp-ad-watch">Assistir Anuncio</button>
-    `;
-      player.style.position = "relative";
+      overlay.setAttribute("role", "status");
+      const label = document.createElement("span");
+      label.className = "yte-ad-text";
+      label.id = TIMER_ID;
+      const watchBtn = document.createElement("button");
+      watchBtn.type = "button";
+      watchBtn.className = "ytp-ad-watch";
+      watchBtn.textContent = "Assistir";
+      watchBtn.title = "Assistir este anúncio até o fim";
+      overlay.append(label, watchBtn);
+      for (const type of ["click", "mousedown", "pointerdown", "dblclick"]) {
+        overlay.addEventListener(type, (event) => event.stopPropagation());
+      }
       player.appendChild(overlay);
       adState.overlayEl = overlay;
-      const watchBtn = overlay.querySelector(".ytp-ad-watch");
-      if (watchBtn) {
-        watchBtn.addEventListener("click", () => {
-          adState.watching = true;
-          stopForceSkipBurst();
-          stopSpeedThrough();
-          clearSkipTimeout();
-          clearInterval(adState.countdownInterval);
-          removeOverlay();
-          unmuteVideo();
-          resetPlaybackRate();
-        });
-      }
-      adState.countdownInterval = setInterval(() => {
-        if (!adState.skipTargetTime) return;
-        let remaining = Math.ceil((adState.skipTargetTime - Date.now()) / 1e3);
-        if (remaining < 0) remaining = 0;
-        const timerEl = document.getElementById(TIMER_ID);
-        if (timerEl) timerEl.textContent = remaining + "s";
-        if (remaining <= 0) clearInterval(adState.countdownInterval);
-      }, 200);
+      renderOverlayState();
+      watchBtn.addEventListener("click", () => {
+        adState.watching = true;
+        stopForceSkipBurst();
+        stopSpeedThrough();
+        clearSkipTimeout();
+        clearInterval(adState.countdownInterval);
+        removeOverlay();
+        unmuteVideo();
+        resetPlaybackRate();
+      });
+      adState.countdownInterval = setInterval(renderOverlayState, 200);
     }
     function removeOverlay() {
       document.querySelectorAll("#" + OVERLAY_ID).forEach((el) => el.remove());
@@ -3579,14 +3746,14 @@
         style.id = "ytp-toast-style";
         style.textContent = `
         #ytp-skipper-toast {
-          position: fixed; bottom: 24px; right: 24px;
-          padding: 10px 20px; background: rgba(0, 0, 0, 0.85);
-          color: #fff; font-family: 'Roboto', 'Arial', sans-serif;
-          font-size: 13px; font-weight: 500; border-radius: 8px;
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          z-index: 999999; opacity: 0; transform: translateY(10px);
-          transition: opacity 0.3s ease, transform 0.3s ease;
-          pointer-events: none; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+          position: fixed; left: 24px; bottom: 24px;
+          padding: 12px 16px; border-radius: 8px;
+          background: var(--yt-spec-inverted-background, #f1f1f1);
+          color: var(--yt-spec-text-primary-inverse, #0f0f0f);
+          font: 500 14px/1.2 Roboto, Arial, sans-serif;
+          z-index: 2200; opacity: 0; transform: translateY(8px);
+          transition: opacity 0.2s ease, transform 0.2s ease;
+          pointer-events: none; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
         }
         #ytp-skipper-toast.show { opacity: 1; transform: translateY(0); }
       `;
@@ -3594,7 +3761,7 @@
       }
       const toast = document.createElement("div");
       toast.id = "ytp-skipper-toast";
-      toast.textContent = "Anúncio pulado ✓";
+      toast.textContent = "Anúncio pulado";
       document.body.appendChild(toast);
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
@@ -3654,6 +3821,8 @@
       adState.forceSkipStartedAt = null;
       adState.skipTimeout = null;
       adState.speedThroughInterval = null;
+      adState.adSrc = "";
+      adState.lastAdEndedAt = Date.now();
     }
     const AD_WATCHDOG_EVENTS = ["play", "playing", "timeupdate", "durationchange", "ratechange", "loadeddata"];
     function scheduleAdWatchdogTick() {
@@ -3683,6 +3852,1113 @@
       adWatchdogVideo = video;
       AD_WATCHDOG_EVENTS.forEach((eventName) => {
         video.addEventListener(eventName, scheduleAdWatchdogTick, true);
+      });
+    }
+    const PLAYER_UI_STYLE_ID = "yte-player-ui-style";
+    const PLAYER_CONTROLS_ID = "yte-controls";
+    const FILTER_PANEL_ID = "yte-filter-panel";
+    const END_TIME_ID = "yte-end-time";
+    const SPEED_CYCLE = [1, 1.25, 1.5, 1.75, 2];
+    let playerControlsVideo = null;
+    let filterSaveTimer = null;
+    const PLAYER_ICON_PATHS = {
+      loop: "M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z",
+      camera: "M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4zM9 2 7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z",
+      filters: "M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z",
+      pip: "M19 11h-8v6h8v-6zm4 8V4.98C23 3.88 22.1 3 21 3H3c-1.1 0-2 .88-2 1.98V19c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2zm-2 .02H3V4.97h18v14.05z",
+      popup: "M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z",
+      cinema: "M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.39 5.39 0 0 1-4.4 2.26 5.4 5.4 0 0 1-3.14-9.8c-.44-.06-.9-.1-1.36-.1z",
+      boost: "M7 18h2V6H7v12zm4 4h2V2h-2v20zm-8-8h2v-4H3v4zm12 4h2V6h-2v12zm4-8v4h2v-4h-2z"
+    };
+    function playerIcon(name) {
+      return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="' + (PLAYER_ICON_PATHS[name] || "") + '"/></svg>';
+    }
+    function buildPlayerUiCss() {
+      return `
+      #${PLAYER_CONTROLS_ID} {
+        display: inline-flex;
+        align-items: center;
+        height: 100%;
+        vertical-align: top;
+        float: left;
+      }
+
+      #${PLAYER_CONTROLS_ID} .yte-btn {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 48px;
+        height: 100%;
+        min-height: 36px;
+        padding: 0;
+        color: #fff;
+        opacity: 1;
+        font: 600 16px/1 "YouTube Sans", Roboto, Arial, sans-serif;
+        letter-spacing: 0.01em;
+        transition: opacity 0.12s ease;
+      }
+
+      #${PLAYER_CONTROLS_ID} .yte-btn:hover,
+      #${PLAYER_CONTROLS_ID} .yte-btn:focus-visible {
+        opacity: 1;
+      }
+
+      #${PLAYER_CONTROLS_ID} .yte-btn svg {
+        width: 24px;
+        height: 24px;
+        fill: currentColor;
+        stroke: none;
+        filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.35));
+      }
+
+      #${PLAYER_CONTROLS_ID} .yte-btn.is-active::after {
+        content: "";
+        position: absolute;
+        left: 50%;
+        bottom: 7px;
+        width: 20px;
+        height: 3px;
+        margin-left: -10px;
+        border-radius: 2px;
+        background: #f03;
+      }
+
+      #${PLAYER_CONTROLS_ID} .yte-btn--text {
+        width: auto;
+        min-width: 48px;
+        font-size: 18px;
+        padding: 0 6px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      #${PLAYER_CONTROLS_ID} .yte-live {
+        gap: 6px;
+        padding: 0 10px 0 8px;
+        font-size: 14px;
+      }
+
+      #${PLAYER_CONTROLS_ID} .yte-live::before {
+        content: "";
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: #8a8a8a;
+      }
+
+      #${PLAYER_CONTROLS_ID} .yte-live.is-synced::before { background: #f03; }
+      #${PLAYER_CONTROLS_ID} .yte-live.is-catching::before { background: #ffb020; }
+
+      #${PLAYER_CONTROLS_ID} .yte-btn[data-tip]:hover::before {
+        content: attr(data-tip);
+        position: absolute;
+        bottom: calc(100% + 12px);
+        left: 50%;
+        transform: translateX(-50%);
+        padding: 6px 9px;
+        border-radius: 4px;
+        background: rgba(28, 28, 28, 0.92);
+        color: #eee;
+        font: 500 12px/1.2 Roboto, Arial, sans-serif;
+        white-space: nowrap;
+        pointer-events: none;
+        z-index: 80;
+      }
+
+      #${PLAYER_CONTROLS_ID} [data-fit-hidden] {
+        display: none;
+      }
+
+      /* Cinema only dims the page around the player: pointless in fullscreen. */
+      #movie_player.ytp-fullscreen #${PLAYER_CONTROLS_ID} [data-yte-action="cinema"] {
+        display: none;
+      }
+
+      #${END_TIME_ID}:empty { display: none; }
+      #movie_player.yte-no-endtime #${END_TIME_ID} { display: none; }
+
+      #${END_TIME_ID} {
+        margin-left: 6px;
+        color: rgba(255, 255, 255, 0.72);
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+
+      /* The panel uses YouTube's .ytp-popup/.ytp-menuitem styles; these are
+         only placement and fallbacks (zero specificity via :where). */
+      #${FILTER_PANEL_ID} {
+        position: absolute;
+        right: 12px;
+        bottom: 62px;
+        z-index: 70;
+        border-radius: 12px !important;
+        overflow: hidden !important;
+      }
+
+      #${FILTER_PANEL_ID}[hidden] { display: none !important; }
+
+      /* Fade out together with YouTube's controls when the mouse stops. */
+      #${FILTER_PANEL_ID} { transition: opacity 0.1s cubic-bezier(0.4, 0, 1, 1); }
+      #movie_player.ytp-autohide #${FILTER_PANEL_ID} {
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.25s cubic-bezier(0, 0, 0.2, 1);
+      }
+
+      /* While the panel is open, YouTube's fullscreen quick actions
+         (like/dislike/comment/share) step aside instead of overlapping it. */
+      #movie_player.yte-filter-panel-open .ytp-fullscreen-quick-actions,
+      #movie_player.yte-filter-panel-open .ytp-overlay-bottom-right {
+        visibility: hidden !important;
+      }
+
+      :where(#${FILTER_PANEL_ID}) {
+        border-radius: 12px;
+        background: rgba(0, 0, 0, 0.6);
+        overflow: hidden;
+        color: #eee;
+      }
+
+      #${FILTER_PANEL_ID} .ytp-panel { overflow-y: auto; overflow-x: hidden; }
+
+      #${FILTER_PANEL_ID} .yte-menuitem--slider { cursor: default; }
+
+      #${FILTER_PANEL_ID} .yte-menu-slider {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        width: 150px;
+      }
+
+      #${FILTER_PANEL_ID} .yte-menu-slider output {
+        min-width: 38px;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+
+      #${FILTER_PANEL_ID} .yte-menu-slider input[type="range"] {
+        flex: 1;
+        min-width: 0;
+        height: 16px;
+        margin: 0;
+        background: transparent;
+        -webkit-appearance: none;
+        appearance: none;
+        cursor: pointer;
+      }
+
+      #${FILTER_PANEL_ID} .yte-menu-slider input[type="range"]::-webkit-slider-runnable-track {
+        height: 3px;
+        border-radius: 2px;
+        background: rgba(255, 255, 255, 0.3);
+      }
+
+      #${FILTER_PANEL_ID} .yte-menu-slider input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 12px;
+        height: 12px;
+        margin-top: -4.5px;
+        border-radius: 50%;
+        background: #fff;
+      }
+
+      #${FILTER_PANEL_ID} .yte-menu-slider input[type="range"]:focus-visible { outline: none; }
+      #${FILTER_PANEL_ID} .yte-menu-slider input[type="range"]:focus-visible::-webkit-slider-thumb {
+        box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.35);
+      }
+
+      /* Style "pill": our own rounded group next to YouTube's, using the
+         same background/radius/height read from YouTube's group at runtime. */
+      #${PLAYER_CONTROLS_ID}.yte-style-pill {
+        float: none;
+        align-self: center;
+        flex: none;
+        height: var(--yte-pill-h, 40px);
+        margin: 0 var(--yte-pill-gap, 12px);
+        padding: 0 4px;
+        border-radius: var(--yte-pill-radius, 28px);
+        background: var(--yte-pill-bg, rgba(0, 0, 0, 0.3));
+      }
+
+      #${PLAYER_CONTROLS_ID}.yte-style-pill .yte-btn { min-height: 0; }
+
+      /* Style "divider": inside YouTube's group, separated by a thin line. */
+      #${PLAYER_CONTROLS_ID}.yte-style-divider::after {
+        content: "";
+        align-self: center;
+        width: 1px;
+        height: 20px;
+        margin: 0 6px 0 4px;
+        background: rgba(255, 255, 255, 0.28);
+      }
+    `;
+    }
+    function ensurePlayerUiStyle() {
+      if (document.getElementById(PLAYER_UI_STYLE_ID)) return;
+      const style = document.createElement("style");
+      style.id = PLAYER_UI_STYLE_ID;
+      style.textContent = buildPlayerUiCss();
+      (document.head || document.documentElement).appendChild(style);
+    }
+    function isLiveStream() {
+      const player = getYouTubePlayer();
+      if (!player) return false;
+      if (player.classList.contains("ytp-live")) return true;
+      const badge = player.querySelector(".ytp-live-badge");
+      return !!badge && badge.offsetParent !== null && !badge.hasAttribute("disabled");
+    }
+    function getPlayerControlItems() {
+      const items = [];
+      if (config.liveCatchUpEnabled !== false) items.push({ id: "live", tip: "Atraso da live", text: "AO VIVO", priority: "high", className: "yte-btn--text yte-live" });
+      if (config.toolbarSpeed !== false && config.playerSpeedButtonsEnabled !== false) {
+        items.push({ id: "speed", tip: "Velocidade · clique para alternar, role para ajustar, botão direito volta a 1x", text: "1x", priority: "high", className: "yte-btn--text" });
+      }
+      const inGear = config.settingsMenuItemsEnabled !== false;
+      if (config.toolbarLoop !== false && !inGear) items.push({ id: "loop", tip: "Repetir vídeo", icon: "loop", priority: "mid" });
+      if (config.toolbarFilters !== false && !inGear) items.push({ id: "filters", tip: "Filtros de imagem", icon: "filters", priority: "mid" });
+      if (config.toolbarScreenshot !== false) items.push({ id: "screenshot", tip: "Salvar frame (PNG)", icon: "camera", priority: "low" });
+      if (config.toolbarVolumeBoost !== false) items.push({ id: "boost", tip: "Volume boost", icon: "boost", priority: "low" });
+      if (!inGear) items.push({ id: "cinema", tip: "Modo cinema", icon: "cinema", priority: "low" });
+      if (config.toolbarPopup !== false && config.playerPopupEnabled !== false) items.push({ id: "popup", tip: "Abrir em janela", icon: "popup", priority: "low" });
+      if (config.toolbarPip !== false && document.pictureInPictureEnabled) items.push({ id: "pip", tip: "Picture-in-picture", icon: "pip", priority: "mid" });
+      return items;
+    }
+    function getPlayerControlsStyle() {
+      return config.playerControlsStyle === "divider" ? "divider" : "pill";
+    }
+    function getPlayerControlsSignature() {
+      return getPlayerControlsStyle() + ":" + getPlayerControlItems().map((item) => item.id).join(",");
+    }
+    const FIT_HIDE_ORDER = ["popup", "cinema", "screenshot", "boost", "pip", "loop", "filters"];
+    function fitPlayerControls(player) {
+      const controls = document.getElementById(PLAYER_CONTROLS_ID);
+      const left = player.querySelector(".ytp-left-controls");
+      const time = player.querySelector(".ytp-time-display");
+      if (!controls) return;
+      const overflowing = () => !!left && left.scrollWidth > left.clientWidth + 1 || !!time && time.scrollWidth > time.clientWidth + 1;
+      controls.querySelectorAll("[data-fit-hidden]").forEach((button) => button.removeAttribute("data-fit-hidden"));
+      player.classList.remove("yte-no-endtime");
+      if (!overflowing()) return;
+      for (const action of FIT_HIDE_ORDER) {
+        const button = controls.querySelector(`[data-yte-action="${action}"]`);
+        if (!button) continue;
+        button.setAttribute("data-fit-hidden", "");
+        if (!overflowing()) return;
+      }
+      player.classList.add("yte-no-endtime");
+    }
+    function syncPillStyle(controls, rightControls) {
+      if (getPlayerControlsStyle() !== "pill") return;
+      const style = getComputedStyle(rightControls);
+      const bg = style.backgroundColor;
+      const transparent = !bg || bg === "transparent" || bg === "rgba(0, 0, 0, 0)";
+      const height = Math.round(rightControls.getBoundingClientRect().height);
+      const values = {
+        "--yte-pill-bg": transparent ? "rgba(0, 0, 0, 0.3)" : bg,
+        "--yte-pill-radius": style.borderRadius && style.borderRadius !== "0px" ? style.borderRadius : "28px",
+        "--yte-pill-h": height > 20 && height < 80 ? height + "px" : "40px"
+      };
+      for (const [name, value] of Object.entries(values)) {
+        if (controls.style.getPropertyValue(name) !== value) controls.style.setProperty(name, value);
+      }
+    }
+    function shouldShowPlayerControls() {
+      return !!config.enabled && config.playerControlsEnabled !== false && (isWatchPage() || /^\/embed\//.test(location.pathname));
+    }
+    function removePlayerControls() {
+      getYouTubePlayer()?.classList.remove("yte-filter-panel-open");
+      document.getElementById(PLAYER_CONTROLS_ID)?.remove();
+      document.getElementById(FILTER_PANEL_ID)?.remove();
+      document.getElementById(END_TIME_ID)?.remove();
+    }
+    function stopPlayerEvent(event) {
+      event.stopPropagation();
+    }
+    function updatePlayerControls() {
+      bindGearMenu();
+      if (!shouldShowPlayerControls()) {
+        removePlayerControls();
+        return;
+      }
+      const player = getYouTubePlayer();
+      const rightControls = player?.querySelector(".ytp-right-controls");
+      if (!player || !rightControls) return;
+      ensurePlayerUiStyle();
+      let controls = document.getElementById(PLAYER_CONTROLS_ID);
+      const signature = getPlayerControlsSignature();
+      const style = getPlayerControlsStyle();
+      const expectedParent = style === "pill" ? rightControls.parentElement : rightControls;
+      if (!expectedParent) return;
+      if (controls && (controls.parentElement !== expectedParent || controls.dataset.signature !== signature)) {
+        controls.remove();
+        controls = null;
+      }
+      if (!controls) {
+        controls = document.createElement("span");
+        controls.id = PLAYER_CONTROLS_ID;
+        controls.className = "yte-style-" + style;
+        controls.dataset.signature = signature;
+        for (const item of getPlayerControlItems()) {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "ytp-button yte-btn " + (item.className || "");
+          button.dataset.yteAction = item.id;
+          button.dataset.priority = item.priority;
+          button.dataset.tip = item.tip;
+          button.setAttribute("aria-label", item.tip.split(" · ")[0]);
+          if (item.icon) button.innerHTML = playerIcon(item.icon);
+          if (item.text) button.textContent = item.text;
+          controls.appendChild(button);
+        }
+        controls.addEventListener("click", (event) => {
+          const button = event.target.closest?.("[data-yte-action]");
+          if (!button) return;
+          event.preventDefault();
+          event.stopPropagation();
+          handlePlayerControlAction(button.dataset.yteAction || "", event);
+        });
+        controls.addEventListener("contextmenu", (event) => {
+          const button = event.target.closest?.('[data-yte-action="speed"]');
+          if (!button) return;
+          event.preventDefault();
+          event.stopPropagation();
+          markUserPlaybackIntent("player-controls");
+          resetToolbarSpeed(getActiveVideo());
+          refreshPlayerControlStates();
+        });
+        controls.addEventListener("wheel", (event) => {
+          const button = event.target.closest?.('[data-yte-action="speed"]');
+          if (!button) return;
+          event.preventDefault();
+          event.stopPropagation();
+          adjustToolbarSpeed(getWheelDirection(event), getActiveVideo());
+          refreshPlayerControlStates();
+        }, { passive: false });
+        if (style === "pill") expectedParent.insertBefore(controls, rightControls);
+        else rightControls.insertBefore(controls, rightControls.firstChild);
+      }
+      syncPillStyle(controls, rightControls);
+      fitPlayerControls(player);
+      ensureEndTimeLabel(player);
+      bindPlayerControlsVideo();
+      bindGearMenu();
+      refreshPlayerControlStates();
+    }
+    function bindPlayerControlsVideo() {
+      const video = getActiveVideo();
+      if (!video || playerControlsVideo === video) return;
+      if (playerControlsVideo) playerControlsVideo.removeEventListener("ratechange", refreshPlayerControlStates);
+      playerControlsVideo = video;
+      video.addEventListener("ratechange", refreshPlayerControlStates);
+    }
+    function refreshPlayerControlStates() {
+      const controls = document.getElementById(PLAYER_CONTROLS_ID);
+      if (!controls) return;
+      const video = getActiveVideo();
+      const key = getCurrentVideoKey();
+      const set = (id, active) => controls.querySelector(`[data-yte-action="${id}"]`)?.classList.toggle("is-active", active);
+      const speed = controls.querySelector('[data-yte-action="speed"]');
+      if (speed && video) {
+        const label = formatPlaybackRate(video.playbackRate);
+        if (speed.textContent !== label) speed.textContent = label;
+        speed.classList.toggle("is-active", Math.abs(video.playbackRate - 1) > 1e-3 && !adState.liveRateApplied);
+      }
+      set("loop", !!video?.loop || adState.loopEnabled && adState.loopVideoKey === key);
+      set("filters", shouldUseVideoFilters());
+      set("boost", shouldUseVolumeBoost());
+      set("cinema", !!adState.cinemaActive);
+      set("pip", !!document.pictureInPictureElement);
+      const live = controls.querySelector('[data-yte-action="live"]');
+      if (live) {
+        const isLive = isLiveStream();
+        live.hidden = !isLive;
+        if (isLive) {
+          const delay = adState.liveDelay || 0;
+          const catching = (adState.liveRateApplied || 1) > 1.001;
+          const text = delay > 0.05 ? "AO VIVO −" + delay.toFixed(1) + "s" : "AO VIVO";
+          if (live.textContent !== text) live.textContent = text;
+          live.classList.toggle("is-synced", delay <= Number(config.liveCatchUpTarget || 3) + 1);
+          live.classList.toggle("is-catching", catching);
+          live.dataset.tip = catching ? "Acelerando " + (adState.liveRateApplied || 1).toFixed(2) + "x para tirar o atraso · clique para ir ao vivo" : "Atraso ~" + delay.toFixed(1) + "s · clique para ir ao vivo";
+        }
+      }
+    }
+    function handlePlayerControlAction(action, event) {
+      const video = getActiveVideo();
+      markUserPlaybackIntent("player-controls");
+      switch (action) {
+        case "speed": {
+          if (!video) break;
+          if (event.shiftKey) {
+            resetToolbarSpeed(video);
+            break;
+          }
+          const current = video.playbackRate;
+          const next = SPEED_CYCLE.find((rate) => rate > current + 1e-3) ?? SPEED_CYCLE[0];
+          setUserPlaybackRate(next, video);
+          showPlayerFeedback("speed", formatPlaybackRate(next), "Role para ajuste fino");
+          break;
+        }
+        case "loop":
+          handlePlayerToolbarAction("loop");
+          break;
+        case "filters":
+          toggleFilterPanel();
+          break;
+        case "screenshot":
+          captureVideoFrame(video);
+          break;
+        case "boost":
+          setVolumeBoostEnabled(!config.volumeBoostEnabled, video);
+          break;
+        case "cinema":
+          toggleCinemaMode();
+          break;
+        case "popup":
+          if (document.fullscreenElement) {
+            document.exitFullscreen().catch(() => {
+            }).finally(() => window.setTimeout(openPopupPlayer, 150));
+          } else {
+            openPopupPlayer();
+          }
+          break;
+        case "pip":
+          togglePictureInPicture(video).then(refreshPlayerControlStates);
+          break;
+        case "live":
+          jumpToLiveEdge();
+          break;
+      }
+      refreshPlayerControlStates();
+    }
+    function ensureEndTimeLabel(player) {
+      if (config.playerEndTimeEnabled !== true) {
+        document.getElementById(END_TIME_ID)?.remove();
+        return;
+      }
+      const display = player.querySelector(".ytp-time-display .ytp-time-contents") || player.querySelector(".ytp-time-display");
+      if (!display) return;
+      let label = document.getElementById(END_TIME_ID);
+      if (label && label.parentElement !== display) {
+        label.remove();
+        label = null;
+      }
+      if (!label) {
+        label = document.createElement("span");
+        label.id = END_TIME_ID;
+        display.appendChild(label);
+      }
+      updateEndTimeLabel();
+    }
+    function updateEndTimeLabel() {
+      const label = document.getElementById(END_TIME_ID);
+      if (!label) return;
+      const video = getActiveVideo();
+      const duration = Number(video?.duration);
+      if (!video || !Number.isFinite(duration) || duration <= 0 || isLiveStream() || getAdPlaying()) {
+        if (label.textContent) label.textContent = "";
+        return;
+      }
+      const rate = video.playbackRate > 0 ? video.playbackRate : 1;
+      const remaining = Math.max(0, (duration - video.currentTime) / rate);
+      const end = new Date(Date.now() + remaining * 1e3);
+      const text = "· termina " + end.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      if (label.textContent !== text) label.textContent = text;
+    }
+    const FILTER_ROW_ICONS = {
+      toggle: "M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z",
+      presets: "M19 9l1.25-2.75L23 5l-2.75-1.25L19 1l-1.25 2.75L15 5l2.75 1.25L19 9zm-7.5.5L9 4 6.5 9.5 1 12l5.5 2.5L9 20l2.5-5.5L17 12l-5.5-2.5zM19 15l-1.25 2.75L15 19l2.75 1.25L19 23l1.25-2.75L23 19l-2.75-1.25L19 15z",
+      brightness: "M20 15.31 23.31 12 20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69zM12 18V6c3.31 0 6 2.69 6 6s-2.69 6-6 6z",
+      contrast: "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.94-.49-7-3.85-7-7.93s3.05-7.44 7-7.93v15.86z",
+      saturate: "M12 3a9 9 0 0 0 0 18c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8zm-5.5 9a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm3-4a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm3 4a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z",
+      hue: "M17.66 7.93 12 2.27 6.34 7.93c-3.12 3.12-3.12 8.19 0 11.31A7.98 7.98 0 0 0 12 21.58c2.05 0 4.1-.78 5.66-2.34 3.12-3.12 3.12-8.19 0-11.31zM12 19.59c-1.6 0-3.11-.62-4.24-1.76A5.95 5.95 0 0 1 6 13.59c0-1.6.62-3.11 1.76-4.24L12 5.1v14.49z",
+      sepia: "M6.76 4.84l-1.8-1.79-1.41 1.41 1.79 1.79 1.42-1.41zM4 10.5H1v2h3v-2zm9-9.95h-2V3.5h2V.55zm7.45 3.91-1.41-1.41-1.79 1.79 1.41 1.41 1.79-1.79zm-3.21 13.7 1.79 1.8 1.41-1.41-1.8-1.79-1.4 1.4zM20 10.5v2h3v-2h-3zm-8-5c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6zm-1 16.95h2V19.5h-2v2.95zm-7.45-3.91 1.41 1.41 1.79-1.8-1.41-1.41-1.79 1.8z",
+      grayscale: "M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16-7-8v8H5l7-8V5h7v14z",
+      reset: "M12 5V2L8 6l4 4V7c3.31 0 6 2.69 6 6 0 2.97-2.17 5.43-5 5.91v2.02c3.95-.49 7-3.85 7-7.93 0-4.42-3.58-8-8-8zm-6 8c0-1.65.67-3.15 1.76-4.24L6.34 7.34A7.95 7.95 0 0 0 4 13c0 4.08 3.05 7.44 7 7.93v-2.02c-2.83-.48-5-2.94-5-5.91z"
+    };
+    function getVideoFilterValues() {
+      return normalizeVideoFilters({
+        brightness: config.videoFilterBrightness,
+        contrast: config.videoFilterContrast,
+        saturate: config.videoFilterSaturate,
+        grayscale: config.videoFilterGrayscale,
+        sepia: config.videoFilterSepia,
+        hue: config.videoFilterHue
+      });
+    }
+    function setVideoFilterValues(values, enable = true) {
+      config.videoFilterBrightness = values.brightness;
+      config.videoFilterContrast = values.contrast;
+      config.videoFilterSaturate = values.saturate;
+      config.videoFilterGrayscale = values.grayscale;
+      config.videoFilterSepia = values.sepia;
+      config.videoFilterHue = values.hue;
+      if (enable) config.videoFiltersEnabled = true;
+      applyVideoFilters();
+      syncFilterPanel();
+      if (filterSaveTimer) window.clearTimeout(filterSaveTimer);
+      filterSaveTimer = window.setTimeout(() => {
+        filterSaveTimer = null;
+        try {
+          chrome.storage.local.set({
+            videoFiltersEnabled: !!config.videoFiltersEnabled,
+            videoFilterBrightness: values.brightness,
+            videoFilterContrast: values.contrast,
+            videoFilterSaturate: values.saturate,
+            videoFilterGrayscale: values.grayscale,
+            videoFilterSepia: values.sepia,
+            videoFilterHue: values.hue
+          });
+        } catch (err) {
+        }
+      }, 250);
+    }
+    let filterPanelView = "main";
+    function menuIcon(name) {
+      return '<svg height="24" viewBox="0 0 24 24" width="24" aria-hidden="true"><path fill="#fff" d="' + (FILTER_ROW_ICONS[name] || "") + '"/></svg>';
+    }
+    function createMenuItem(options) {
+      const item = document.createElement("div");
+      item.className = "ytp-menuitem";
+      item.setAttribute("role", options.role);
+      item.tabIndex = 0;
+      if (options.submenu) item.setAttribute("aria-haspopup", "true");
+      if (typeof options.checked === "boolean") item.setAttribute("aria-checked", String(options.checked));
+      const icon = document.createElement("div");
+      icon.className = "ytp-menuitem-icon";
+      if (options.icon) icon.innerHTML = menuIcon(options.icon);
+      const label = document.createElement("div");
+      label.className = "ytp-menuitem-label";
+      label.textContent = options.label;
+      const content = document.createElement("div");
+      content.className = "ytp-menuitem-content";
+      if (typeof options.content === "string") content.textContent = options.content;
+      else if (options.content) content.appendChild(options.content);
+      item.append(icon, label, content);
+      return item;
+    }
+    function onMenuActivate(item, handler) {
+      item.addEventListener("click", handler);
+      item.addEventListener("keydown", (event) => {
+        const key = event.key;
+        if (key === "Enter" || key === " ") {
+          event.preventDefault();
+          handler();
+        }
+      });
+    }
+    function renderFilterPanel(panel) {
+      const values = getVideoFilterValues();
+      const presetId = findPresetId(values);
+      const panelEl = document.createElement("div");
+      panelEl.className = "ytp-panel";
+      const menu = document.createElement("div");
+      menu.className = "ytp-panel-menu";
+      menu.setAttribute("role", "menu");
+      if (filterPanelView === "presets") {
+        const header = document.createElement("div");
+        header.className = "ytp-panel-header";
+        const back = document.createElement("button");
+        back.className = "ytp-button ytp-panel-back-button";
+        back.setAttribute("aria-label", "Voltar");
+        back.addEventListener("click", () => {
+          filterPanelView = "main";
+          renderFilterPanel(panel);
+        });
+        const title = document.createElement("span");
+        title.className = "ytp-panel-title";
+        title.textContent = "Predefinição";
+        header.append(back, title);
+        panelEl.appendChild(header);
+        for (const preset of VIDEO_FILTER_PRESETS) {
+          const item = createMenuItem({ role: "menuitemradio", label: preset.label, checked: preset.id === presetId });
+          onMenuActivate(item, () => {
+            setVideoFilterValues({ ...preset.values }, preset.id !== "normal" || !!config.videoFiltersEnabled);
+            filterPanelView = "main";
+            renderFilterPanel(panel);
+          });
+          menu.appendChild(item);
+        }
+      } else {
+        const toggle = createMenuItem({ role: "menuitemcheckbox", icon: "toggle", label: "Filtros de imagem", checked: !!config.videoFiltersEnabled });
+        const toggleBox = document.createElement("div");
+        toggleBox.className = "ytp-menuitem-toggle-checkbox";
+        toggle.querySelector(".ytp-menuitem-content").appendChild(toggleBox);
+        toggle.dataset.yteToggle = "1";
+        onMenuActivate(toggle, () => {
+          config.videoFiltersEnabled = !config.videoFiltersEnabled;
+          setVideoFilterValues(getVideoFilterValues(), false);
+        });
+        menu.appendChild(toggle);
+        const presetLabel = VIDEO_FILTER_PRESETS.find((preset) => preset.id === presetId)?.label || "Personalizado";
+        const presets = createMenuItem({ role: "menuitem", icon: "presets", label: "Predefinição", content: presetLabel, submenu: true });
+        onMenuActivate(presets, () => {
+          filterPanelView = "presets";
+          renderFilterPanel(panel);
+        });
+        menu.appendChild(presets);
+        for (const key of Object.keys(VIDEO_FILTER_LIMITS)) {
+          const limits = VIDEO_FILTER_LIMITS[key];
+          const wrap = document.createElement("span");
+          wrap.className = "yte-menu-slider";
+          const input = document.createElement("input");
+          input.type = "range";
+          input.min = String(limits.min);
+          input.max = String(limits.max);
+          input.step = String(limits.step);
+          input.value = String(values[key]);
+          input.dataset.filter = key;
+          input.setAttribute("aria-label", limits.label);
+          const output = document.createElement("output");
+          output.textContent = values[key] + limits.unit;
+          wrap.append(input, output);
+          input.addEventListener("input", () => {
+            const next = getVideoFilterValues();
+            next[key] = Number(input.value);
+            setVideoFilterValues(normalizeVideoFilters(next));
+          });
+          input.addEventListener("dblclick", () => {
+            const next = getVideoFilterValues();
+            next[key] = VIDEO_FILTER_DEFAULTS[key];
+            setVideoFilterValues(next);
+          });
+          const item = createMenuItem({ role: "menuitem", icon: key, label: limits.label, content: wrap });
+          item.classList.add("yte-menuitem--slider");
+          menu.appendChild(item);
+        }
+        const reset = createMenuItem({ role: "menuitem", icon: "reset", label: "Restaurar padrão" });
+        onMenuActivate(reset, () => setVideoFilterValues({ ...VIDEO_FILTER_DEFAULTS }, false));
+        menu.appendChild(reset);
+      }
+      panelEl.appendChild(menu);
+      const content = panel.querySelector(".ytp-popup-content");
+      content.replaceChildren(panelEl);
+      sizeFilterPanel(panel);
+    }
+    const PANEL_AVOID_SELECTORS = [".ytp-fullscreen-quick-actions", ".ytp-overlay-bottom-right"];
+    function getPanelBottomOffset(player, panelWidth) {
+      const playerRect = player.getBoundingClientRect();
+      const bar = player.querySelector(".ytp-chrome-bottom");
+      let limit = bar ? bar.getBoundingClientRect().top : playerRect.bottom - 62;
+      for (const selector of PANEL_AVOID_SELECTORS) {
+        player.querySelectorAll(selector).forEach((el) => {
+          const rect = el.getBoundingClientRect();
+          if (rect.height <= 0 || rect.width <= 0 || rect.top >= limit) return;
+          const style = getComputedStyle(el);
+          if (style.visibility === "hidden" || style.display === "none" || Number(style.opacity) === 0) return;
+          if (rect.right < playerRect.right - panelWidth - 12) return;
+          limit = Math.min(limit, rect.top);
+        });
+      }
+      return { bottom: Math.max(62, Math.round(playerRect.bottom - limit + 10)), available: limit - playerRect.top - 20 };
+    }
+    function sizeFilterPanel(panel) {
+      const player = getYouTubePlayer();
+      const panelEl = panel.querySelector(".ytp-panel");
+      if (!player || !panelEl) return;
+      const width = Math.min(360, Math.max(260, player.clientWidth - 24));
+      const offset = getPanelBottomOffset(player, width);
+      panel.style.bottom = offset.bottom + "px";
+      panel.style.width = width + "px";
+      panelEl.style.width = width + "px";
+      panel.style.height = "auto";
+      panelEl.style.height = "auto";
+      panelEl.style.position = "static";
+      const natural = panelEl.scrollHeight;
+      const maxHeight = Math.max(160, Math.min(player.clientHeight - 84, offset.available));
+      const height = Math.min(natural, maxHeight);
+      panelEl.style.position = "";
+      panel.style.height = height + "px";
+      panelEl.style.height = height + "px";
+    }
+    function buildFilterPanel() {
+      const panel = document.createElement("div");
+      panel.id = FILTER_PANEL_ID;
+      panel.className = "ytp-popup";
+      panel.hidden = true;
+      panel.setAttribute("role", "dialog");
+      panel.setAttribute("aria-label", "Filtros de imagem");
+      const content = document.createElement("div");
+      content.className = "ytp-popup-content";
+      panel.appendChild(content);
+      for (const type of ["click", "dblclick", "mousedown", "mouseup", "pointerdown", "pointerup", "keydown", "keyup", "wheel", "contextmenu"]) {
+        panel.addEventListener(type, stopPlayerEvent);
+      }
+      panel.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape") return;
+        if (filterPanelView === "presets") {
+          filterPanelView = "main";
+          renderFilterPanel(panel);
+        } else {
+          closeFilterPanel();
+        }
+      });
+      return panel;
+    }
+    function syncFilterPanel() {
+      const panel = document.getElementById(FILTER_PANEL_ID);
+      if (!panel || panel.hidden || filterPanelView !== "main") return;
+      const values = getVideoFilterValues();
+      panel.querySelector("[data-yte-toggle]")?.setAttribute("aria-checked", String(!!config.videoFiltersEnabled));
+      const presetId = findPresetId(values);
+      const presetRow = panel.querySelector('[aria-haspopup="true"] .ytp-menuitem-content');
+      if (presetRow) presetRow.textContent = VIDEO_FILTER_PRESETS.find((preset) => preset.id === presetId)?.label || "Personalizado";
+      panel.querySelectorAll("input[data-filter]").forEach((input) => {
+        const key = input.dataset.filter;
+        if (document.activeElement !== input) input.value = String(values[key]);
+        const output = input.parentElement?.querySelector("output");
+        if (output) output.textContent = values[key] + VIDEO_FILTER_LIMITS[key].unit;
+      });
+    }
+    function closeFilterPanel() {
+      const panel = document.getElementById(FILTER_PANEL_ID);
+      if (panel) panel.hidden = true;
+      getYouTubePlayer()?.classList.remove("yte-filter-panel-open");
+      document.removeEventListener("pointerdown", handleOutsideFilterPanel, true);
+    }
+    function handleOutsideFilterPanel(event) {
+      const target = event.target;
+      if (target?.closest?.("#" + FILTER_PANEL_ID) || target?.closest?.('[data-yte-action="filters"]')) return;
+      closeFilterPanel();
+    }
+    function toggleFilterPanel() {
+      const player = getYouTubePlayer();
+      if (!player) return;
+      let panel = document.getElementById(FILTER_PANEL_ID);
+      if (!panel || panel.parentElement !== player) {
+        panel?.remove();
+        panel = buildFilterPanel();
+        player.appendChild(panel);
+      }
+      if (!panel.hidden) {
+        closeFilterPanel();
+        return;
+      }
+      filterPanelView = "main";
+      player.classList.add("yte-filter-panel-open");
+      panel.hidden = false;
+      renderFilterPanel(panel);
+      document.addEventListener("pointerdown", handleOutsideFilterPanel, true);
+    }
+    const resizeOpenFilterPanel = () => {
+      const panel = document.getElementById(FILTER_PANEL_ID);
+      if (panel && !panel.hidden) window.setTimeout(() => sizeFilterPanel(panel), 250);
+    };
+    document.addEventListener("fullscreenchange", resizeOpenFilterPanel);
+    window.addEventListener("resize", resizeOpenFilterPanel);
+    const GEAR_ITEM_ATTR = "data-yte-gear";
+    const GEAR_ICONS = {
+      filters: FILTER_ROW_ICONS.toggle,
+      loop: "M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z",
+      boost: "M7 18h2V6H7v12zm4 4h2V2h-2v20zm-8-8h2v-4H3v4zm12 4h2V6h-2v12zm4-8v4h2v-4h-2z",
+      cinema: "M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.39 5.39 0 0 1-4.4 2.26 5.4 5.4 0 0 1-3.14-9.8c-.44-.06-.9-.1-1.36-.1z",
+      live: "M7.76 16.24A5.98 5.98 0 0 1 6 12c0-1.66.67-3.16 1.76-4.24l1.42 1.42A3.99 3.99 0 0 0 8 12c0 1.1.45 2.1 1.17 2.83l-1.41 1.41zm8.48 0A5.98 5.98 0 0 0 18 12c0-1.66-.67-3.16-1.76-4.24l-1.42 1.42A3.99 3.99 0 0 1 16 12c0 1.1-.45 2.1-1.17 2.83l1.41 1.41zM12 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm8 2c0 2.21-.9 4.21-2.35 5.65l1.42 1.42A9.97 9.97 0 0 0 22 12c0-2.76-1.12-5.26-2.93-7.07l-1.42 1.42A7.95 7.95 0 0 1 20 12zM6.35 6.35 4.93 4.93A9.97 9.97 0 0 0 2 12c0 2.76 1.12 5.26 2.93 7.07l1.42-1.42A7.95 7.95 0 0 1 4 12c0-2.21.9-4.21 2.35-5.65z"
+    };
+    let gearObserver = null;
+    let gearObservedMenu = null;
+    let gearRaf = 0;
+    function gearIcon(name) {
+      return '<svg height="24" viewBox="0 0 24 24" width="24" aria-hidden="true"><path fill="#fff" d="' + (GEAR_ICONS[name] || "") + '"/></svg>';
+    }
+    function shouldAddGearItems() {
+      return !!config.enabled && config.settingsMenuItemsEnabled !== false && (isWatchPage() || /^\/embed\//.test(location.pathname));
+    }
+    function getGearItems() {
+      const key = getCurrentVideoKey();
+      const video = getActiveVideo();
+      const items = [
+        { id: "filters", label: "Filtros de imagem", value: shouldUseVideoFilters() ? "Ativados" : "Desativados" },
+        { id: "loop", label: "Repetir vídeo", checked: !!video?.loop || adState.loopEnabled && adState.loopVideoKey === key }
+      ];
+      if (!document.fullscreenElement) items.push({ id: "cinema", label: "Modo cinema", checked: !!adState.cinemaActive });
+      if (isLiveStream()) items.push({ id: "live", label: "Tirar atraso da live", checked: config.liveCatchUpEnabled !== false });
+      return items;
+    }
+    function closeYouTubeSettingsMenu() {
+      const button = getYouTubePlayer()?.querySelector(".ytp-settings-button");
+      if (button?.getAttribute("aria-expanded") === "true") button.click();
+    }
+    function handleGearItem(id) {
+      markUserPlaybackIntent("settings-menu");
+      switch (id) {
+        case "filters":
+          closeYouTubeSettingsMenu();
+          window.setTimeout(() => {
+            const panel = document.getElementById(FILTER_PANEL_ID);
+            if (!panel || panel.hidden) toggleFilterPanel();
+          }, 60);
+          return;
+        case "loop":
+          handlePlayerToolbarAction("loop");
+          break;
+        case "boost":
+          setVolumeBoostEnabled(!config.volumeBoostEnabled, getActiveVideo());
+          break;
+        case "cinema":
+          toggleCinemaMode();
+          break;
+        case "live":
+          config.liveCatchUpEnabled = config.liveCatchUpEnabled === false;
+          try {
+            chrome.storage.local.set({ liveCatchUpEnabled: config.liveCatchUpEnabled });
+          } catch (err) {
+          }
+          if (!config.liveCatchUpEnabled) restoreLiveRate();
+          break;
+      }
+      refreshGearItems();
+      refreshPlayerControlStates();
+    }
+    function refreshGearItems() {
+      const states = new Map(getGearItems().map((item) => [item.id, item]));
+      document.querySelectorAll(`[${GEAR_ITEM_ATTR}]`).forEach((row) => {
+        const item = states.get(row.getAttribute(GEAR_ITEM_ATTR) || "");
+        if (!item) return;
+        if (typeof item.checked === "boolean") row.setAttribute("aria-checked", String(item.checked));
+        if (item.value) {
+          const content = row.querySelector(".ytp-menuitem-content");
+          if (content && content.textContent !== item.value) content.textContent = item.value;
+        }
+      });
+    }
+    function buildGearRow(item) {
+      const row = document.createElement("div");
+      row.className = "ytp-menuitem";
+      row.setAttribute(GEAR_ITEM_ATTR, item.id);
+      row.tabIndex = 0;
+      if (typeof item.checked === "boolean") {
+        row.setAttribute("role", "menuitemcheckbox");
+        row.setAttribute("aria-checked", String(item.checked));
+      } else {
+        row.setAttribute("role", "menuitem");
+        row.setAttribute("aria-haspopup", "true");
+      }
+      row.innerHTML = '<div class="ytp-menuitem-icon">' + gearIcon(item.id) + '</div><div class="ytp-menuitem-label"></div><div class="ytp-menuitem-content"></div>';
+      row.querySelector(".ytp-menuitem-label").textContent = item.label;
+      const content = row.querySelector(".ytp-menuitem-content");
+      if (typeof item.checked === "boolean") {
+        const toggle = document.createElement("div");
+        toggle.className = "ytp-menuitem-toggle-checkbox";
+        content.appendChild(toggle);
+      } else {
+        content.textContent = item.value || "";
+      }
+      const activate = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        handleGearItem(item.id);
+      };
+      row.addEventListener("click", activate);
+      row.addEventListener("keydown", (event) => {
+        const key = event.key;
+        if (key === "Enter" || key === " ") activate(event);
+      });
+      return row;
+    }
+    function fitGearMenu(player, menu, panel, list) {
+      const current = parseFloat(list.style.height);
+      if (!Number.isFinite(current)) return;
+      const listStyle = getComputedStyle(list);
+      const padding = (parseFloat(listStyle.paddingTop) || 0) + (parseFloat(listStyle.paddingBottom) || 0);
+      const rowsHeight = padding + Array.from(list.children).reduce((sum, row) => sum + row.getBoundingClientRect().height, 0);
+      const max = Math.max(200, player.clientHeight - 80);
+      const target = Math.min(max, Math.ceil(rowsHeight));
+      for (const el of [list, panel, menu]) {
+        const height = parseFloat(el.style.height);
+        if (Number.isFinite(height) && Math.abs(height - target) >= 1) el.style.height = target + "px";
+      }
+    }
+    function injectGearItems() {
+      gearRaf = 0;
+      const player = getYouTubePlayer();
+      const menu = player?.querySelector(".ytp-settings-menu");
+      if (!player || !menu || menu.style.display === "none" || !shouldAddGearItems()) return;
+      const panels = Array.from(menu.querySelectorAll(".ytp-panel")).filter((panel2) => !panel2.querySelector(".ytp-panel-header"));
+      const panel = panels[panels.length - 1];
+      const list = panel?.querySelector(".ytp-panel-menu");
+      if (!panel || !list) return;
+      if (list.querySelector(`[${GEAR_ITEM_ATTR}]`)) {
+        refreshGearItems();
+        fitGearMenu(player, menu, panel, list);
+        return;
+      }
+      const rows = getGearItems().map(buildGearRow);
+      const firstSubmenu = list.querySelector(':scope > .ytp-menuitem[aria-haspopup="true"]');
+      for (const row of rows) list.insertBefore(row, firstSubmenu);
+      fitGearMenu(player, menu, panel, list);
+    }
+    function scheduleGearInjection() {
+      if (gearRaf) return;
+      gearRaf = requestAnimationFrame(injectGearItems);
+    }
+    function bindGearMenu() {
+      if (!shouldAddGearItems()) return;
+      const menu = getYouTubePlayer()?.querySelector(".ytp-settings-menu");
+      if (!menu || menu === gearObservedMenu) return;
+      gearObserver?.disconnect();
+      gearObservedMenu = menu;
+      gearObserver = new MutationObserver(scheduleGearInjection);
+      gearObserver.observe(menu, { childList: true, subtree: true, attributes: true, attributeFilter: ["style"] });
+      scheduleGearInjection();
+    }
+    document.addEventListener("click", (event) => {
+      const target = event.target;
+      if (target?.closest?.(".ytp-settings-button")) window.setTimeout(() => {
+        bindGearMenu();
+        scheduleGearInjection();
+      }, 0);
+    }, true);
+    function getLiveTarget() {
+      const n = Number(config.liveCatchUpTarget);
+      return Number.isFinite(n) && n > 0 ? n : 3;
+    }
+    function restoreLiveRate() {
+      if (!adState.liveRateApplied || adState.liveRateApplied === 1) return;
+      const video = getActiveVideo();
+      if (video && Math.abs(video.playbackRate - adState.liveRateApplied) < 0.01) {
+        try {
+          video.playbackRate = 1;
+        } catch (err) {
+        }
+        requestMainWorldSpeedThrough(1);
+      }
+      adState.liveRateApplied = 1;
+    }
+    function runLiveCatchUp() {
+      const video = getActiveVideo();
+      const key = getCurrentVideoKey();
+      if (!video || !config.enabled || config.liveCatchUpEnabled === false || !isLiveStream() || adState.active || getAdPlaying()) {
+        restoreLiveRate();
+        adState.liveDelay = 0;
+        return;
+      }
+      adState.liveDelay = getBufferAhead(video);
+      if (video.paused || adState.liveUserOverrideKey === key) return;
+      const applied = adState.liveRateApplied || 1;
+      if (Math.abs(video.playbackRate - applied) > 0.01 && Math.abs(video.playbackRate - 1) > 0.01) {
+        adState.liveUserOverrideKey = key;
+        adState.liveRateApplied = 1;
+        return;
+      }
+      const decision = decideLiveRate({
+        bufferAhead: adState.liveDelay,
+        target: getLiveTarget(),
+        currentRate: applied,
+        maxRate: Number(config.liveCatchUpMaxRate) || 1.25
+      });
+      if (decision.jumpBy > 0) {
+        try {
+          video.currentTime = video.currentTime + decision.jumpBy;
+        } catch (err) {
+        }
+        recordPlaybackEvent("live-jump", "live-catch-up", Number(video.currentTime || 0));
+      }
+      if (Math.abs(decision.rate - video.playbackRate) > 5e-3) {
+        try {
+          video.playbackRate = decision.rate;
+        } catch (err) {
+        }
+        requestMainWorldSpeedThrough(decision.rate);
+      }
+      adState.liveRateApplied = decision.rate;
+    }
+    function jumpToLiveEdge() {
+      const video = getActiveVideo();
+      if (!video || !isLiveStream()) return;
+      const ahead = getBufferAhead(video);
+      adState.liveUserOverrideKey = "";
+      if (ahead > 1.5) {
+        try {
+          video.currentTime = video.currentTime + ahead - 1;
+        } catch (err) {
+        }
+      }
+      showPlayerFeedback("speed", "Ao vivo", ahead > 1.5 ? "Pulou " + (ahead - 1).toFixed(1) + "s" : "Já está no ao vivo");
+    }
+    function runPlayerUiTick() {
+      runLiveCatchUp();
+      if (!shouldShowPlayerControls()) return;
+      updateEndTimeLabel();
+      refreshPlayerControlStates();
+    }
+    let resumeStore = null;
+    let resumeLoading = false;
+    let resumeLastSaveAt = 0;
+    function withResumeStore(callback) {
+      if (resumeStore) {
+        callback(resumeStore);
+        return;
+      }
+      if (resumeLoading || !chrome?.storage?.local) return;
+      resumeLoading = true;
+      chrome.storage.local.get({ [RESUME_STORAGE_KEY]: {} }, (data) => {
+        resumeLoading = false;
+        const stored = data[RESUME_STORAGE_KEY];
+        resumeStore = stored && typeof stored === "object" ? stored : {};
+        callback(resumeStore);
+      });
+    }
+    function hasExplicitStartTime() {
+      try {
+        const url = new URL(location.href);
+        return url.searchParams.has("t") || url.searchParams.has("start") || /(^|[#&])t=/.test(url.hash.slice(1));
+      } catch (err) {
+        return false;
+      }
+    }
+    function playerHoldsCurrentVideo(videoId) {
+      const link = getYouTubePlayer()?.querySelector(".ytp-title-link");
+      const href = link?.href || "";
+      if (!href) return true;
+      return getYouTubeVideoIdFromUrl(href) === videoId;
+    }
+    function runResumePlayback() {
+      if (!config.enabled || !config.resumePlaybackEnabled || !isWatchPage() || isPopupWindow()) return;
+      if (adState.active || getAdPlaying()) return;
+      const video = getMainVideo();
+      const videoId = getCurrentVideoId();
+      const key = getCurrentVideoKey();
+      if (!video || !videoId || !key || video.readyState < 1) return;
+      if (!playerHoldsCurrentVideo(videoId)) return;
+      const duration = Number(video.duration);
+      if (adState.resumeCheckedKey !== key) {
+        if (adState.resumeCheckStartedKey !== key) {
+          adState.resumeCheckStartedKey = key;
+          adState.resumeCheckStartedAt = Date.now();
+        }
+        withResumeStore((store) => {
+          if (adState.resumeCheckedKey === key) return;
+          const entry = store[videoId];
+          const target = getResumeTarget(entry, duration, hasExplicitStartTime());
+          if (target === null) {
+            const durationMismatch = !!entry && Math.abs(entry.d - duration) > 3;
+            if (!durationMismatch || Date.now() - adState.resumeCheckStartedAt > 15e3) adState.resumeCheckedKey = key;
+            return;
+          }
+          adState.resumeCheckedKey = key;
+          if (video.currentTime >= target - 5) return;
+          try {
+            video.currentTime = target;
+            showPlayerFeedback("resume", formatClock(target), "Continuando de onde parou");
+            recordPlaybackEvent("resume-seek", "resume-playback", target);
+          } catch (err) {
+          }
+        });
+        return;
+      }
+      if (video.paused || Date.now() - resumeLastSaveAt < 5e3) return;
+      resumeLastSaveAt = Date.now();
+      const action = getResumeSaveAction(Number(video.currentTime), duration);
+      if (action === "skip") return;
+      withResumeStore((store) => {
+        if (action === "delete") {
+          if (!store[videoId]) return;
+          delete store[videoId];
+        } else {
+          store[videoId] = { t: Math.floor(video.currentTime), d: Math.round(duration), at: Date.now() };
+        }
+        resumeStore = pruneResumeStore(store);
+        chrome.storage.local.set({ [RESUME_STORAGE_KEY]: resumeStore });
       });
     }
     function mainLoop() {
@@ -3716,6 +4992,8 @@
         if (adState.active || adState.overlayEl) cleanupRuntimeState();
         enforceAutoplayGuards();
         applyPlayerPreferences();
+        runResumePlayback();
+        runPlayerUiTick();
         return;
       }
       bindAdSkipperWatchdog();
@@ -3729,6 +5007,7 @@
         adState.startTime = Date.now();
         adState.lastVideoTime = -1;
         adState.alreadyCounted = false;
+        adState.adSrc = getMainVideo()?.currentSrc || "";
         capturePlaybackRate();
         muteVideo();
         startSpeedThrough();
@@ -3736,7 +5015,7 @@
         if (config.showOverlay) createOverlay();
       } else if (adPlaying && adState.active) {
         if (adState.watching) return;
-        const video = document.querySelector("video");
+        const video = getMainVideo();
         if (video) {
           const ct = video.currentTime;
           if (adState.lastVideoTime > 2 && ct < adState.lastVideoTime - 2) {
@@ -3744,11 +5023,13 @@
             adState.startTime = Date.now();
             adState.alreadyCounted = false;
             adState.lastVideoTime = ct;
+            adState.adSrc = video.currentSrc || "";
             scheduleSkip();
             if (config.showOverlay) createOverlay();
             return;
           }
           adState.lastVideoTime = ct;
+          if (video.currentSrc) adState.adSrc = video.currentSrc;
         }
         if (adState.skipTargetTime && Date.now() >= adState.skipTargetTime) {
           attemptScheduledSkip();
@@ -3760,6 +5041,8 @@
         cleanupRuntimeState();
       } else if (!adPlaying && !adState.active) {
         applyPlayerPreferences();
+        runResumePlayback();
+        runPlayerUiTick();
         const orphans = document.querySelectorAll("#" + OVERLAY_ID);
         if (orphans.length > 0) orphans.forEach((el) => el.remove());
       }
@@ -3781,7 +5064,7 @@
         { combo: config.shortcutSpeedUp, action: "speed-up" },
         { combo: config.shortcutVolumeDown, action: "volume-down" },
         { combo: config.shortcutVolumeUp, action: "volume-up" },
-        { combo: config.shortcutCinema, action: "theater" },
+        { combo: config.shortcutCinema, action: "cinema" },
         { combo: config.shortcutScreenshot, action: "screenshot" },
         { combo: config.shortcutPopup, action: "popup" },
         { combo: config.shortcutLoop, action: "loop" }
@@ -3803,7 +5086,20 @@
         showPlayerFeedback("volume", next + "%", shouldUseVolumeBoost() ? "Boost " + normalizeVolumeBoostLevel(config.volumeBoostLevel) + "x" : "");
         return;
       }
+      if (matched.action === "cinema") {
+        toggleCinemaMode();
+        showPlayerFeedback("settings", adState.cinemaActive ? "Cinema ligado" : "Cinema desligado");
+        refreshPlayerControlStates();
+        refreshGearItems();
+        return;
+      }
+      if (matched.action === "popup") {
+        handlePlayerControlAction("popup", new MouseEvent("click"));
+        return;
+      }
       handlePlayerToolbarAction(matched.action);
+      refreshPlayerControlStates();
+      refreshGearItems();
     }
     document.addEventListener("keydown", handleConfiguredShortcut, true);
     document.addEventListener("mousedown", (event) => {
@@ -3821,6 +5117,8 @@
     document.addEventListener("wheel", handlePlayerWheel, { capture: true, passive: false });
     document.addEventListener("pointerdown", (event) => {
       markUserPlaybackIntent("pointerdown");
+      resumeSuspendedBoost();
+      if (config.volumeBoostEnabled) setTimeout(() => applyVolumeBoost(getActiveVideo()), 0);
       if (config.volumeBoostEnabled && config.volumeBoostAuto && isPointerInsidePlayer(event.target)) {
         setTimeout(() => applyVolumeBoost(getActiveVideo()), 0);
       }
@@ -3828,6 +5126,7 @@
     document.addEventListener("keydown", (event) => {
       const playbackKeys = [" ", "Enter", "k", "K", "MediaPlayPause", "MediaPlay"];
       if (playbackKeys.includes(event.key)) markUserPlaybackIntent("keyboard");
+      resumeSuspendedBoost();
     }, true);
     document.addEventListener("visibilitychange", () => {
       if (!document.hidden) markUserPlaybackIntent("tab-visible");
@@ -3838,106 +5137,6 @@
     window.addEventListener("resize", scheduleMiniplayerUpdate);
     const PIP_BTN_ID = "ytp-pip-float-btn";
     const PIP_STYLE_ID = "ytp-pip-style";
-    function injectPipStyles() {
-      if (document.getElementById(PIP_STYLE_ID)) return;
-      const style = document.createElement("style");
-      style.id = PIP_STYLE_ID;
-      style.textContent = `
-      #${PIP_BTN_ID} {
-        position: absolute;
-        bottom: 60px;
-        right: 16px;
-        z-index: 99998;
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
-        background: rgba(0, 0, 0, 0.7);
-        border: 1.5px solid rgba(255, 255, 255, 0.2);
-        color: #fff;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        opacity: 0;
-        transition: opacity 0.3s ease, transform 0.2s ease, background 0.2s ease;
-        pointer-events: auto;
-        backdrop-filter: blur(8px);
-        -webkit-backdrop-filter: blur(8px);
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
-      }
-      .html5-video-player:hover #${PIP_BTN_ID},
-      #${PIP_BTN_ID}:focus {
-        opacity: 1;
-      }
-      #${PIP_BTN_ID}:hover {
-        background: rgba(200, 60, 60, 0.85);
-        border-color: rgba(255, 255, 255, 0.35);
-        transform: scale(1.1);
-      }
-      #${PIP_BTN_ID}:active {
-        transform: scale(0.95);
-      }
-      #${PIP_BTN_ID} svg {
-        width: 20px;
-        height: 20px;
-        pointer-events: none;
-      }
-      #${PIP_BTN_ID}.pip-active {
-        background: rgba(200, 60, 60, 0.9);
-        border-color: rgba(200, 60, 60, 0.6);
-        box-shadow: 0 0 12px rgba(200, 60, 60, 0.4);
-      }
-      .html5-video-player:hover #${PIP_BTN_ID}.pip-active {
-        opacity: 1;
-      }
-    `;
-      (document.head || document.documentElement).appendChild(style);
-    }
-    function createPipButton() {
-      if (document.getElementById(PIP_BTN_ID)) return;
-      injectPipStyles();
-      const player = document.querySelector("#movie_player") || document.querySelector(".html5-video-player");
-      if (!player) return;
-      const btn = document.createElement("button");
-      btn.id = PIP_BTN_ID;
-      btn.title = "Player Flutuante (PiP)";
-      btn.innerHTML = `
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
-        <rect x="12" y="10" width="8" height="6" rx="1" ry="1" fill="currentColor" opacity="0.4"/>
-      </svg>
-    `;
-      btn.addEventListener("click", async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        const video2 = document.querySelector("video");
-        if (!video2) return;
-        try {
-          if (document.pictureInPictureElement) {
-            await document.exitPictureInPicture();
-            btn.classList.remove("pip-active");
-          } else {
-            await video2.requestPictureInPicture();
-            btn.classList.add("pip-active");
-          }
-        } catch (err) {
-          console.warn("[YouTube Extension] PiP error:", err);
-        }
-      });
-      player.style.position = "relative";
-      player.appendChild(btn);
-      const video = document.querySelector("video");
-      if (video) {
-        video.addEventListener("enterpictureinpicture", () => {
-          const b = document.getElementById(PIP_BTN_ID);
-          if (b) b.classList.add("pip-active");
-        });
-        video.addEventListener("leavepictureinpicture", () => {
-          const b = document.getElementById(PIP_BTN_ID);
-          if (b) b.classList.remove("pip-active");
-        });
-      }
-    }
     function removePipButton() {
       const btn = document.getElementById(PIP_BTN_ID);
       if (btn) btn.remove();
@@ -3945,28 +5144,18 @@
       if (style) style.remove();
     }
     function injectPipButton() {
-      if (!config.enabled || !config.pipEnabled) return;
-      const player = document.querySelector("#movie_player") || document.querySelector(".html5-video-player");
-      if (player) {
-        createPipButton();
-      } else {
-        setTimeout(() => {
-          if (config.enabled && config.pipEnabled) createPipButton();
-        }, 2e3);
-      }
+      removePipButton();
     }
-    let _pipLastUrl = location.href;
-    const _pipNavObserver = new MutationObserver(() => {
-      if (location.href !== _pipLastUrl) {
-        _pipLastUrl = location.href;
-        if (config.enabled && config.pipEnabled) {
-          setTimeout(injectPipButton, 1500);
-        }
-        scheduleVisualMaintenanceTasks(true, 500);
-      }
-    });
-    _pipNavObserver.observe(document.documentElement, { childList: true, subtree: true });
+    let lastNavigationUrl = location.href;
+    function handleSpaNavigation() {
+      if (location.href === lastNavigationUrl) return;
+      lastNavigationUrl = location.href;
+      if (config.enabled && config.pipEnabled) setTimeout(injectPipButton, 600);
+      scheduleVisualMaintenanceTasks(true, 300);
+    }
+    window.addEventListener("popstate", handleSpaNavigation);
     document.addEventListener("yt-navigate-finish", () => {
+      handleSpaNavigation();
       setTimeout(() => {
         runVisualMaintenanceTasks(true);
         if (config.volumeBoostEnabled && config.volumeBoostAuto) applyVolumeBoost();

@@ -70,3 +70,26 @@ Use este roteiro depois de `npm run package` ou `npm run build`.
 - Nao ha toolbar duplicada.
 - Build e package passam.
 - Console nao mostra erro recorrente da extensao.
+
+## Teste automatizado no navegador (Playwright)
+
+Carrega `dist/` num Chromium real e abre um vídeo do YouTube:
+
+```bash
+npm run build
+npx playwright install chromium   # só na primeira vez
+npm run e2e
+```
+
+Verifica: vídeo avança sem pausas da extensão, velocidade normal depois de anúncios,
+miniplayer flutua ao descer até os comentários sem piscar, volta ao subir, e nenhum
+erro da extensão no console. Variáveis úteis:
+
+- `E2E_VIDEO=<url>` para outro vídeo (use um com anúncio para testar o skip).
+- `E2E_HEADED=1` para ver a janela.
+- `E2E_SETTINGS='{"miniplayerEnabled":false}'` para sobrescrever configurações.
+- `E2E_NO_EXTENSION=1` roda o mesmo fluxo sem a extensão, como referência.
+
+Observação: no Chromium automatizado o YouTube costuma mostrar "Algo deu errado" depois
+de uns 40 s e descarregar o vídeo. Isso acontece também sem a extensão, por isso o teste
+registra como `WARN` e não como falha.

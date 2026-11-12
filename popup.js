@@ -1,11 +1,11 @@
 (function() {
   "use strict";
-  const PLAYER_DEFAULTS_PROFILE_VERSION = 2;
+  const PLAYER_DEFAULTS_PROFILE_VERSION = 5;
   const PLAYER_DEFAULTS_PROFILE = {
     playerSpeedEnabled: true,
     playerSpeedStep: 0.02,
     playerSpeedWheel: true,
-    autoplayBlockBackground: true,
+    autoplayBlockBackground: false,
     autoplayAllowPlaylists: true,
     miniplayerEnabled: true,
     miniplayerSize: "480x270",
@@ -77,7 +77,7 @@
     volumeBoostLevel: 2,
     volumeBoostAuto: false,
     playerWheelInvert: false,
-    autoplayBlockBackground: true,
+    autoplayBlockBackground: false,
     autoplayBlockForeground: false,
     autoplayAllowPlaylists: true,
     pauseBackgroundTabs: false,
@@ -164,7 +164,17 @@
     videoFilterContrast: 100,
     videoFilterSaturate: 100,
     videoFilterGrayscale: 0,
-    videoFilterSepia: 0
+    videoFilterSepia: 0,
+    resumePlaybackEnabled: false,
+    playerControlsEnabled: true,
+    playerControlsStyle: "pill",
+    settingsMenuItemsEnabled: true,
+    skipSurveysEnabled: true,
+    playerEndTimeEnabled: false,
+    liveCatchUpEnabled: true,
+    liveCatchUpTarget: 3,
+    liveCatchUpMaxRate: 1.25,
+    videoFilterHue: 0
   };
   const SETTINGS_EXPORT_KEYS = Object.keys(DEFAULT_SETTINGS);
   function normalizeSettings(raw = {}) {
@@ -189,13 +199,40 @@
     }
     return normalized;
   }
+  const SETTINGS_MIGRATIONS = {
+    2: PLAYER_DEFAULTS_PROFILE,
+    // v3: stability overhaul. These defaults caused surprise pauses and comment
+    // menus opening on their own.
+    3: {
+      autoplayBlockBackground: false,
+      appearanceSortNewestComments: false
+    },
+    // v4: controls moved inside YouTube's own control bar; the separate bar
+    // below the video becomes optional.
+    4: {
+      playerControlsEnabled: true,
+      toolbarEnabled: false
+    },
+    // v5: the "termina às" clock is opt-in; buttons default to their own pill.
+    5: {
+      playerEndTimeEnabled: false,
+      playerControlsStyle: "pill"
+    }
+  };
+  function getSettingsMigrationPatch(storedVersion) {
+    const version = Number(storedVersion) || 0;
+    if (version >= PLAYER_DEFAULTS_PROFILE_VERSION) return null;
+    const patch = {};
+    for (let next = version + 1; next <= PLAYER_DEFAULTS_PROFILE_VERSION; next += 1) {
+      Object.assign(patch, SETTINGS_MIGRATIONS[next] || {});
+    }
+    patch.playerDefaultsProfileVersion = PLAYER_DEFAULTS_PROFILE_VERSION;
+    return patch;
+  }
   function migrateSettings(raw = {}) {
     const settings = normalizeSettings(raw);
-    if ((Number(settings.playerDefaultsProfileVersion) || 0) < PLAYER_DEFAULTS_PROFILE_VERSION) {
-      Object.assign(settings, PLAYER_DEFAULTS_PROFILE, {
-        playerDefaultsProfileVersion: PLAYER_DEFAULTS_PROFILE_VERSION
-      });
-    }
+    const patch = getSettingsMigrationPatch(raw.playerDefaultsProfileVersion);
+    if (patch) Object.assign(settings, patch);
     return settings;
   }
   function byId(id) {
@@ -269,6 +306,8 @@
     elements.version.textContent = "v-";
   }
   chrome.storage.local.get(DEFAULT_SETTINGS, (settings) => {
+    const migrationPatch = getSettingsMigrationPatch(settings.playerDefaultsProfileVersion);
+    if (migrationPatch) chrome.storage.local.set(migrationPatch);
     settings = migrateSettings(settings);
     elements.enabled.checked = settings.enabled;
     elements.skipper.checked = settings.adSkipperEnabled !== false;
@@ -333,4 +372,72 @@
   for (const id of ["btn-open-settings", "btn-open-settings-main"]) {
     byId(id).addEventListener("click", () => chrome.runtime.openOptionsPage());
   }
+  const POPUP_SETTING_MESSAGES = {
+    miniplayerEnabled: ["Miniplayer ativado.", "Miniplayer desativado."],
+    resumePlaybackEnabled: ["Vídeos vão continuar de onde pararam.", "Continuar de onde parou desativado."],
+    liveCatchUpEnabled: ["Lives sem atraso: acelera de leve quando atrasar.", "Lives no ritmo normal."],
+    skipSurveysEnabled: ["Pesquisas serão puladas automaticamente.", "Pesquisas não serão puladas."]
+  };
+  const popupSettingInputs = Array.from(document.querySelectorAll("[data-popup-setting]"));
+  chrome.storage.local.get(DEFAULT_SETTINGS, (settings) => {
+    const migrated = migrateSettings(settings);
+    popupSettingInputs.forEach((input) => {
+      const key = input.dataset.popupSetting || "";
+      input.checked = migrated[key] !== false && !!migrated[key];
+    });
+  });
+  popupSettingInputs.forEach((input) => {
+    input.addEventListener("change", () => {
+      const key = input.dataset.popupSetting || "";
+      if (!key) return;
+      chrome.storage.local.set({ [key]: input.checked });
+      const [on, off] = POPUP_SETTING_MESSAGES[key] || ["Configuração aplicada.", "Configuração aplicada."];
+      announceChange(input.checked ? on : off);
+    });
+  });
+  const placementButtons = Array.from(document.querySelectorAll("[data-placement]"));
+  function renderPlacement(inside, below) {
+    const current = inside ? "inside" : below ? "below" : "off";
+    placementButtons.forEach((button) => button.setAttribute("aria-checked", String(button.dataset.placement === current)));
+  }
+  chrome.storage.local.get(DEFAULT_SETTINGS, (settings) => {
+    const migrated = migrateSettings(settings);
+    renderPlacement(migrated.playerControlsEnabled !== false, migrated.toolbarEnabled !== false);
+  });
+  placementButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      const value = button.dataset.placement;
+      const inside = value === "inside";
+      const below = value === "below";
+      chrome.storage.local.set({ playerControlsEnabled: inside, toolbarEnabled: below });
+      renderPlacement(inside, below);
+      announceChange(inside ? "Botões dentro do player." : below ? "Botões numa barra abaixo do vídeo." : "Botões escondidos.");
+    });
+  });
+  const styleButtons = Array.from(document.querySelectorAll("[data-controls-style]"));
+  const styleRow = document.getElementById("style-row");
+  function renderControlsStyle(style, inside) {
+    const current = style === "divider" ? "divider" : "pill";
+    styleButtons.forEach((button) => button.setAttribute("aria-checked", String(button.dataset.controlsStyle === current)));
+    if (styleRow) styleRow.hidden = !inside;
+  }
+  chrome.storage.local.get(DEFAULT_SETTINGS, (settings) => {
+    const migrated = migrateSettings(settings);
+    renderControlsStyle(String(migrated.playerControlsStyle), migrated.playerControlsEnabled !== false);
+  });
+  styleButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      const style = button.dataset.controlsStyle === "divider" ? "divider" : "pill";
+      chrome.storage.local.set({ playerControlsStyle: style });
+      renderControlsStyle(style, true);
+      announceChange(style === "pill" ? "Botões numa caixa própria." : "Botões junto com os do YouTube.");
+    });
+  });
+  chrome.storage.onChanged.addListener((changes) => {
+    if (!changes.playerControlsEnabled && !changes.playerControlsStyle) return;
+    chrome.storage.local.get(DEFAULT_SETTINGS, (settings) => {
+      const migrated = migrateSettings(settings);
+      renderControlsStyle(String(migrated.playerControlsStyle), migrated.playerControlsEnabled !== false);
+    });
+  });
 })();

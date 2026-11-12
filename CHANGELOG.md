@@ -2,7 +2,61 @@
 
 Todas as mudancas relevantes deste projeto serao registradas aqui.
 
-## Unreleased
+## 5.1.0 — Estabilidade
+
+### Corrigido
+
+- O vídeo não pausa mais sozinho: a extensão usava o primeiro `<video>` da página (às vezes a prévia de uma miniatura) e pausava o player principal por engano.
+- O skip de anúncio não avança mais o vídeo de verdade: as ações no contexto da página conferem se o anúncio ainda está passando antes de avançar ou acelerar.
+- O bloqueio de autoplay só age no evento de play do vídeo principal, no máximo uma vez por vídeo e nunca logo depois de um anúncio. Retomar pelo fone ou pelos controles de mídia do sistema volta a funcionar.
+- O bloqueio de autoplay em abas de fundo e a ordenação automática de comentários agora vêm desligados (migração que preserva as demais escolhas).
+- O miniplayer não pisca mais ao descer para os comentários: tem margem de entrada/saída, reserva o espaço do player e funciona no modo teatro.
+- Os menus do YouTube (como "Classificar comentários") abrem por cima do miniplayer.
+- Tela preta em lives com filtros de codec ativos.
+- O modo teatro automático não dessincroniza mais o player; o modo cinema não redimensiona mais o vídeo.
+- Depois de remover o aviso de bloqueador de anúncios, o vídeo pausado pelo YouTube volta a tocar.
+
+### Adicionado
+
+- Botões dentro da barra do próprio player (velocidade, repetir, filtros, frame, boost, cinema, janela, PiP), com ícones no padrão do YouTube e uma divisória separando dos botões nativos. Opção de deixá-los dentro do player, numa barra abaixo do vídeo, nos dois ou escondidos.
+- Itens dentro do menu de configurações (engrenagem) do próprio YouTube: Filtros de imagem, Repetir vídeo, Modo cinema e, em lives, Tirar atraso. A barra fica com as ações rápidas: velocidade, frame, volume boost, janela e PiP.
+- "Termina às" ao lado do tempo do vídeo (opcional), considerando a velocidade.
+- Painel de filtros dentro do player, com o mesmo visual do menu de configurações do YouTube: predefinições (Vívido, Cinema, Noite, Clarear, P&B), brilho, contraste, saturação, tom, quente e preto e branco. Os filtros agora valem para todos os vídeos.
+- Lives sem atraso: acelera de leve (até 1,25x) enquanto houver atraso acumulado e mostra o atraso no botão "AO VIVO".
+- Pesquisas de anúncio ("Pular pesquisa") agora são puladas.
+- Continuar de onde parou (opcional): lembra a posição de vídeos com mais de 3 minutos.
+- Botão para fechar o miniplayer até o player voltar a aparecer na tela.
+- Diagnóstico de reprodução no Control Center: lista toda pausa/avanço feito pela extensão e o motivo.
+- Atalhos rápidos de Miniplayer e Continuar no popup.
+
+### Corrigido na auditoria das opções antigas
+
+- Qualidade automática: a extensão falava com o player do lado errado (onde a API do YouTube não existe) e nunca sabia a qualidade atual. Agora a escolha acontece no contexto da página, e "restaurar ao sair da tela cheia" volta a funcionar.
+- Todo vídeo era tratado como playlist (o YouTube deixa um painel de playlist vazio na página), o que trocava a qualidade para a de playlists e desligava o bloqueio de autoplay.
+- Velocidade padrão não "pegava" porque o YouTube reaplicava a velocidade dele logo depois de carregar o vídeo; não é mais aplicada em lives.
+- Volume padrão agora atualiza o volume do próprio YouTube (barra e volume salvo).
+- Volume boost podia deixar o vídeo mudo (processador de áudio criado antes de qualquer clique); agora só é criado após interação e é retomado no próximo clique.
+- O atalho "Cinema" ativava o modo teatro.
+- A rodinha do mouse dentro do painel de filtros ou da engrenagem mudava volume/velocidade.
+- O CSS de aparência era reconstruído (com três redimensionamentos) a cada vídeo; seletores de Shorts atualizados.
+- Botão flutuante de PiP antigo, duplicado e sem estilo, aposentado (o PiP fica na barra).
+
+### Adicionado
+
+- Pular pesquisas automaticamente (opção, ligada por padrão): pula pesquisas de anúncio e esconde as pesquisas de opinião do YouTube.
+- `npm run e2e:audit`: confere no YouTube real qualidade, velocidade, volume, atalhos, rodinha, barra abaixo do vídeo e Shorts.
+
+### Melhorado
+
+- Redesign do popup e do Control Center: fontes embutidas (Pixelify Sans nos títulos, IBM Plex no texto), menu lateral, superfícies retas, sem selos decorativos e textos reescritos.
+- O aviso de anúncio no player virou uma pílula no estilo do YouTube que diz o que está acontecendo de verdade ("Pulando em 2s", "Esperando o botão Pular", "Acelerando…").
+- Notificação de anúncio pulado e balões de velocidade/volume no estilo do YouTube.
+
+- Carregamento de configurações unificado (cerca de 330 linhas duplicadas a menos); contadores sincronizados entre abas.
+- Sem `MutationObserver` no documento inteiro para detectar navegação; ganchos globais de `JSON.parse` só quando há filtro de codec.
+- Control Center: acentuação revisada, textos técnicos trocados por descrições claras, cabeçalho e menu fixos sem sobreposição, seção atual destacada no menu.
+
+## 5.0.0
 
 ### Adicionado
 

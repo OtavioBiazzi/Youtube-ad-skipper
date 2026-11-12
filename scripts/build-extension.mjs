@@ -19,6 +19,8 @@ const staticFiles = [
   "manifest.json",
   "popup.html",
   "popup.css",
+  "fonts.css",
+  "options.theme.css",
   "options.html",
   "options.css",
   "icon16.png",
@@ -81,6 +83,12 @@ for (const item of entries) {
 
 for (const file of staticFiles) {
   await copyFile(resolve(root, file), resolve(distDir, file));
+}
+
+// Bundled fonts (OFL), so extension pages never call Google Fonts.
+await mkdir(resolve(distDir, "fonts"), { recursive: true });
+for (const file of await readdir(resolve(root, "fonts"))) {
+  await copyFile(resolve(root, "fonts", file), resolve(distDir, "fonts", file));
 }
 
 const builtFiles = await readdir(tempDir);
