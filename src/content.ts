@@ -3858,6 +3858,18 @@ declare global {
         opacity: 1;
       }
 
+      /* Same hover as YouTube's own buttons: a soft white pill (10%). */
+      #${PLAYER_CONTROLS_ID} .yte-btn {
+        border-radius: 40px;
+        transition: background-color 0.1s cubic-bezier(0.4, 0, 1, 1);
+      }
+
+      #${PLAYER_CONTROLS_ID} .yte-btn:hover,
+      #${PLAYER_CONTROLS_ID} .yte-btn:focus-visible {
+        background-color: rgba(255, 255, 255, 0.1);
+        transition-timing-function: cubic-bezier(0, 0, 0.2, 1);
+      }
+
       #${PLAYER_CONTROLS_ID} .yte-btn svg {
         width: 24px;
         height: 24px;
