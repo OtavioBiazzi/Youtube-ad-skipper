@@ -3954,6 +3954,21 @@
 
       #${FILTER_PANEL_ID}[hidden] { display: none !important; }
 
+      /* Fade out together with YouTube's controls when the mouse stops. */
+      #${FILTER_PANEL_ID} { transition: opacity 0.1s cubic-bezier(0.4, 0, 1, 1); }
+      #movie_player.ytp-autohide #${FILTER_PANEL_ID} {
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.25s cubic-bezier(0, 0, 0.2, 1);
+      }
+
+      /* While the panel is open, YouTube's fullscreen quick actions
+         (like/dislike/comment/share) step aside instead of overlapping it. */
+      #movie_player.yte-filter-panel-open .ytp-fullscreen-quick-actions,
+      #movie_player.yte-filter-panel-open .ytp-overlay-bottom-right {
+        visibility: hidden !important;
+      }
+
       :where(#${FILTER_PANEL_ID}) {
         border-radius: 12px;
         background: rgba(0, 0, 0, 0.6);
@@ -4107,6 +4122,7 @@
       return !!config.enabled && config.playerControlsEnabled !== false && (isWatchPage() || /^\/embed\//.test(location.pathname));
     }
     function removePlayerControls() {
+      getYouTubePlayer()?.classList.remove("yte-filter-panel-open");
       document.getElementById(PLAYER_CONTROLS_ID)?.remove();
       document.getElementById(FILTER_PANEL_ID)?.remove();
       document.getElementById(END_TIME_ID)?.remove();
@@ -4551,6 +4567,7 @@
     function closeFilterPanel() {
       const panel = document.getElementById(FILTER_PANEL_ID);
       if (panel) panel.hidden = true;
+      getYouTubePlayer()?.classList.remove("yte-filter-panel-open");
       document.removeEventListener("pointerdown", handleOutsideFilterPanel, true);
     }
     function handleOutsideFilterPanel(event) {
@@ -4572,6 +4589,7 @@
         return;
       }
       filterPanelView = "main";
+      player.classList.add("yte-filter-panel-open");
       panel.hidden = false;
       renderFilterPanel(panel);
       document.addEventListener("pointerdown", handleOutsideFilterPanel, true);
