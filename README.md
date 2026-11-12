@@ -7,8 +7,8 @@ Uma extensão experimental de navegador para reunir **skipper inteligente, contr
 <br>
 
 <div align="center">
-  <a href="https://github.com/OtavioBiazzi/Youtube-ad-skipper/releases/download/v5.2.7/youtube-extension-v5.2.7.zip">
-    <img src="https://img.shields.io/badge/Baixar_Vers%C3%A3o_5.2.7_(.ZIP)-000000?style=for-the-badge&logo=github&logoColor=white" alt="Baixar YouTube Extension 5.2.7" />
+  <a href="https://github.com/OtavioBiazzi/Youtube-ad-skipper/releases/download/v5.3.0/youtube-extension-v5.3.0.zip">
+    <img src="https://img.shields.io/badge/Baixar_Vers%C3%A3o_5.3.0_(.ZIP)-000000?style=for-the-badge&logo=github&logoColor=white" alt="Baixar YouTube Extension 5.3.0" />
   </a>
   <br><br>
   <a href="https://github.com/OtavioBiazzi/Youtube-ad-skipper/releases">Ver todas as versões</a>
@@ -20,13 +20,16 @@ Uma extensão experimental de navegador para reunir **skipper inteligente, contr
 
 | Funcionalidade | Descrição |
 |---|---|
-| ⏭️ **Pular Automático** | Detecta anúncios e clica no botão de pular automaticamente |
-| ⏱️ **Delay Configurável** | Escolha de 1s até 30s antes de pular |
-| 🔇 **Mutar Anúncios** | Silencia automaticamente durante o anúncio |
-| 🎬 **Overlay Interativo** | Mostra countdown no vídeo com opção de assistir ou pular |
-| 👁 **Modo Assistir** | Opção de cancelar o skip e ver o anúncio se quiser |
-| 📊 **Estatísticas** | Conta quantos anúncios foram pulados e tempo economizado |
-| ⚙️ **Popup de Configuração** | Menu bonito e intuitivo para personalizar tudo |
+| ⏭️ **Pular anúncios** | Clica em "Pular" no tempo que você escolher (1–30s), acelera o que não tem botão e pula pesquisas de anúncio |
+| 🎛️ **Botões no player** | Velocidade, salvar frame, volume boost, janela e PiP direto na barra do YouTube, no mesmo estilo dos botões dele |
+| ⚙️ **Itens na engrenagem** | Filtros de imagem e repetir vídeo dentro do menu de configurações do próprio YouTube |
+| 🚀 **Velocidade até 10x** | O menu de velocidade do YouTube vai até 10x, e o chip "3,0" do Premium funciona |
+| 🎨 **Filtros de imagem** | Brilho, contraste, saturação, tom, quente e P&B, com predefinições (Vívido, Cinema, Noite…) |
+| 📡 **Lives sem atraso** | Opcional: acelera de leve enquanto houver atraso acumulado, com menu ao lado do "AO VIVO" |
+| 🪟 **Miniplayer** | O vídeo flutua quando você desce para os comentários |
+| 🌙 **Temas** | Paletas escuras aplicadas sobre as cores do próprio YouTube |
+| 🩺 **Saúde e diagnóstico** | Mostra se cada recurso encontra o que precisa no YouTube e registra toda pausa, avanço e anúncio contado |
+| 🔄 **Atualizações** | Avisa quando sai versão nova e baixa o zip pelo Control Center |
 
 ## 📸 Como funciona
 
@@ -43,8 +46,8 @@ Quando um anúncio aparece no YouTube:
 
 ### Chrome / Opera GX / Edge / Brave
 
-1. **[Baixe o pacote pronto da versão 5.2.7](https://github.com/OtavioBiazzi/Youtube-ad-skipper/releases/download/v5.2.7/youtube-extension-v5.2.7.zip)**.
-2. **Extraia (descompacte)** o arquivo `youtube-extension-v5.2.7.zip` em uma pasta permanente no seu computador.
+1. **[Baixe o pacote pronto da versão 5.3.0](https://github.com/OtavioBiazzi/Youtube-ad-skipper/releases/download/v5.3.0/youtube-extension-v5.3.0.zip)**.
+2. **Extraia (descompacte)** o arquivo `youtube-extension-v5.3.0.zip` em uma pasta permanente no seu computador.
 3. Abra o seu navegador e vá para a página de extensões:
    - Chrome: `chrome://extensions/`
    - Opera GX: `opera://extensions/`
