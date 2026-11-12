@@ -267,3 +267,34 @@ chrome.storage.onChanged.addListener((changes) => {
     renderControlsStyle(String(migrated.playerControlsStyle), migrated.playerControlsEnabled !== false);
   });
 });
+
+// ── Update check: shows a download link when GitHub has a newer release ──
+
+const RELEASES_API = "https://api.github.com/repos/OtavioBiazzi/Youtube-ad-skipper/releases/latest";
+
+function isNewerVersion(latest: string, current: string) {
+  const a = latest.replace(/^v/, "").split(".").map(Number);
+  const b = current.replace(/^v/, "").split(".").map(Number);
+  for (let i = 0; i < 3; i += 1) {
+    if ((a[i] || 0) !== (b[i] || 0)) return (a[i] || 0) > (b[i] || 0);
+  }
+  return false;
+}
+
+(async () => {
+  try {
+    const current = chrome.runtime.getManifest().version;
+    const response = await fetch(RELEASES_API, { headers: { Accept: "application/vnd.github+json" } });
+    if (!response.ok) return;
+    const release = await response.json();
+    const tag = String(release.tag_name || "");
+    if (!tag || !isNewerVersion(tag, current)) return;
+    const asset = Array.isArray(release.assets) ? release.assets.find((a: any) => String(a.name).endsWith(".zip")) : null;
+    const banner = document.getElementById("update-banner") as HTMLAnchorElement | null;
+    const label = document.getElementById("update-version");
+    if (!banner || !label) return;
+    banner.href = asset?.browser_download_url || release.html_url;
+    label.textContent = tag + " ↓";
+    banner.hidden = false;
+  } catch (err) {}
+})();
