@@ -405,7 +405,7 @@ input[type="range"] {
   border-radius: var(--radius-sm);
   background: var(--text);
   color: var(--bg);
-  font: 500 13px var(--font-display);
+  font: 600 13px var(--font-body);
   box-shadow: 3px 3px 0 var(--accent);
   transition: transform 0.1s ease, box-shadow 0.1s ease;
 }
@@ -624,3 +624,29 @@ body.theme-light { font-size: 15px; }
 .stat-value { font-size: 32px; }
 .delay-value { font-size: 48px; }
 .header-version { font-size: 13px; color: var(--text-dim); }
+
+
+/* Advanced: backup narrow, diagnostics wide, same row. */
+.section-grid:has(#playback-log) {
+  grid-template-columns: minmax(260px, 1fr) minmax(0, 2.2fr) !important;
+  align-items: start;
+}
+
+.playback-log { max-height: 320px; }
+
+/* About: links spread over the full width. */
+.about-links,
+.about-links--wide {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  max-width: none;
+}
+
+.about-link { justify-content: center; min-height: 44px; }
+
+#about .section-heading p { max-width: none; }
+
+@media (max-width: 920px) {
+  .section-grid:has(#playback-log) { grid-template-columns: 1fr !important; }
+}

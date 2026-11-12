@@ -313,11 +313,21 @@ declare global {
     config.themeCustomBorder = normalizeHexColor(s.themeCustomBorder, "#343741");
     config.themeCustomCss = String(s.themeCustomCss || "");
     config.videoFiltersEnabled = !!s.videoFiltersEnabled;
-    config.videoFilterBrightness = normalizePercent(s.videoFilterBrightness, 100);
-    config.videoFilterContrast = normalizePercent(s.videoFilterContrast, 100);
-    config.videoFilterSaturate = normalizePercent(s.videoFilterSaturate, 100);
-    config.videoFilterGrayscale = normalizePercent(s.videoFilterGrayscale, 0);
-    config.videoFilterSepia = normalizePercent(s.videoFilterSepia, 0);
+    // Filter ranges go above 100% (e.g. saturation 135%): normalizePercent
+    // capped them at 100, silently turning presets like "Vívido" off.
+    const filters = normalizeVideoFilters({
+      brightness: s.videoFilterBrightness,
+      contrast: s.videoFilterContrast,
+      saturate: s.videoFilterSaturate,
+      grayscale: s.videoFilterGrayscale,
+      sepia: s.videoFilterSepia,
+      hue: s.videoFilterHue,
+    });
+    config.videoFilterBrightness = filters.brightness;
+    config.videoFilterContrast = filters.contrast;
+    config.videoFilterSaturate = filters.saturate;
+    config.videoFilterGrayscale = filters.grayscale;
+    config.videoFilterSepia = filters.sepia;
     config.codecForceStandardFps = !!s.codecForceStandardFps;
     config.codecForceAvc = !!s.codecForceAvc;
     config.resumePlaybackEnabled = !!s.resumePlaybackEnabled;
@@ -331,7 +341,7 @@ declare global {
     config.liveCatchUpMode = normalizeLiveMode(s.liveCatchUpMode);
     config.liveJumpEnabled = s.liveJumpEnabled !== false;
     config.liveCatchUpMaxRate = Math.min(1.5, Math.max(1.05, Number(s.liveCatchUpMaxRate) || 1.25));
-    config.videoFilterHue = Number(s.videoFilterHue) || 0;
+    config.videoFilterHue = filters.hue;
     adState.warningCount = s.warningCount || 0;
     adState.totalSkipped = s.totalAdsSkipped || 0;
     adState.adsSkippedToday = s.adsSkippedToday || 0;
@@ -3810,7 +3820,7 @@ declare global {
     pip: "M19 11h-8v6h8v-6zm4 8V4.98C23 3.88 22.1 3 21 3H3c-1.1 0-2 .88-2 1.98V19c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2zm-2 .02H3V4.97h18v14.05z",
     popup: "M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z",
     cinema: "M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.39 5.39 0 0 1-4.4 2.26 5.4 5.4 0 0 1-3.14-9.8c-.44-.06-.9-.1-1.36-.1z",
-    boost: "M7 18h2V6H7v12zm4 4h2V2h-2v20zm-8-8h2v-4H3v4zm12 4h2V6h-2v12zm4-8v4h2v-4h-2z",
+    boost: "M3 9v6h4l5 5V4L7 9H3zm13 2V8h2v3h3v2h-3v3h-2v-3h-3v-2h3z",
   };
 
   function playerIcon(name: string) {
@@ -4024,22 +4034,25 @@ declare global {
 
       #${FILTER_PANEL_ID} .ytp-panel { overflow-y: auto; overflow-x: hidden; }
 
-      #${FILTER_PANEL_ID} .yte-menuitem--slider { cursor: default; }
+      .yte-gear-subpanel .ytp-menuitem-label { white-space: nowrap; }
+      .yte-gear-subpanel { overflow-x: hidden; }
 
-      #${FILTER_PANEL_ID} .yte-menu-slider {
+      .yte-filter-scope .yte-menuitem--slider { cursor: default; }
+
+      .yte-filter-scope .yte-menu-slider {
         display: inline-flex;
         align-items: center;
         gap: 10px;
         width: 150px;
       }
 
-      #${FILTER_PANEL_ID} .yte-menu-slider output {
+      .yte-filter-scope .yte-menu-slider output {
         min-width: 38px;
         text-align: right;
         font-variant-numeric: tabular-nums;
       }
 
-      #${FILTER_PANEL_ID} .yte-menu-slider input[type="range"] {
+      .yte-filter-scope .yte-menu-slider input[type="range"] {
         flex: 1;
         min-width: 0;
         height: 16px;
@@ -4050,13 +4063,13 @@ declare global {
         cursor: pointer;
       }
 
-      #${FILTER_PANEL_ID} .yte-menu-slider input[type="range"]::-webkit-slider-runnable-track {
+      .yte-filter-scope .yte-menu-slider input[type="range"]::-webkit-slider-runnable-track {
         height: 3px;
         border-radius: 2px;
         background: rgba(255, 255, 255, 0.3);
       }
 
-      #${FILTER_PANEL_ID} .yte-menu-slider input[type="range"]::-webkit-slider-thumb {
+      .yte-filter-scope .yte-menu-slider input[type="range"]::-webkit-slider-thumb {
         -webkit-appearance: none;
         width: 12px;
         height: 12px;
@@ -4065,8 +4078,8 @@ declare global {
         background: #fff;
       }
 
-      #${FILTER_PANEL_ID} .yte-menu-slider input[type="range"]:focus-visible { outline: none; }
-      #${FILTER_PANEL_ID} .yte-menu-slider input[type="range"]:focus-visible::-webkit-slider-thumb {
+      .yte-filter-scope .yte-menu-slider input[type="range"]:focus-visible { outline: none; }
+      .yte-filter-scope .yte-menu-slider input[type="range"]:focus-visible::-webkit-slider-thumb {
         box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.35);
       }
 
@@ -4109,8 +4122,10 @@ declare global {
     const player = getYouTubePlayer();
     if (!player) return false;
     if (player.classList.contains("ytp-live")) return true;
+    // At the live edge YouTube marks its badge as disabled (nothing to jump
+    // to); it is still a live. VODs keep the badge hidden (no offsetParent).
     const badge = player.querySelector(".ytp-live-badge") as HTMLElement | null;
-    return !!badge && badge.offsetParent !== null && !badge.hasAttribute("disabled");
+    return !!badge && badge.offsetParent !== null;
   }
 
   function getPlayerControlItems() {
@@ -4486,7 +4501,36 @@ declare global {
     });
   }
 
-  function renderFilterPanel(panel: HTMLElement) {
+  interface FilterHost {
+    render(direction: "forward" | "back" | "none"): void;
+    back(): void;
+  }
+
+  // Standalone popup (bar button / shortcut).
+  function renderFilterPanel(panel: HTMLElement, direction: "forward" | "back" | "none" = "none") {
+    const host: FilterHost = {
+      render: (dir) => renderFilterPanel(panel, dir),
+      back: () => {
+        closeFilterPanel();
+        const gear = getYouTubePlayer()?.querySelector(".ytp-settings-button") as HTMLElement | null;
+        window.setTimeout(() => gear?.click(), 0);
+      },
+    };
+    const panelEl = buildFilterPanelEl(host);
+    const before = panel.getBoundingClientRect();
+    (panel.querySelector(".ytp-popup-content") as HTMLElement).replaceChildren(panelEl);
+    sizeFilterPanel(panel);
+    if (direction !== "none" && before.height > 0) {
+      const after = panel.getBoundingClientRect();
+      panel.animate(
+        [{ width: before.width + "px", height: before.height + "px" }, { width: after.width + "px", height: after.height + "px" }],
+        { duration: SUBMENU_ANIM_MS, easing: "cubic-bezier(0.4, 0, 0.2, 1)" },
+      );
+      slidePanels(null, panelEl, direction);
+    }
+  }
+
+  function buildFilterPanelEl(host: FilterHost) {
     const values = getVideoFilterValues();
     const presetId = findPresetId(values);
     const panelEl = document.createElement("div");
@@ -4503,7 +4547,7 @@ declare global {
       back.setAttribute("aria-label", "Voltar");
       back.addEventListener("click", () => {
         filterPanelView = "main";
-        renderFilterPanel(panel);
+        host.render("back");
       });
       const title = document.createElement("span");
       title.className = "ytp-panel-title";
@@ -4516,7 +4560,7 @@ declare global {
         onMenuActivate(item, () => {
           setVideoFilterValues({ ...preset.values }, preset.id !== "normal" || !!config.videoFiltersEnabled);
           filterPanelView = "main";
-          renderFilterPanel(panel);
+          host.render("back");
         });
         menu.appendChild(item);
       }
@@ -4528,11 +4572,7 @@ declare global {
       const back = document.createElement("button");
       back.className = "ytp-button ytp-panel-back-button";
       back.setAttribute("aria-label", "Voltar ao menu anterior");
-      back.addEventListener("click", () => {
-        closeFilterPanel();
-        const gear = getYouTubePlayer()?.querySelector(".ytp-settings-button") as HTMLElement | null;
-        window.setTimeout(() => gear?.click(), 0);
-      });
+      back.addEventListener("click", () => host.back());
       const title = document.createElement("span");
       title.className = "ytp-panel-title";
       title.textContent = "Filtros de imagem";
@@ -4554,7 +4594,7 @@ declare global {
       const presets = createMenuItem({ role: "menuitem", icon: "presets", label: "Predefinição", content: presetLabel, submenu: true });
       onMenuActivate(presets, () => {
         filterPanelView = "presets";
-        renderFilterPanel(panel);
+        host.render("forward");
       });
       menu.appendChild(presets);
 
@@ -4594,9 +4634,7 @@ declare global {
     }
 
     panelEl.appendChild(menu);
-    const content = panel.querySelector(".ytp-popup-content") as HTMLElement;
-    content.replaceChildren(panelEl);
-    sizeFilterPanel(panel);
+    return panelEl;
   }
 
   // Lowest free line above the control bar. In fullscreen YouTube shows
@@ -4646,7 +4684,7 @@ declare global {
   function buildFilterPanel() {
     const panel = document.createElement("div");
     panel.id = FILTER_PANEL_ID;
-    panel.className = "ytp-popup";
+    panel.className = "ytp-popup yte-filter-scope";
     panel.hidden = true;
     panel.setAttribute("role", "dialog");
     panel.setAttribute("aria-label", "Filtros de imagem");
@@ -4671,9 +4709,134 @@ declare global {
     return panel;
   }
 
+  // ── Filtros como submenu da engrenagem ──
+  // Opened from the gear menu, the filter panel lives INSIDE YouTube's
+  // settings popup like its own sub-menus: the popup resizes from the gear
+  // size to the filter size while the panels slide, and "back" reverses it.
+  const SUBMENU_ANIM_MS = 250;
+  let gearSubmenu: { menu: HTMLElement; ytPanel: HTMLElement; ours: HTMLElement | null; size: { w: number; h: number } } | null = null;
+
+  function measurePanel(panelEl: HTMLElement, width: number, container: HTMLElement) {
+    panelEl.style.position = "absolute";
+    panelEl.style.visibility = "hidden";
+    panelEl.style.width = width + "px";
+    panelEl.style.height = "auto";
+    container.appendChild(panelEl);
+    const height = panelEl.scrollHeight;
+    panelEl.remove();
+    panelEl.style.visibility = "";
+    return height;
+  }
+
+  function slidePanels(outgoing: HTMLElement | null, incoming: HTMLElement, direction: "forward" | "back" | "none") {
+    if (direction === "none") return;
+    const sign = direction === "forward" ? 1 : -1;
+    const easing = "cubic-bezier(0.4, 0, 0.2, 1)";
+    incoming.animate(
+      [{ transform: `translateX(${sign * 40}%)`, opacity: 0 }, { transform: "translateX(0)", opacity: 1 }],
+      { duration: SUBMENU_ANIM_MS, easing },
+    );
+    if (outgoing) {
+      outgoing.animate(
+        [{ transform: "translateX(0)", opacity: 1 }, { transform: `translateX(${-sign * 40}%)`, opacity: 0 }],
+        { duration: SUBMENU_ANIM_MS, easing, fill: "forwards" },
+      );
+    }
+  }
+
+  function resizeYouTubeMenu(menu: HTMLElement, panelEl: HTMLElement, width: number, height: number) {
+    const easing = "cubic-bezier(0.4, 0, 0.2, 1)";
+    menu.style.transition = `width ${SUBMENU_ANIM_MS}ms ${easing}, height ${SUBMENU_ANIM_MS}ms ${easing}`;
+    menu.style.width = width + "px";
+    menu.style.height = height + "px";
+    panelEl.style.width = width + "px";
+    panelEl.style.height = height + "px";
+    window.setTimeout(() => { menu.style.transition = ""; }, SUBMENU_ANIM_MS + 30);
+  }
+
+  function renderGearFilterSubmenu(direction: "forward" | "back" | "none") {
+    const state = gearSubmenu;
+    const player = getYouTubePlayer();
+    if (!state || !player) return;
+    const content = state.menu.querySelector(".ytp-popup-content") as HTMLElement | null;
+    if (!content) return;
+
+    const host: FilterHost = { render: renderGearFilterSubmenu, back: closeGearFilterSubmenu };
+    const panelEl = buildFilterPanelEl(host);
+    panelEl.classList.add("yte-gear-subpanel", "yte-filter-scope");
+    const width = Math.min(380, Math.max(300, player.clientWidth - 24));
+    const maxHeight = Math.max(200, player.clientHeight - 80);
+    const height = Math.min(maxHeight, measurePanel(panelEl, width, content));
+
+    const previous = state.ours || state.ytPanel;
+    panelEl.style.position = "absolute";
+    panelEl.style.bottom = "0";
+    panelEl.style.right = "0";
+    panelEl.style.overflowY = "auto";
+    content.appendChild(panelEl);
+    resizeYouTubeMenu(state.menu, panelEl, width, height);
+    slidePanels(previous, panelEl, direction);
+
+    const hideOld = () => {
+      if (previous === state.ytPanel) previous.style.display = "none";
+      else previous.remove();
+    };
+    if (direction === "none") hideOld();
+    else window.setTimeout(hideOld, SUBMENU_ANIM_MS);
+    state.ours = panelEl;
+  }
+
+  function openGearFilterSubmenu() {
+    const player = getYouTubePlayer();
+    const menu = player?.querySelector(".ytp-settings-menu") as HTMLElement | null;
+    const ytPanel = menu?.querySelector(".ytp-popup-content > .ytp-panel") as HTMLElement | null;
+    if (!menu || !ytPanel) {
+      toggleFilterPanel();
+      return;
+    }
+    const rect = menu.getBoundingClientRect();
+    gearSubmenu = { menu, ytPanel, ours: null, size: { w: rect.width, h: rect.height } };
+    filterPanelView = "main";
+    renderGearFilterSubmenu("forward");
+    watchGearMenuClose(menu);
+  }
+
+  function closeGearFilterSubmenu() {
+    const state = gearSubmenu;
+    if (!state) return;
+    gearSubmenu = null;
+    const ours = state.ours;
+    state.ytPanel.style.display = "";
+    resizeYouTubeMenu(state.menu, state.ytPanel, state.size.w, state.size.h);
+    if (ours) {
+      slidePanels(ours, state.ytPanel, "back");
+      window.setTimeout(() => ours.remove(), SUBMENU_ANIM_MS);
+    }
+  }
+
+  // YouTube hides the popup (click outside, Esc): drop our sub-menu so the
+  // next open starts on YouTube's own main panel.
+  function watchGearMenuClose(menu: HTMLElement) {
+    const observer = new MutationObserver(() => {
+      if (menu.style.display !== "none" && menu.getAttribute("aria-hidden") !== "true") return;
+      observer.disconnect();
+      const state = gearSubmenu;
+      if (!state) return;
+      gearSubmenu = null;
+      state.ours?.remove();
+      state.ytPanel.style.display = "";
+    });
+    observer.observe(menu, { attributes: true, attributeFilter: ["style", "aria-hidden"] });
+  }
+
   function syncFilterPanel() {
+    if (filterPanelView !== "main") return;
+    if (gearSubmenu?.ours) syncFilterValues(gearSubmenu.ours);
     const panel = document.getElementById(FILTER_PANEL_ID);
-    if (!panel || panel.hidden || filterPanelView !== "main") return;
+    if (panel && !panel.hidden) syncFilterValues(panel);
+  }
+
+  function syncFilterValues(panel: HTMLElement) {
     const values = getVideoFilterValues();
     panel.querySelector("[data-yte-toggle]")?.setAttribute("aria-checked", String(!!config.videoFiltersEnabled));
     const presetId = findPresetId(values);
@@ -4774,11 +4937,7 @@ declare global {
     markUserPlaybackIntent("settings-menu");
     switch (id) {
       case "filters":
-        closeYouTubeSettingsMenu();
-        window.setTimeout(() => {
-          const panel = document.getElementById(FILTER_PANEL_ID);
-          if (!panel || panel.hidden) toggleFilterPanel();
-        }, 60);
+        openGearFilterSubmenu();
         return;
       case "loop":
         handlePlayerToolbarAction("loop");
@@ -4873,7 +5032,7 @@ declare global {
     // Main panel = the one without a sub-menu header.
     // While a sub-menu (Legendas, Qualidade, Timer…) is open, leave YouTube's
     // sizes alone: forcing the main list height there left a big empty gap.
-    if (menu.querySelector(".ytp-panel .ytp-panel-header")) return;
+    if (gearSubmenu || menu.querySelector(".ytp-panel .ytp-panel-header")) return;
     const panels = Array.from(menu.querySelectorAll<HTMLElement>(".ytp-panel"));
     const panel = panels[panels.length - 1];
     const list = panel?.querySelector(".ytp-panel-menu") as HTMLElement | null;
@@ -5152,7 +5311,7 @@ declare global {
       : "Atraso até o ao vivo · clique para ativar o \"tirar atraso\"";
   }
 
-  function renderLivePanel(panel: HTMLElement) {
+  function renderLivePanel(panel: HTMLElement, direction: "forward" | "back" | "none" = "none") {
     const panelEl = document.createElement("div");
     panelEl.className = "ytp-panel";
     const menu = document.createElement("div");
@@ -5167,7 +5326,7 @@ declare global {
       back.setAttribute("aria-label", "Voltar");
       back.addEventListener("click", () => {
         livePanelView = "main";
-        renderLivePanel(panel);
+        renderLivePanel(panel, "back");
       });
       const label = document.createElement("span");
       label.className = "ytp-panel-title";
@@ -5190,7 +5349,7 @@ declare global {
           save({ liveCatchUpMode: id });
           adState.liveEngaged = false;
           livePanelView = "main";
-          renderLivePanel(panel);
+          renderLivePanel(panel, "back");
         });
         menu.appendChild(item);
       }
@@ -5202,7 +5361,7 @@ declare global {
         onMenuActivate(item, () => {
           save({ liveCatchUpMaxRate: rate });
           livePanelView = "main";
-          renderLivePanel(panel);
+          renderLivePanel(panel, "back");
         });
         menu.appendChild(item);
       }
@@ -5219,11 +5378,11 @@ declare global {
       menu.appendChild(toggle);
 
       const mode = createMenuItem({ role: "menuitem", icon: "presets", label: "Modo", content: LIVE_MODES[normalizeLiveMode(config.liveCatchUpMode)].label, submenu: true });
-      onMenuActivate(mode, () => { livePanelView = "mode"; renderLivePanel(panel); });
+      onMenuActivate(mode, () => { livePanelView = "mode"; renderLivePanel(panel, "forward"); });
       menu.appendChild(mode);
 
       const rate = createMenuItem({ role: "menuitem", icon: "speed", label: "Velocidade máxima", content: Number(config.liveCatchUpMaxRate || 1.25).toString().replace(".", ",") + "x", submenu: true });
-      onMenuActivate(rate, () => { livePanelView = "rate"; renderLivePanel(panel); });
+      onMenuActivate(rate, () => { livePanelView = "rate"; renderLivePanel(panel, "forward"); });
       menu.appendChild(rate);
 
       const jump = createMenuItem({ role: "menuitemcheckbox", icon: "jump", label: "Pular para o ao vivo após 30 s", checked: config.liveJumpEnabled !== false });
@@ -5245,8 +5404,21 @@ declare global {
     }
 
     panelEl.appendChild(menu);
-    (panel.querySelector(".ytp-popup-content") as HTMLElement).replaceChildren(panelEl);
+    const content = panel.querySelector(".ytp-popup-content") as HTMLElement;
+    const previous = content.querySelector(".ytp-panel") as HTMLElement | null;
+    const before = panel.getBoundingClientRect();
+    content.replaceChildren(panelEl);
     sizeFilterPanel(panel);
+    if (direction !== "none" && previous) {
+      // Same feel as YouTube's sub-menus: the box resizes while the new
+      // view slides in from the side.
+      const after = panel.getBoundingClientRect();
+      panel.animate(
+        [{ width: before.width + "px", height: before.height + "px" }, { width: after.width + "px", height: after.height + "px" }],
+        { duration: SUBMENU_ANIM_MS, easing: "cubic-bezier(0.4, 0, 0.2, 1)" },
+      );
+      slidePanels(null, panelEl, direction);
+    }
     syncLivePanel();
   }
 

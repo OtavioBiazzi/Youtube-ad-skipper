@@ -457,22 +457,32 @@
     }
     return false;
   }
-  (async () => {
+  const UPDATE_CACHE_KEY = "updateCheckCache";
+  const UPDATE_CACHE_MS = 6 * 60 * 60 * 1e3;
+  function showUpdate(tag, url) {
+    const current = chrome.runtime.getManifest().version;
+    if (!tag || !url || !isNewerVersion(tag, current)) return;
+    const banner = document.getElementById("update-banner");
+    const label = document.getElementById("update-version");
+    if (!banner || !label) return;
+    banner.href = url;
+    label.textContent = tag + " ↓";
+    banner.hidden = false;
+  }
+  chrome.storage.local.get({ [UPDATE_CACHE_KEY]: null }, async (data) => {
+    const cache = data[UPDATE_CACHE_KEY];
+    if (cache && typeof cache.tag === "string") showUpdate(cache.tag, cache.url);
+    if (cache && Date.now() - Number(cache.at || 0) < UPDATE_CACHE_MS) return;
     try {
-      const current = chrome.runtime.getManifest().version;
       const response = await fetch(RELEASES_API, { headers: { Accept: "application/vnd.github+json" } });
       if (!response.ok) return;
       const release = await response.json();
       const tag = String(release.tag_name || "");
-      if (!tag || !isNewerVersion(tag, current)) return;
       const asset = Array.isArray(release.assets) ? release.assets.find((a) => String(a.name).endsWith(".zip")) : null;
-      const banner = document.getElementById("update-banner");
-      const label = document.getElementById("update-version");
-      if (!banner || !label) return;
-      banner.href = asset?.browser_download_url || release.html_url;
-      label.textContent = tag + " ↓";
-      banner.hidden = false;
+      const url = asset?.browser_download_url || release.html_url || "";
+      chrome.storage.local.set({ [UPDATE_CACHE_KEY]: { at: Date.now(), tag, url } });
+      showUpdate(tag, url);
     } catch (err) {
     }
-  })();
+  });
 })();
