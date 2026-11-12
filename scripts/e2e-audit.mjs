@@ -22,7 +22,7 @@ await page.evaluate(() => chrome.storage.local.set({
   qualityEnabled: true, qualityVideo: "medium",
   playerSpeedEnabled: true, playerSpeedDefault: 1.5,
   playerVolumeEnabled: true, playerVolumeDefault: 30,
-  shortcutEnabled: true, shortcutCinema: "Alt+Shift+C",
+  shortcutEnabled: true, shortcutLoop: "Alt+Shift+L",
   appearanceHideShorts: true,
 }));
 
@@ -47,17 +47,15 @@ check("quality preference applied through the player API", state.quality === "me
 check("default speed sticks after YouTube loads the video", Math.abs(state.rate - 1.5) < 0.01, `rate=${state.rate}`);
 check("default volume reflected in YouTube's own volume", state.ytVolume === 30, `ytVolume=${state.ytVolume} videoVolume=${state.videoVolume}`);
 
-// Cinema shortcut toggles cinema (not theater).
+// Keyboard shortcut: Alt+Shift+L toggles loop on the video.
 await page.mouse.click(800, 300);
 await page.waitForTimeout(300);
 await page.evaluate(() => document.querySelector("#movie_player video")?.play().catch(() => {}));
-await page.keyboard.press("Alt+Shift+KeyC");
+const loopBefore = await page.evaluate(() => document.querySelector("#movie_player video").loop);
+await page.keyboard.press("Alt+Shift+KeyL");
 await page.waitForTimeout(500);
-const cinema = await page.evaluate(() => ({
-  cinema: document.documentElement.classList.contains("youtube-extension-cinema-active"),
-  theater: document.querySelector("ytd-watch-flexy")?.hasAttribute("theater"),
-}));
-check("Alt+Shift+C toggles cinema mode", cinema.cinema, JSON.stringify(cinema));
+const loopAfter = await page.evaluate(() => document.querySelector("#movie_player video").loop);
+check("Alt+Shift+L toggles loop", loopBefore !== loopAfter, `${loopBefore} -> ${loopAfter}`);
 
 // Wheel inside the filter panel must not change volume.
 await page.hover("#movie_player");

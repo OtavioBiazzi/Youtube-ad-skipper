@@ -74,7 +74,6 @@
     shortcutSpeedUp: "Alt+Shift+.",
     shortcutVolumeDown: "Alt+Shift+ArrowDown",
     shortcutVolumeUp: "Alt+Shift+ArrowUp",
-    shortcutCinema: "Alt+Shift+C",
     shortcutScreenshot: "Alt+Shift+P",
     shortcutPopup: "Alt+Shift+O",
     shortcutLoop: "Alt+Shift+L"
@@ -160,7 +159,6 @@
     shortcutSpeedUp: "Alt+Shift+.",
     shortcutVolumeDown: "Alt+Shift+ArrowDown",
     shortcutVolumeUp: "Alt+Shift+ArrowUp",
-    shortcutCinema: "Alt+Shift+C",
     shortcutScreenshot: "Alt+Shift+P",
     shortcutPopup: "Alt+Shift+O",
     shortcutLoop: "Alt+Shift+L",
@@ -367,7 +365,6 @@
       appearanceHideComments: true,
       appearanceHideEndcards: true,
       appearanceAutoTheater: true,
-      cinemaDefault: true,
       themeEngine: "tube-shield",
       themeVariant: "deep-dark"
     }
@@ -1001,7 +998,6 @@
         if (!key) return;
         setPlannedControlValue(control, settings[key] ?? DEFAULT_VALUES[key] ?? "");
       });
-      updateCinemaPreview();
     });
   }
   function persistPlannedControls() {
@@ -1026,7 +1022,6 @@
           control.value = String(value);
         }
         chrome.storage.local.set({ [key]: value });
-        if (key.startsWith("cinema")) updateCinemaPreview();
       };
       if (control instanceof HTMLInputElement && isShortcutSettingKey(key)) {
         control.placeholder = "Pressione as teclas";
@@ -1080,7 +1075,6 @@
           chrome.storage.local.set(resetValues, loadPlannedSettings);
         } else if (action === "themeSave") {
           persistPlannedControls();
-          updateCinemaPreview();
           flashBorder(button, "var(--green)");
         } else if (action === "shortcutEditor") {
           const firstShortcut = document.querySelector('[data-setting="shortcutSkipAd"]');
@@ -1106,18 +1100,6 @@
         }
       });
     });
-  }
-  function getPlannedInput(key) {
-    return plannedControls.find((control) => getPlannedKey(control) === key) || null;
-  }
-  function updateCinemaPreview() {
-    const preview = document.querySelector(".cinema-preview");
-    if (!preview) return;
-    const color = String(getPlannedInput("cinemaColor")?.value || DEFAULT_VALUES.cinemaColor);
-    const opacity = Number(getPlannedInput("cinemaOpacity")?.value || DEFAULT_VALUES.cinemaOpacity);
-    const alpha = Math.min(1, Math.max(0, opacity / 100));
-    preview.style.setProperty("--cinema-preview-color", color);
-    preview.style.setProperty("--cinema-preview-alpha", String(alpha));
   }
   function exportSettingsBackup(button) {
     chrome.storage.local.get(null, (settings) => {
@@ -1553,7 +1535,6 @@
       const nextValue = changes[key].newValue ?? DEFAULT_VALUES[key] ?? "";
       setPlannedControlValue(control, nextValue);
     });
-    if (changes.cinemaColor || changes.cinemaOpacity) updateCinemaPreview();
     if (changes.totalAdsSkipped) {
       animateCounter(statTotal, Number(changes.totalAdsSkipped.newValue) || 0);
     }
@@ -1706,4 +1687,35 @@
   }
   document.getElementById("update-check")?.addEventListener("click", () => checkForUpdate(true));
   checkForUpdate(false);
+  function renderHealth(health) {
+    const list = document.getElementById("health-list");
+    const meta = document.getElementById("health-meta");
+    if (!list || !meta) return;
+    list.textContent = "";
+    if (!health || !Array.isArray(health.checks)) {
+      const empty = document.createElement("li");
+      empty.className = "health-empty";
+      empty.textContent = "Abra um vídeo no YouTube para a extensão fazer a primeira verificação.";
+      list.appendChild(empty);
+      meta.textContent = "";
+      return;
+    }
+    for (const check of health.checks) {
+      const item = document.createElement("li");
+      item.className = check.ok ? "is-ok" : "is-bad";
+      const mark = document.createElement("span");
+      mark.className = "health-mark";
+      mark.textContent = check.ok ? "✓" : "✗";
+      const label = document.createElement("span");
+      label.textContent = check.label + (!check.ok && check.detail ? " — " + check.detail : "");
+      item.append(mark, label);
+      list.appendChild(item);
+    }
+    const bad = health.checks.filter((c) => !c.ok).length;
+    meta.textContent = (bad ? bad + " item(ns) com problema · " : "Tudo encontrado · ") + "verificado " + new Date(Number(health.at) || 0).toLocaleString() + (health.version ? " · v" + health.version : "");
+  }
+  chrome.storage.local.get({ extensionHealth: null }, (data) => renderHealth(data.extensionHealth));
+  chrome.storage.onChanged.addListener((changes) => {
+    if (changes.extensionHealth) renderHealth(changes.extensionHealth.newValue);
+  });
 })();

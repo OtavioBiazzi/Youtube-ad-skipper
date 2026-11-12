@@ -47,7 +47,6 @@ export const SETTINGS_PRESETS: Record<SettingsPresetId, Partial<ExtensionSetting
     appearanceHideComments: true,
     appearanceHideEndcards: true,
     appearanceAutoTheater: true,
-    cinemaDefault: true,
     themeEngine: "tube-shield",
     themeVariant: "deep-dark",
   },

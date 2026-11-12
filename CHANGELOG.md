@@ -2,6 +2,33 @@
 
 Todas as mudancas relevantes deste projeto serao registradas aqui.
 
+## 5.3.0 — Revisão geral
+
+### Corrigido
+- **Engrenagem:** o menu não some mais depois de voltar dos Filtros (a extensão não mexe mais por dentro do menu do YouTube). O painel de filtros abre no lugar da engrenagem e se transforma no tamanho dele, e o voltar reabre a engrenagem do YouTube.
+- **Itens na engrenagem:** Repetir e Filtros ficam sempre logo abaixo do último liga/desliga do YouTube, mesmo quando o YouTube adiciona opções depois.
+- **Animações:** a transformação dos painéis usa recorte em vez de largura/altura, sem recalcular a página a cada quadro (mais fluida). A barra de rolagem que piscava no menu principal durante a animação sumiu.
+- **Lives:**
+  - desligar o "tirar atraso" volta para a velocidade de antes;
+  - o YouTube arredondar a velocidade não é mais confundido com escolha sua;
+  - o botão não alterna mais entre "DVR" e segundos.
+- **Destaque ao passar o mouse:** o dos nossos botões tem o mesmo tamanho da bolinha do YouTube (48×32, com folga em cima e embaixo).
+- **Temas refeitos:**
+  - usam as cores do próprio YouTube e ligam o modo escuro dele por baixo, então nunca mais há texto escuro em fundo escuro;
+  - não pintam mais a barra de progresso inteira nem as durações;
+  - o botão "Inscrever-se" continua legível.
+
+### Adicionado
+- **Saúde da extensão** (Control Center → Avançado): mostra se cada recurso encontra o que precisa no YouTube (player, barra, engrenagem, comunicação com a página, live).
+- `npm run e2e:perf`: mede o custo da extensão. Hoje fica em ~7,5 ms de script por segundo de vídeo, menos de 1% de um núcleo.
+
+### Removido
+- Modo cinema, o botão flutuante de PiP antigo e o "continuar de onde parou" (o YouTube já faz isso).
+
+### Por dentro
+- Menos trabalho em segundo plano: o vigia do aviso anti-adblock só olha onde o aviso pode aparecer, a varredura de reserva roda a cada 2 s, e os botões só medem o espaço quando algo muda.
+- CSS do player e dos temas em `src/content/styles.ts`; cerca de 850 linhas a menos no arquivo principal.
+
 ## 5.2.7
 
 - A engrenagem do YouTube abre já no tamanho certo, com a animação dele intacta: os itens da extensão são colocados no menu enquanto ele está fechado (antes, a primeira abertura começava no tamanho antigo e "pulava" para o novo).

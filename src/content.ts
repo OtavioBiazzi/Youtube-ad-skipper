@@ -49,6 +49,19 @@ import {
 } from "./shared/settings";
 import { normalizeQualityLevel, pickBestQualityLevel } from "./shared/quality";
 import { getAutoplayBlockReason as decideAutoplayBlock } from "./shared/autoplay";
+import {
+  PLAYER_CONTROLS_ID,
+  FILTER_PANEL_ID,
+  END_TIME_ID,
+  PLAYER_TOOLBAR_ID,
+  MINIPLAYER_ACTIVE_CLASS,
+  MINIPLAYER_CLOSE_ID,
+  MINIPLAYER_SLOT_ATTR,
+  buildMiniplayerCss,
+  buildPlayerToolbarCss,
+  buildPlayerUiCss,
+  buildYouTubeThemeCss,
+} from "./content/styles";
 import { shouldFloatPlayer, shouldResetMiniplayerDismissal } from "./shared/miniplayer";
 import { LIVE_MAX_RATES, LIVE_MODES, decideLiveRate, normalizeLiveMode } from "./shared/liveLatency";
 import {
@@ -61,14 +74,6 @@ import {
   isNeutralFilter,
   normalizeVideoFilters,
 } from "./shared/videoFilters";
-import {
-  RESUME_STORAGE_KEY,
-  ResumeStore,
-  formatClock,
-  getResumeSaveAction,
-  getResumeTarget,
-  pruneResumeStore,
-} from "./shared/resume";
 import { getYouTubeVideoIdFromUrl, getYouTubeVideoKeyFromUrl } from "./shared/youtube";
 
 declare global {
@@ -153,8 +158,6 @@ declare global {
     qualityAppliedKey: "",
     fullscreenQualityMode: false,
     preFullscreenQuality: null,
-    cinemaActive: false,
-    cinemaInitialized: false,
     autoTheaterAppliedKey: "",
     autoExpandAppliedKey: "",
     commentsSortKey: "",
@@ -169,7 +172,6 @@ declare global {
   let adblockBodyWaitObserver: MutationObserver | null = null;
   let skipButtonObserver: MutationObserver | null = null;
   let appearanceSignature = "";
-  let cinemaSignature = "";
   let videoFilterSignature = "";
   let miniplayerSignature = "";
   let miniplayerUpdateRaf = 0;
@@ -276,7 +278,6 @@ declare global {
     config.shortcutSpeedUp = normalizeShortcutSetting(s.shortcutSpeedUp, "Alt+Shift+.");
     config.shortcutVolumeDown = normalizeShortcutSetting(s.shortcutVolumeDown, "Alt+Shift+ArrowDown");
     config.shortcutVolumeUp = normalizeShortcutSetting(s.shortcutVolumeUp, "Alt+Shift+ArrowUp");
-    config.shortcutCinema = normalizeShortcutSetting(s.shortcutCinema, "Alt+Shift+C");
     config.shortcutScreenshot = normalizeShortcutSetting(s.shortcutScreenshot, "Alt+Shift+P");
     config.shortcutPopup = normalizeShortcutSetting(s.shortcutPopup, "Alt+Shift+O");
     config.shortcutLoop = normalizeShortcutSetting(s.shortcutLoop, "Alt+Shift+L");
@@ -292,11 +293,6 @@ declare global {
     config.appearanceAutoTheater = !!s.appearanceAutoTheater;
     config.appearanceAutoExpandPlayer = !!s.appearanceAutoExpandPlayer;
     config.appearanceUseViewportPlayer = !!s.appearanceUseViewportPlayer;
-    config.cinemaColor = normalizeHexColor(s.cinemaColor, "#000000");
-    config.cinemaOpacity = normalizePercent(s.cinemaOpacity, 85);
-    config.cinemaDefault = !!s.cinemaDefault;
-    config.cinemaAutoResize = !!s.cinemaAutoResize;
-    config.cinemaUseYouTubeTheater = s.cinemaUseYouTubeTheater !== false;
     config.ultrawideEnabled = !!s.ultrawideEnabled;
     config.ultrawideFit = normalizeUltrawideFit(s.ultrawideFit);
     config.toolbarInsidePlayer = !!s.toolbarInsidePlayer;
@@ -330,7 +326,6 @@ declare global {
     config.videoFilterSepia = filters.sepia;
     config.codecForceStandardFps = !!s.codecForceStandardFps;
     config.codecForceAvc = !!s.codecForceAvc;
-    config.resumePlaybackEnabled = !!s.resumePlaybackEnabled;
     config.playerControlsEnabled = s.playerControlsEnabled !== false;
     config.playerControlsStyle = s.playerControlsStyle === "divider" ? "divider" : "pill";
     config.settingsMenuItemsEnabled = s.settingsMenuItemsEnabled !== false;
@@ -446,8 +441,6 @@ declare global {
       if (hasPrefix(settingChanges, "toolbar", "volumeBoost") || has(settingChanges, "playerSpeedButtonsEnabled", "playerPopupEnabled")) {
         schedulePlayerToolbarUpdate();
       }
-      if (has(settingChanges, "cinemaColor", "cinemaOpacity")) applyCinemaMode();
-      if (has(settingChanges, "cinemaDefault")) setCinemaMode(config.cinemaDefault);
       if (hasPrefix(settingChanges, "codec")) syncCodecSettingsToMainWorld();
     });
   }
@@ -457,15 +450,22 @@ declare global {
     const data = event.data || {};
     if (!isBridgeMessage(data)) return;
     if (data.source === MAIN_LIVE_STATS && data.token === mainWorldSessionToken) {
+      adState.lastBridgeReplyAt = Date.now();
+      const latency = Number(data.latency);
+      // YouTube's "at live head" flag flickers near the edge: only switch to
+      // DVR after 4 readings in a row, and a small delay is always "live".
+      const reportedDvr = data.atLiveHead === false && !(Number.isFinite(latency) && latency < 30);
+      adState.liveDvrStreak = reportedDvr ? (adState.liveDvrStreak || 0) + 1 : 0;
       adState.liveStats = {
-        latency: Number(data.latency),
+        latency,
         health: Number(data.health),
-        atLiveHead: data.atLiveHead !== false,
+        atLiveHead: (adState.liveDvrStreak || 0) < 4,
         at: Date.now(),
       };
       return;
     }
     if (data.source === MAIN_QUALITY_RESULT && data.token === mainWorldSessionToken) {
+      adState.lastBridgeReplyAt = Date.now();
       adState.qualityCurrent = typeof data.current === "string" ? data.current : "";
       if (Array.isArray(data.available)) adState.qualityAvailable = data.available.filter((level) => typeof level === "string");
       if (data.query && adState.fullscreenQualityMode && adState.preFullscreenQuality === null) {
@@ -1111,79 +1111,9 @@ declare global {
   function buildThemeCss() {
     const engine = normalizeThemeEngine(config.themeEngine);
     if (engine === "youtube") return "";
-
-    const palette = getThemePalette();
     const customCss = String(config.themeCustomCss || "").trim();
     const allowCustomCss = engine === "custom" || (engine === "deepdark" && config.themeDeepDarkCustom);
-
-    return `
-      html,
-      ytd-app,
-      #content,
-      #page-manager,
-      ytd-browse,
-      ytd-watch-flexy {
-        --yt-spec-base-background: ${palette.background} !important;
-        --yt-spec-raised-background: ${palette.surfaceRaised} !important;
-        --yt-spec-menu-background: ${palette.surfaceRaised} !important;
-        --yt-spec-brand-background-solid: ${palette.background} !important;
-        --yt-spec-general-background-a: ${palette.background} !important;
-        --yt-spec-general-background-b: ${palette.surface} !important;
-        --yt-spec-general-background-c: ${palette.surfaceRaised} !important;
-        --yt-spec-text-primary: ${palette.text} !important;
-        --yt-spec-text-secondary: ${palette.muted} !important;
-        --yt-spec-call-to-action: ${palette.accent} !important;
-        --yt-spec-themed-blue: ${palette.accent} !important;
-        --yt-spec-static-brand-red: ${palette.accent} !important;
-        background: ${palette.background} !important;
-        color: ${palette.text} !important;
-      }
-
-      ytd-masthead,
-      #masthead-container,
-      tp-yt-paper-dialog,
-      ytd-popup-container,
-      ytd-menu-popup-renderer,
-      ytd-multi-page-menu-renderer,
-      ytd-guide-renderer,
-      ytd-mini-guide-renderer,
-      ytd-watch-flexy #secondary-inner,
-      ytd-live-chat-frame {
-        background: ${palette.surface} !important;
-        color: ${palette.text} !important;
-      }
-
-      ytd-video-renderer,
-      ytd-rich-item-renderer,
-      ytd-compact-video-renderer,
-      ytd-grid-video-renderer,
-      ytd-playlist-panel-video-renderer {
-        color: ${palette.text} !important;
-      }
-
-      ytd-thumbnail-overlay-time-status-renderer,
-      .ytp-chrome-bottom .ytp-progress-list,
-      .ytp-volume-slider-handle,
-      .ytp-play-progress,
-      .ytp-swatch-background-color {
-        background-color: ${palette.accent} !important;
-      }
-
-      #video-title:hover,
-      ytd-toggle-button-renderer[is-icon-button][style-target="button"] yt-icon {
-        color: ${palette.accent} !important;
-      }
-
-      ytd-rich-item-renderer,
-      ytd-video-renderer,
-      ytd-comment-thread-renderer,
-      ytd-playlist-panel-video-renderer,
-      #sections.ytd-guide-renderer > ytd-guide-section-renderer {
-        border-color: ${palette.border} !important;
-      }
-
-      ${allowCustomCss && customCss ? customCss : ""}
-    `;
+    return buildYouTubeThemeCss(getThemePalette(), allowCustomCss ? customCss : "");
   }
 
   function buildAppearanceCss() {
@@ -1373,7 +1303,25 @@ declare global {
     return blocks.join("\n");
   }
 
+  // Our themes are dark palettes. YouTube in light mode keeps dark text in its
+  // components, so a theme on top of it was unreadable: switch YouTube's own
+  // dark mode on while a theme is active (and give it back afterwards).
+  function syncThemeDarkMode() {
+    const root = document.documentElement;
+    const wantDark = !!config.enabled && normalizeThemeEngine(config.themeEngine) !== "youtube";
+    if (wantDark) {
+      if (!root.hasAttribute("dark")) {
+        root.setAttribute("dark", "");
+        root.dataset.yteForcedDark = "1";
+      }
+    } else if (root.dataset.yteForcedDark === "1") {
+      root.removeAttribute("dark");
+      delete root.dataset.yteForcedDark;
+    }
+  }
+
   function applyAppearanceFilters() {
+    syncThemeDarkMode();
     const signature = [
       config.enabled,
       config.appearanceHideShorts,
@@ -1533,22 +1481,13 @@ declare global {
       if (ensureTheaterMode(true)) adState.autoTheaterAppliedKey = key;
     }
 
-    if (config.cinemaDefault && !adState.cinemaInitialized) {
-      adState.cinemaInitialized = true;
-      setCinemaMode(true);
-    }
 
-    // Cinema may ask for theater before the page is ready; keep retrying per video.
-    if (adState.cinemaActive && (config.cinemaUseYouTubeTheater || config.cinemaAutoResize) && key && adState.cinemaTheaterKey !== key) {
-      if (ensureTheaterMode(true)) adState.cinemaTheaterKey = key;
-    }
   }
 
   function runAppearanceTasks() {
     applyAppearanceFilters();
     convertShortsUrlIfNeeded();
     runAutoLayoutTasks();
-    applyCinemaMode();
   }
 
   function runVisualMaintenanceTasks(force = false) {
@@ -1589,87 +1528,6 @@ declare global {
     if (visualMaintenanceTimeout !== null) return;
     if (visualMaintenanceRaf) return;
     visualMaintenanceRaf = window.requestAnimationFrame(run);
-  }
-
-  const CINEMA_STYLE_ID = "youtube-extension-cinema-style";
-  const CINEMA_CLASS = "youtube-extension-cinema-active";
-
-  function buildCinemaCss() {
-    const color = normalizeHexColor(config.cinemaColor, "#000000");
-    const opacity = normalizePercent(config.cinemaOpacity, 85) / 100;
-    const dimOpacity = Math.max(0.45, 1 - opacity);
-    return `
-      html.${CINEMA_CLASS},
-      html.${CINEMA_CLASS} body,
-      html.${CINEMA_CLASS} ytd-app,
-      html.${CINEMA_CLASS} #page-manager {
-        background: ${color} !important;
-      }
-
-      html.${CINEMA_CLASS} ytd-watch-flexy #secondary,
-      html.${CINEMA_CLASS} ytd-watch-flexy #below,
-      html.${CINEMA_CLASS} ytd-watch-flexy ytd-watch-metadata,
-      html.${CINEMA_CLASS} ytd-comments {
-        opacity: ${dimOpacity.toFixed(2)} !important;
-        transition: opacity 180ms ease !important;
-      }
-
-      html.${CINEMA_CLASS} ytd-watch-flexy #player-container-outer,
-      html.${CINEMA_CLASS} ytd-watch-flexy #player-theater-container,
-      html.${CINEMA_CLASS} ytd-watch-flexy #player-full-bleed-container {
-        background: ${color} !important;
-        box-shadow: 0 0 0 100vmax rgba(0, 0, 0, ${Math.min(0.85, opacity).toFixed(2)}) !important;
-      }
-
-      /* Cinema only darkens the surroundings. It used to force its own size
-         on #movie_player, which fought YouTube's computed size and could crop
-         the video or push it out of view. Sizing is left to YouTube/theater. */
-
-      html.${CINEMA_CLASS}.${MINIPLAYER_ACTIVE_CLASS} ytd-watch-flexy #player-container-outer,
-      html.${CINEMA_CLASS}.${MINIPLAYER_ACTIVE_CLASS} ytd-watch-flexy #player-theater-container,
-      html.${CINEMA_CLASS}.${MINIPLAYER_ACTIVE_CLASS} ytd-watch-flexy #player-full-bleed-container {
-        box-shadow: none !important;
-      }
-    `;
-  }
-
-  function applyCinemaMode() {
-    document.documentElement.classList.toggle(CINEMA_CLASS, !!adState.cinemaActive && !!config.enabled);
-
-    const signature = [
-      config.enabled,
-      adState.cinemaActive,
-      config.cinemaColor,
-      config.cinemaOpacity,
-    ].join(":");
-
-    if (signature === cinemaSignature) return;
-    cinemaSignature = signature;
-
-    const existing = document.getElementById(CINEMA_STYLE_ID);
-    if (!config.enabled || !adState.cinemaActive) {
-      existing?.remove();
-      return;
-    }
-
-    const style = existing || document.createElement("style");
-    style.id = CINEMA_STYLE_ID;
-    style.textContent = buildCinemaCss();
-    if (!existing) (document.head || document.documentElement).appendChild(style);
-  }
-
-  function setCinemaMode(active) {
-    adState.cinemaActive = !!active;
-    adState.cinemaTheaterKey = "";
-    if (config.cinemaUseYouTubeTheater || config.cinemaAutoResize) {
-      ensureTheaterMode(adState.cinemaActive);
-    }
-    applyCinemaMode();
-    updatePlayerToolbarStates();
-  }
-
-  function toggleCinemaMode() {
-    setCinemaMode(!adState.cinemaActive);
   }
 
   const PLAYER_FEEDBACK_ID = "youtube-extension-player-feedback";
@@ -1735,7 +1593,6 @@ declare global {
     const kindLabel = kind === "volume" ? "Volume"
       : kind === "filters" ? "Filtros"
       : kind === "settings" ? "Configurações"
-      : kind === "resume" ? "Continuar"
       : kind === "popup" ? "Pop-up"
       : kind === "speed" ? "Velocidade"
       : "YouTube Extension";
@@ -1755,10 +1612,7 @@ declare global {
   }
 
   const MINIPLAYER_STYLE_ID = "tube-shield-miniplayer-style";
-  const MINIPLAYER_ACTIVE_CLASS = "tube-shield-miniplayer-active";
 
-  const MINIPLAYER_SLOT_ATTR = "data-yte-mini-slot";
-  const MINIPLAYER_CLOSE_ID = "yte-miniplayer-close";
   const MINIPLAYER_SLOT_SELECTORS = [
     "#player-full-bleed-container",
     "#full-bleed-container",
@@ -1807,116 +1661,6 @@ declare global {
     }
   }
 
-  function buildMiniplayerCss() {
-    const size = parseMiniplayerSize();
-    // z-index stays below YouTube's masthead (2020) and its dropdowns/dialogs
-    // (2200+), so menus like "Sort comments" open on top of the miniplayer.
-    return `
-      [${MINIPLAYER_SLOT_ATTR}] {
-        min-height: var(--yte-mini-slot-height, 0px) !important;
-      }
-
-      html.${MINIPLAYER_ACTIVE_CLASS} ytd-watch-flexy #player,
-      html.${MINIPLAYER_ACTIVE_CLASS} ytd-watch-flexy #player-container-outer,
-      html.${MINIPLAYER_ACTIVE_CLASS} ytd-watch-flexy #player-container-inner,
-      html.${MINIPLAYER_ACTIVE_CLASS} ytd-watch-flexy #player-container,
-      html.${MINIPLAYER_ACTIVE_CLASS} ytd-watch-flexy #player-theater-container,
-      html.${MINIPLAYER_ACTIVE_CLASS} ytd-watch-flexy #player-full-bleed-container,
-      html.${MINIPLAYER_ACTIVE_CLASS} ytd-watch-flexy #full-bleed-container,
-      html.${MINIPLAYER_ACTIVE_CLASS} ytd-watch-flexy ytd-player {
-        z-index: 2010 !important;
-        overflow: visible !important;
-        transform: none !important;
-        contain: none !important;
-        filter: none !important;
-      }
-
-      html.${MINIPLAYER_ACTIVE_CLASS} #movie_player.html5-video-player {
-        position: fixed !important;
-        ${getMiniplayerPositionCss()}
-        width: min(${size.width}px, calc(100vw - 36px)) !important;
-        height: min(${size.height}px, calc(100vh - 90px)) !important;
-        z-index: 2010 !important;
-        border-radius: 12px !important;
-        overflow: hidden !important;
-        box-shadow: 0 22px 60px rgba(0, 0, 0, 0.48), 0 0 0 1px rgba(255, 255, 255, 0.14) !important;
-        background: #000 !important;
-        animation: yte-mini-in 180ms ease-out;
-      }
-
-      @keyframes yte-mini-in {
-        from { opacity: 0; transform: translateY(-8px) scale(0.98); }
-        to { opacity: 1; transform: none; }
-      }
-
-      html.${MINIPLAYER_ACTIVE_CLASS} #movie_player .html5-video-container,
-      html.${MINIPLAYER_ACTIVE_CLASS} #movie_player .html5-main-video,
-      html.${MINIPLAYER_ACTIVE_CLASS} #movie_player video {
-        width: 100% !important;
-        height: 100% !important;
-      }
-
-      html.${MINIPLAYER_ACTIVE_CLASS} #movie_player video.html5-main-video {
-        left: 0 !important;
-        top: 0 !important;
-        object-fit: contain !important;
-        transform: none !important;
-      }
-
-      /* YouTube sizes the control bar in px for the docked player. */
-      html.${MINIPLAYER_ACTIVE_CLASS} #movie_player .ytp-chrome-bottom {
-        width: calc(100% - 24px) !important;
-        left: 12px !important;
-      }
-
-      html.${MINIPLAYER_ACTIVE_CLASS} #movie_player .ytp-ce-element,
-      html.${MINIPLAYER_ACTIVE_CLASS} #movie_player .ytp-cards-teaser,
-      html.${MINIPLAYER_ACTIVE_CLASS} #movie_player .ytp-size-button,
-      html.${MINIPLAYER_ACTIVE_CLASS} #movie_player .ytp-miniplayer-button,
-      html.${MINIPLAYER_ACTIVE_CLASS} #movie_player .ytp-chapter-container {
-        display: none !important;
-      }
-
-      #${MINIPLAYER_CLOSE_ID} {
-        display: none;
-      }
-
-      html.${MINIPLAYER_ACTIVE_CLASS} #${MINIPLAYER_CLOSE_ID} {
-        position: absolute;
-        top: 8px;
-        right: 8px;
-        z-index: 80;
-        display: grid;
-        place-items: center;
-        width: 30px;
-        height: 30px;
-        border: 0;
-        border-radius: 999px;
-        background: rgba(0, 0, 0, 0.62);
-        color: #fff;
-        cursor: pointer;
-        opacity: 0;
-        transition: opacity 140ms ease, background 140ms ease;
-      }
-
-      html.${MINIPLAYER_ACTIVE_CLASS} #movie_player:hover #${MINIPLAYER_CLOSE_ID},
-      html.${MINIPLAYER_ACTIVE_CLASS} #${MINIPLAYER_CLOSE_ID}:focus-visible {
-        opacity: 1;
-      }
-
-      #${MINIPLAYER_CLOSE_ID}:hover {
-        background: rgba(255, 51, 75, 0.9);
-      }
-
-      #${MINIPLAYER_CLOSE_ID} svg {
-        width: 16px;
-        height: 16px;
-        stroke: currentColor;
-        stroke-width: 2.4;
-        fill: none;
-      }
-    `;
-  }
 
   function ensureMiniplayerStyle() {
     const signature = [
@@ -1930,7 +1674,7 @@ declare global {
     miniplayerSignature = signature;
     const style = existing || document.createElement("style");
     style.id = MINIPLAYER_STYLE_ID;
-    style.textContent = buildMiniplayerCss();
+    style.textContent = buildMiniplayerCss(parseMiniplayerSize(), getMiniplayerPositionCss());
     if (!existing) (document.head || document.documentElement).appendChild(style);
   }
 
@@ -2049,7 +1793,6 @@ declare global {
     });
   }
 
-  const PLAYER_TOOLBAR_ID = "tube-shield-player-toolbar";
   const PLAYER_TOOLBAR_STYLE_ID = "tube-shield-player-toolbar-style";
   let playerToolbarSignature = "";
 
@@ -2088,131 +1831,6 @@ declare global {
     return actions;
   }
 
-  function buildPlayerToolbarCss() {
-    return `
-      #${PLAYER_TOOLBAR_ID} {
-        --yse-toolbar-bg: rgba(18, 18, 20, 0.9);
-        --yse-toolbar-border: rgba(255, 255, 255, 0.14);
-        --yse-toolbar-color: rgba(255, 255, 255, 0.84);
-        --yse-toolbar-hover: rgba(255, 255, 255, 0.12);
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        width: max-content;
-        max-width: calc(100% - 16px);
-        margin: 8px 0 12px;
-        padding: 6px;
-        border: 1px solid var(--yse-toolbar-border);
-        border-radius: 999px;
-        background: var(--yse-toolbar-bg);
-        color: var(--yse-toolbar-color);
-        box-shadow: 0 10px 24px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.08);
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
-        box-sizing: border-box;
-      }
-
-      html:not([dark]) #${PLAYER_TOOLBAR_ID} {
-        --yse-toolbar-bg: rgba(255, 255, 255, 0.92);
-        --yse-toolbar-border: rgba(15, 15, 15, 0.13);
-        --yse-toolbar-color: rgba(15, 15, 15, 0.82);
-        --yse-toolbar-hover: rgba(15, 15, 15, 0.08);
-        box-shadow: 0 10px 24px rgba(15, 15, 15, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.82);
-      }
-
-      #${PLAYER_TOOLBAR_ID}.is-centered {
-        margin-left: auto;
-        margin-right: auto;
-      }
-
-      #${PLAYER_TOOLBAR_ID}.is-inside {
-        position: absolute;
-        left: 50%;
-        bottom: 54px;
-        transform: translateX(-50%);
-        z-index: 60;
-        margin: 0;
-      }
-
-      #player-container-outer:has(#${PLAYER_TOOLBAR_ID}.is-inside),
-      #player-theater-container:has(#${PLAYER_TOOLBAR_ID}.is-inside),
-      #player:has(#${PLAYER_TOOLBAR_ID}.is-inside),
-      ytd-player:has(#${PLAYER_TOOLBAR_ID}.is-inside) {
-        position: relative !important;
-      }
-
-      #${PLAYER_TOOLBAR_ID}.is-always-visible {
-        opacity: 1 !important;
-        pointer-events: auto !important;
-      }
-
-      #${PLAYER_TOOLBAR_ID} .tube-shield-toolbar-btn {
-        width: 34px;
-        height: 30px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        border: 1px solid transparent;
-        border-radius: 999px;
-        background: transparent;
-        color: var(--yse-toolbar-color);
-        cursor: pointer;
-        transition: transform 160ms ease, background 160ms ease, color 160ms ease, border-color 160ms ease;
-      }
-
-      #${PLAYER_TOOLBAR_ID} .tube-shield-toolbar-btn:hover,
-      #${PLAYER_TOOLBAR_ID} .tube-shield-toolbar-btn:focus-visible {
-        color: #fff;
-        background: var(--yse-toolbar-hover);
-        border-color: var(--yse-toolbar-border);
-        outline: none;
-      }
-
-      #${PLAYER_TOOLBAR_ID} .tube-shield-toolbar-btn:active {
-        transform: translateY(1px) scale(0.98);
-      }
-
-      #${PLAYER_TOOLBAR_ID} .tube-shield-toolbar-btn.is-active {
-        color: #fff;
-        background: rgba(255, 51, 75, 0.84);
-        border-color: rgba(255, 255, 255, 0.18);
-      }
-
-      #${PLAYER_TOOLBAR_ID} svg {
-        width: 18px;
-        height: 18px;
-        color: currentColor !important;
-        stroke: currentColor !important;
-        fill: none !important;
-        pointer-events: none;
-      }
-
-      #${PLAYER_TOOLBAR_ID} svg [fill="currentColor"] {
-        fill: currentColor !important;
-        stroke: none !important;
-      }
-
-      #${PLAYER_TOOLBAR_ID} svg * {
-        vector-effect: non-scaling-stroke;
-      }
-
-      /* visibility (not display) so hiding it does not shift the page */
-      html.${MINIPLAYER_ACTIVE_CLASS} #${PLAYER_TOOLBAR_ID} {
-        visibility: hidden !important;
-        pointer-events: none !important;
-      }
-
-      @media (max-width: 720px) {
-        #${PLAYER_TOOLBAR_ID} {
-          overflow-x: auto;
-          border-radius: 16px;
-          width: 100%;
-          max-width: 100%;
-          justify-content: flex-start;
-        }
-      }
-    `;
-  }
 
   function ensurePlayerToolbarStyle() {
     if (document.getElementById(PLAYER_TOOLBAR_STYLE_ID)) return;
@@ -2311,7 +1929,7 @@ declare global {
     pipButton?.classList.toggle("is-active", !!document.pictureInPictureElement);
 
     const theaterButton = toolbar.querySelector('[data-toolbar-action="theater"]');
-    theaterButton?.classList.toggle("is-active", !!document.querySelector("ytd-watch-flexy")?.hasAttribute("theater") || !!adState.cinemaActive);
+    theaterButton?.classList.toggle("is-active", !!document.querySelector("ytd-watch-flexy")?.hasAttribute("theater"));
 
     const boostButton = toolbar.querySelector('[data-toolbar-action="volume-boost"]');
     boostButton?.classList.toggle("is-active", shouldUseVolumeBoost());
@@ -3356,6 +2974,8 @@ declare global {
     }
   }
 
+  const ADBLOCK_HOST_TAGS = new Set(["YTD-POPUP-CONTAINER", "TP-YT-IRON-OVERLAY-BACKDROP", "YTD-APP", "BODY"]);
+
   function checkAndNukeNode(node) {
     if (!isAdSkipperActive()) return;
     if (!node || node.nodeType !== 1) return;
@@ -3374,7 +2994,9 @@ declare global {
       }
     }
 
-    // Check filhos
+    // Only containers that can host YouTube's popups are searched: running
+    // querySelector on every node YouTube adds was the main idle cost.
+    if (!ADBLOCK_HOST_TAGS.has(node.tagName) && !node.closest?.("ytd-popup-container")) return;
     const found = node.querySelector && node.querySelector('ytd-enforcement-message-view-model');
     if (found) {
       nukeAdblockElement(found.closest('tp-yt-paper-dialog') || found);
@@ -3804,9 +3426,6 @@ declare global {
   // the live delay chip.
 
   const PLAYER_UI_STYLE_ID = "yte-player-ui-style";
-  const PLAYER_CONTROLS_ID = "yte-controls";
-  const FILTER_PANEL_ID = "yte-filter-panel";
-  const END_TIME_ID = "yte-end-time";
   const SPEED_CYCLE = [1, 1.25, 1.5, 1.75, 2];
   let playerControlsVideo: HTMLVideoElement | null = null;
   let filterSaveTimer: number | null = null;
@@ -3819,7 +3438,6 @@ declare global {
     filters: "M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z",
     pip: "M19 11h-8v6h8v-6zm4 8V4.98C23 3.88 22.1 3 21 3H3c-1.1 0-2 .88-2 1.98V19c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2zm-2 .02H3V4.97h18v14.05z",
     popup: "M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z",
-    cinema: "M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.39 5.39 0 0 1-4.4 2.26 5.4 5.4 0 0 1-3.14-9.8c-.44-.06-.9-.1-1.36-.1z",
     boost: "M3 9v6h4l5 5V4L7 9H3zm15-5-4 8h3l-1 8 5-10h-3l2-6z",
   };
 
@@ -3827,300 +3445,6 @@ declare global {
     return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="' + (PLAYER_ICON_PATHS[name] || "") + '"/></svg>';
   }
 
-  function buildPlayerUiCss() {
-    return `
-      #${PLAYER_CONTROLS_ID} {
-        display: inline-flex;
-        align-items: center;
-        height: 100%;
-        vertical-align: top;
-        float: left;
-      }
-
-      #${PLAYER_CONTROLS_ID} .yte-btn {
-        position: relative;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 48px;
-        height: 100%;
-        min-height: 36px;
-        padding: 0;
-        color: #fff;
-        opacity: 1;
-        font: 600 16px/1 "YouTube Sans", Roboto, Arial, sans-serif;
-        letter-spacing: 0.01em;
-        transition: opacity 0.12s ease;
-      }
-
-      #${PLAYER_CONTROLS_ID} .yte-btn:hover,
-      #${PLAYER_CONTROLS_ID} .yte-btn:focus-visible {
-        opacity: 1;
-      }
-
-      /* Same hover as YouTube's own buttons: a soft white pill (10%). */
-      #${PLAYER_CONTROLS_ID} .yte-btn {
-        border-radius: 40px;
-        transition: background-color 0.1s cubic-bezier(0.4, 0, 1, 1);
-      }
-
-      #${PLAYER_CONTROLS_ID} .yte-btn:hover,
-      #${PLAYER_CONTROLS_ID} .yte-btn:focus-visible {
-        background-color: rgba(255, 255, 255, 0.1);
-        transition-timing-function: cubic-bezier(0, 0, 0.2, 1);
-      }
-
-      #${PLAYER_CONTROLS_ID} .yte-btn svg {
-        width: 24px;
-        height: 24px;
-        fill: currentColor;
-        stroke: none;
-        filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.35));
-      }
-
-      #${PLAYER_CONTROLS_ID} .yte-btn.is-active::after {
-        content: "";
-        position: absolute;
-        left: 50%;
-        bottom: 7px;
-        width: 20px;
-        height: 3px;
-        margin-left: -10px;
-        border-radius: 2px;
-        background: #f03;
-      }
-
-      #${PLAYER_CONTROLS_ID} .yte-btn--text {
-        width: auto;
-        min-width: 48px;
-        font-size: 17px;
-        font-weight: 400;
-        padding: 0 6px;
-        font-variant-numeric: tabular-nums;
-      }
-
-      #${PLAYER_CONTROLS_ID} .yte-live {
-        gap: 6px;
-        padding: 0 10px 0 8px;
-        font-size: 14px;
-      }
-
-      #${PLAYER_CONTROLS_ID} .yte-live::before {
-        content: "";
-        width: 7px;
-        height: 7px;
-        border-radius: 50%;
-        background: #8a8a8a;
-      }
-
-      #${PLAYER_CONTROLS_ID} .yte-live.is-synced::before { background: #f03; }
-      #${PLAYER_CONTROLS_ID} .yte-live.is-catching::before { background: #ffb020; }
-
-      #${PLAYER_CONTROLS_ID} .yte-btn[data-tip]:hover::before {
-        content: attr(data-tip);
-        position: absolute;
-        bottom: calc(100% + 12px);
-        left: 50%;
-        transform: translateX(-50%);
-        padding: 6px 9px;
-        border-radius: 4px;
-        background: rgba(28, 28, 28, 0.92);
-        color: #eee;
-        font: 500 12px/1.2 Roboto, Arial, sans-serif;
-        white-space: nowrap;
-        pointer-events: none;
-        z-index: 80;
-      }
-
-      #${PLAYER_CONTROLS_ID} [data-fit-hidden] {
-        display: none;
-      }
-
-      /* Premium-only speed chips work through the extension: drop the upsell marks. */
-      #movie_player .ytp-variable-speed-panel-premium-upsell-icon,
-      #movie_player .ytp-variable-speed-panel-premium-badge { display: none !important; }
-
-      /* Cinema only dims the page around the player: pointless in fullscreen. */
-      #movie_player.ytp-fullscreen #${PLAYER_CONTROLS_ID} [data-yte-action="cinema"] {
-        display: none;
-      }
-
-      #${END_TIME_ID}:empty { display: none; }
-      #movie_player.yte-no-endtime #${END_TIME_ID} { display: none; }
-
-      #${END_TIME_ID} {
-        margin-left: 6px;
-        color: rgba(255, 255, 255, 0.72);
-        font-variant-numeric: tabular-nums;
-        white-space: nowrap;
-      }
-
-      /* The panel uses YouTube's .ytp-popup/.ytp-menuitem styles; these are
-         only placement and fallbacks (zero specificity via :where). */
-      #${FILTER_PANEL_ID} {
-        position: absolute;
-        right: 12px;
-        bottom: 62px;
-        z-index: 70;
-        border-radius: 12px !important;
-        overflow: hidden !important;
-      }
-
-      #${FILTER_PANEL_ID}[hidden], #yte-live-panel[hidden] { display: none !important; }
-
-      @keyframes yte-popup-in {
-        from { opacity: 0; transform: translateY(6px) scale(0.98); }
-        to { opacity: 1; transform: none; }
-      }
-
-      #${FILTER_PANEL_ID}:not([hidden]),
-      #yte-live-panel:not([hidden]) {
-        animation: yte-popup-in 0.16s cubic-bezier(0.05, 0, 0, 1);
-        transform-origin: bottom right;
-      }
-
-      #yte-live-panel {
-        position: absolute;
-        left: 12px;
-        bottom: 62px;
-        z-index: 70;
-        border-radius: 12px !important;
-        overflow: hidden !important;
-        transition: opacity 0.1s cubic-bezier(0.4, 0, 1, 1);
-      }
-
-      #movie_player.ytp-autohide #yte-live-panel { opacity: 0; pointer-events: none; }
-      #yte-live-panel .yte-menuitem--info { cursor: default; opacity: 0.75; }
-      #yte-live-panel .yte-menuitem--info:hover { background: transparent; }
-
-      #yte-live-latency {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        width: auto;
-        height: auto;
-        margin-left: 6px;
-        padding: 2px 8px;
-        border-radius: 12px;
-        background: rgba(255, 255, 255, 0.12);
-        color: #fff;
-        font: 500 13px/1.4 Roboto, Arial, sans-serif;
-        font-variant-numeric: tabular-nums;
-        vertical-align: middle;
-        cursor: pointer;
-      }
-
-      #yte-live-latency::before {
-        content: "";
-        width: 6px;
-        height: 6px;
-        border-radius: 50%;
-        background: rgba(255, 255, 255, 0.55);
-      }
-
-      #yte-live-latency[data-state="on"]::before { background: #2ba640; }
-      #yte-live-latency[data-state="catching"]::before { background: #ffb020; }
-      #yte-live-latency:hover { background: rgba(255, 255, 255, 0.22); }
-
-      /* Fade out together with YouTube's controls when the mouse stops. */
-      #${FILTER_PANEL_ID} { transition: opacity 0.1s cubic-bezier(0.4, 0, 1, 1); }
-      #movie_player.ytp-autohide #${FILTER_PANEL_ID} {
-        opacity: 0;
-        pointer-events: none;
-        transition: opacity 0.25s cubic-bezier(0, 0, 0.2, 1);
-      }
-
-      /* While the panel is open, YouTube's fullscreen quick actions
-         (like/dislike/comment/share) step aside instead of overlapping it. */
-      #movie_player.yte-filter-panel-open .ytp-fullscreen-quick-actions,
-      #movie_player.yte-filter-panel-open .ytp-overlay-bottom-right {
-        visibility: hidden !important;
-      }
-
-      :where(#${FILTER_PANEL_ID}) {
-        border-radius: 12px;
-        background: rgba(0, 0, 0, 0.6);
-        overflow: hidden;
-        color: #eee;
-      }
-
-      #${FILTER_PANEL_ID} .ytp-panel { overflow-y: auto; overflow-x: hidden; }
-
-      .yte-gear-subpanel .ytp-menuitem-label { white-space: nowrap; }
-      .yte-gear-subpanel { overflow-x: hidden; }
-
-      .yte-filter-scope .yte-menuitem--slider { cursor: default; }
-
-      .yte-filter-scope .yte-menu-slider {
-        display: inline-flex;
-        align-items: center;
-        gap: 10px;
-        width: 150px;
-      }
-
-      .yte-filter-scope .yte-menu-slider output {
-        min-width: 38px;
-        text-align: right;
-        font-variant-numeric: tabular-nums;
-      }
-
-      .yte-filter-scope .yte-menu-slider input[type="range"] {
-        flex: 1;
-        min-width: 0;
-        height: 16px;
-        margin: 0;
-        background: transparent;
-        -webkit-appearance: none;
-        appearance: none;
-        cursor: pointer;
-      }
-
-      .yte-filter-scope .yte-menu-slider input[type="range"]::-webkit-slider-runnable-track {
-        height: 3px;
-        border-radius: 2px;
-        background: rgba(255, 255, 255, 0.3);
-      }
-
-      .yte-filter-scope .yte-menu-slider input[type="range"]::-webkit-slider-thumb {
-        -webkit-appearance: none;
-        width: 12px;
-        height: 12px;
-        margin-top: -4.5px;
-        border-radius: 50%;
-        background: #fff;
-      }
-
-      .yte-filter-scope .yte-menu-slider input[type="range"]:focus-visible { outline: none; }
-      .yte-filter-scope .yte-menu-slider input[type="range"]:focus-visible::-webkit-slider-thumb {
-        box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.35);
-      }
-
-      /* Style "pill": our own rounded group next to YouTube's, using the
-         same background/radius/height read from YouTube's group at runtime. */
-      #${PLAYER_CONTROLS_ID}.yte-style-pill {
-        float: none;
-        align-self: center;
-        flex: none;
-        height: var(--yte-pill-h, 40px);
-        margin: 0 var(--yte-pill-gap, 12px);
-        padding: 0 4px;
-        border-radius: var(--yte-pill-radius, 28px);
-        background: var(--yte-pill-bg, rgba(0, 0, 0, 0.3));
-      }
-
-      #${PLAYER_CONTROLS_ID}.yte-style-pill .yte-btn { min-height: 0; }
-
-      /* Style "divider": inside YouTube's group, separated by a thin line. */
-      #${PLAYER_CONTROLS_ID}.yte-style-divider::after {
-        content: "";
-        align-self: center;
-        width: 1px;
-        height: 20px;
-        margin: 0 6px 0 4px;
-        background: rgba(255, 255, 255, 0.28);
-      }
-    `;
-  }
 
   function ensurePlayerUiStyle() {
     if (document.getElementById(PLAYER_UI_STYLE_ID)) return;
@@ -4145,8 +3469,8 @@ declare global {
     if (config.toolbarSpeed !== false && config.playerSpeedButtonsEnabled !== false) {
       items.push({ id: "speed", tip: "Velocidade · clique para alternar, role para ajustar, botão direito volta a 1x", text: "1x", priority: "high", className: "yte-btn--text" });
     }
-    // With the gear integration on, set-and-forget items (filters, loop,
-    // cinema) live in YouTube's settings menu; the bar keeps quick actions.
+    // With the gear integration on, set-and-forget items (filters, loop)
+    // live in YouTube's settings menu; the bar keeps quick actions.
     const inGear = config.settingsMenuItemsEnabled !== false;
     if (config.toolbarLoop !== false && !inGear) items.push({ id: "loop", tip: "Repetir vídeo", icon: "loop", priority: "mid" });
     if (config.toolbarFilters !== false && !inGear) items.push({ id: "filters", tip: "Filtros de imagem", icon: "filters", priority: "mid" });
@@ -4168,7 +3492,7 @@ declare global {
   // Hide our lower-priority buttons (then the end-time clock) only while the
   // left side of YouTube's bar (play, volume, time) would be squeezed.
   // Order in which our buttons give up their place when space is short.
-  const FIT_HIDE_ORDER = ["popup", "cinema", "screenshot", "boost", "pip", "loop", "filters"];
+  const FIT_HIDE_ORDER = ["popup", "screenshot", "boost", "pip", "loop", "filters"];
 
   function fitPlayerControls(player: HTMLElement) {
     const controls = document.getElementById(PLAYER_CONTROLS_ID);
@@ -4294,7 +3618,12 @@ declare global {
     }
 
     syncPillStyle(controls, rightControls);
-    fitPlayerControls(player);
+    // Measuring forces a layout: only refit when something that affects it changed.
+    const fitKey = player.clientWidth + ":" + signature + ":" + (player.querySelector(".ytp-time-display")?.textContent?.length || 0) + ":" + document.fullscreenElement;
+    if (adState.controlsFitKey !== fitKey) {
+      adState.controlsFitKey = fitKey;
+      fitPlayerControls(player);
+    }
 
     ensureEndTimeLabel(player);
     bindPlayerControlsVideo();
@@ -4326,7 +3655,6 @@ declare global {
     set("loop", !!video?.loop || (adState.loopEnabled && adState.loopVideoKey === key));
     set("filters", shouldUseVideoFilters());
     set("boost", shouldUseVolumeBoost());
-    set("cinema", !!adState.cinemaActive);
     set("pip", !!document.pictureInPictureElement);
 
   }
@@ -4358,9 +3686,6 @@ declare global {
         break;
       case "boost":
         setVolumeBoostEnabled(!config.volumeBoostEnabled, video);
-        break;
-      case "cinema":
-        toggleCinemaMode();
         break;
       case "popup":
         // Leave fullscreen first, otherwise the tab stays fullscreen on a paused video.
@@ -4533,11 +3858,7 @@ declare global {
     (panel.querySelector(".ytp-popup-content") as HTMLElement).replaceChildren(panelEl);
     sizeFilterPanel(panel);
     if (direction !== "none" && before.height > 0) {
-      const after = panel.getBoundingClientRect();
-      panel.animate(
-        [{ width: before.width + "px", height: before.height + "px" }, { width: after.width + "px", height: after.height + "px" }],
-        { duration: SUBMENU_ANIM_MS, easing: "cubic-bezier(0.4, 0, 0.2, 1)" },
-      );
+      morphPanelFrom(panel, before.width, before.height);
       slidePanels(null, panelEl, direction);
     }
   }
@@ -4726,19 +4047,6 @@ declare global {
   // settings popup like its own sub-menus: the popup resizes from the gear
   // size to the filter size while the panels slide, and "back" reverses it.
   const SUBMENU_ANIM_MS = 250;
-  let gearSubmenu: { menu: HTMLElement; ytPanel: HTMLElement; ours: HTMLElement | null; size: { w: number; h: number } } | null = null;
-
-  function measurePanel(panelEl: HTMLElement, width: number, container: HTMLElement) {
-    panelEl.style.position = "absolute";
-    panelEl.style.visibility = "hidden";
-    panelEl.style.width = width + "px";
-    panelEl.style.height = "auto";
-    container.appendChild(panelEl);
-    const height = panelEl.scrollHeight;
-    panelEl.remove();
-    panelEl.style.visibility = "";
-    return height;
-  }
 
   function slidePanels(outgoing: HTMLElement | null, incoming: HTMLElement, direction: "forward" | "back" | "none") {
     if (direction === "none") return;
@@ -4756,94 +4064,40 @@ declare global {
     }
   }
 
-  function resizeYouTubeMenu(menu: HTMLElement, panelEl: HTMLElement, width: number, height: number) {
-    const easing = "cubic-bezier(0.4, 0, 0.2, 1)";
-    menu.style.transition = `width ${SUBMENU_ANIM_MS}ms ${easing}, height ${SUBMENU_ANIM_MS}ms ${easing}`;
-    menu.style.width = width + "px";
-    menu.style.height = height + "px";
-    panelEl.style.width = width + "px";
-    panelEl.style.height = height + "px";
-    window.setTimeout(() => { menu.style.transition = ""; }, SUBMENU_ANIM_MS + 30);
-  }
-
-  function renderGearFilterSubmenu(direction: "forward" | "back" | "none") {
-    const state = gearSubmenu;
-    const player = getYouTubePlayer();
-    if (!state || !player) return;
-    const content = state.menu.querySelector(".ytp-popup-content") as HTMLElement | null;
-    if (!content) return;
-
-    const host: FilterHost = { render: renderGearFilterSubmenu, back: closeGearFilterSubmenu };
-    const panelEl = buildFilterPanelEl(host);
-    panelEl.classList.add("yte-gear-subpanel", "yte-filter-scope");
-    const width = Math.min(380, Math.max(300, player.clientWidth - 24));
-    const maxHeight = Math.max(200, player.clientHeight - 80);
-    const height = Math.min(maxHeight, measurePanel(panelEl, width, content));
-
-    const previous = state.ours || state.ytPanel;
-    panelEl.style.position = "absolute";
-    panelEl.style.bottom = "0";
-    panelEl.style.right = "0";
-    panelEl.style.overflowY = "auto";
-    content.appendChild(panelEl);
-    resizeYouTubeMenu(state.menu, panelEl, width, height);
-    slidePanels(previous, panelEl, direction);
-
-    const hideOld = () => {
-      if (previous === state.ytPanel) previous.style.display = "none";
-      else previous.remove();
-    };
-    if (direction === "none") hideOld();
-    else window.setTimeout(hideOld, SUBMENU_ANIM_MS);
-    state.ours = panelEl;
-  }
-
+  // Opened from the gear menu, the filter panel takes over exactly where the
+  // gear menu was: it starts at the gear menu's size and morphs to its own
+  // while the content slides in, like YouTube's sub-menus. YouTube's own
+  // popup is simply closed, never modified (modifying it broke when YouTube
+  // re-rendered its menu, e.g. quality/audio labels updating).
   function openGearFilterSubmenu() {
     const player = getYouTubePlayer();
     const menu = player?.querySelector(".ytp-settings-menu") as HTMLElement | null;
-    const ytPanel = menu?.querySelector(".ytp-popup-content > .ytp-panel") as HTMLElement | null;
-    if (!menu || !ytPanel) {
-      toggleFilterPanel();
-      return;
-    }
-    const rect = menu.getBoundingClientRect();
-    gearSubmenu = { menu, ytPanel, ours: null, size: { w: rect.width, h: rect.height } };
-    filterPanelView = "main";
-    renderGearFilterSubmenu("forward");
-    watchGearMenuClose(menu);
+    const from = menu && getComputedStyle(menu).display !== "none" ? menu.getBoundingClientRect() : null;
+    closeYouTubeSettingsMenu();
+    const panel = openFilterPanel("forward");
+    if (!panel || !from || from.width <= 0) return;
+    morphPanelFrom(panel, from.width, from.height);
   }
 
-  function closeGearFilterSubmenu() {
-    const state = gearSubmenu;
-    if (!state) return;
-    gearSubmenu = null;
-    const ours = state.ours;
-    state.ytPanel.style.display = "";
-    resizeYouTubeMenu(state.menu, state.ytPanel, state.size.w, state.size.h);
-    if (ours) {
-      slidePanels(ours, state.ytPanel, "back");
-      window.setTimeout(() => ours.remove(), SUBMENU_ANIM_MS);
-    }
-  }
-
-  // YouTube hides the popup (click outside, Esc): drop our sub-menu so the
-  // next open starts on YouTube's own main panel.
-  function watchGearMenuClose(menu: HTMLElement) {
-    const observer = new MutationObserver(() => {
-      if (menu.style.display !== "none" && menu.getAttribute("aria-hidden") !== "true") return;
-      observer.disconnect();
-      const state = gearSubmenu;
-      if (!state) return;
-      gearSubmenu = null;
-      state.ours?.remove();
-      state.ytPanel.style.display = "";
-    });
-    observer.observe(menu, { attributes: true, attributeFilter: ["style", "aria-hidden"] });
+  // Grow from the previous box (gear menu or previous view) to the panel's
+  // own size by animating a clip instead of width/height: no page layout
+  // per frame, so it runs as smoothly as YouTube's own menus. Panels are
+  // anchored bottom-right/bottom-left, so the clip opens from that corner.
+  function morphPanelFrom(panel: HTMLElement, fromWidth: number, fromHeight: number) {
+    const to = panel.getBoundingClientRect();
+    const dx = Math.max(0, to.width - fromWidth);
+    const dy = Math.max(0, to.height - fromHeight);
+    if (dx < 1 && dy < 1) return;
+    const leftAnchored = panel.id === "yte-live-panel";
+    const start = leftAnchored ? `inset(${dy}px ${dx}px 0 0 round 12px)` : `inset(${dy}px 0 0 ${dx}px round 12px)`;
+    panel.animate(
+      [{ clipPath: start }, { clipPath: "inset(0 0 0 0 round 12px)" }],
+      { duration: SUBMENU_ANIM_MS, easing: "cubic-bezier(0.4, 0, 0.2, 1)" },
+    );
   }
 
   function syncFilterPanel() {
     if (filterPanelView !== "main") return;
-    if (gearSubmenu?.ours) syncFilterValues(gearSubmenu.ours);
     const panel = document.getElementById(FILTER_PANEL_ID);
     if (panel && !panel.hidden) syncFilterValues(panel);
   }
@@ -4871,28 +4125,41 @@ declare global {
 
   function handleOutsideFilterPanel(event: Event) {
     const target = event.target as Element;
-    if (target?.closest?.("#" + FILTER_PANEL_ID) || target?.closest?.('[data-yte-action="filters"]')) return;
+    if (target?.closest?.("#" + FILTER_PANEL_ID) || target?.closest?.('[data-yte-action="filters"]') || target?.closest?.('[data-yte-gear="filters"]')) return;
     closeFilterPanel();
   }
 
-  function toggleFilterPanel() {
+  function openFilterPanel(entry: "forward" | "none" = "none") {
     const player = getYouTubePlayer();
-    if (!player) return;
+    if (!player) return null;
     let panel = document.getElementById(FILTER_PANEL_ID);
     if (!panel || panel.parentElement !== player) {
       panel?.remove();
       panel = buildFilterPanel();
       player.appendChild(panel);
     }
-    if (!panel.hidden) {
+    filterPanelView = "main";
+    player.classList.add("yte-filter-panel-open");
+    // From the gear menu the morph replaces the generic pop-in.
+    panel.classList.toggle("yte-from-gear", entry === "forward");
+    panel.hidden = false;
+    renderFilterPanel(panel, "none");
+    if (entry === "forward") {
+      const panelEl = panel.querySelector(".ytp-panel") as HTMLElement | null;
+      if (panelEl) slidePanels(null, panelEl, "forward");
+    }
+    document.removeEventListener("pointerdown", handleOutsideFilterPanel, true);
+    document.addEventListener("pointerdown", handleOutsideFilterPanel, true);
+    return panel;
+  }
+
+  function toggleFilterPanel() {
+    const panel = document.getElementById(FILTER_PANEL_ID);
+    if (panel && !panel.hidden) {
       closeFilterPanel();
       return;
     }
-    filterPanelView = "main";
-    player.classList.add("yte-filter-panel-open");
-    panel.hidden = false;
-    renderFilterPanel(panel);
-    document.addEventListener("pointerdown", handleOutsideFilterPanel, true);
+    openFilterPanel("none");
   }
 
   // Re-place an open panel when the player changes size (fullscreen, theater).
@@ -4913,7 +4180,6 @@ declare global {
     filters: FILTER_ROW_ICONS.toggle,
     loop: "M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z",
     boost: "M7 18h2V6H7v12zm4 4h2V2h-2v20zm-8-8h2v-4H3v4zm12 4h2V6h-2v12zm4-8v4h2v-4h-2z",
-    cinema: "M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.39 5.39 0 0 1-4.4 2.26 5.4 5.4 0 0 1-3.14-9.8c-.44-.06-.9-.1-1.36-.1z",
     live: "M7.76 16.24A5.98 5.98 0 0 1 6 12c0-1.66.67-3.16 1.76-4.24l1.42 1.42A3.99 3.99 0 0 0 8 12c0 1.1.45 2.1 1.17 2.83l-1.41 1.41zm8.48 0A5.98 5.98 0 0 0 18 12c0-1.66-.67-3.16-1.76-4.24l-1.42 1.42A3.99 3.99 0 0 1 16 12c0 1.1-.45 2.1-1.17 2.83l1.41 1.41zM12 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm8 2c0 2.21-.9 4.21-2.35 5.65l1.42 1.42A9.97 9.97 0 0 0 22 12c0-2.76-1.12-5.26-2.93-7.07l-1.42 1.42A7.95 7.95 0 0 1 20 12zM6.35 6.35 4.93 4.93A9.97 9.97 0 0 0 2 12c0 2.76 1.12 5.26 2.93 7.07l1.42-1.42A7.95 7.95 0 0 1 4 12c0-2.21.9-4.21 2.35-5.65z",
   };
   let gearObserver: MutationObserver | null = null;
@@ -4955,9 +4221,6 @@ declare global {
         break;
       case "boost":
         setVolumeBoostEnabled(!config.volumeBoostEnabled, getActiveVideo());
-        break;
-      case "cinema":
-        toggleCinemaMode();
         break;
     }
     refreshGearItems();
@@ -5042,6 +4305,20 @@ declare global {
     }
   }
 
+  function placeGearRows(list: HTMLElement) {
+    const ours = Array.from(list.querySelectorAll<HTMLElement>(`:scope > [${GEAR_ITEM_ATTR}]`));
+    if (!ours.length) return;
+    const toggles = Array.from(list.querySelectorAll<HTMLElement>(':scope > .ytp-menuitem[role="menuitemcheckbox"]:not([' + GEAR_ITEM_ATTR + '])'));
+    const lastToggle = toggles[toggles.length - 1];
+    const expectedPrev = lastToggle || null;
+    // Already in place: first of ours sits right after YouTube's last toggle.
+    if (expectedPrev ? ours[0].previousElementSibling === expectedPrev : list.firstElementChild === ours[0]) {
+      if (ours.every((row, i) => i === 0 || row.previousElementSibling === ours[i - 1])) return;
+    }
+    const anchor = expectedPrev ? expectedPrev.nextElementSibling : list.firstElementChild;
+    for (const row of ours) list.insertBefore(row, anchor === row ? row.nextElementSibling : anchor);
+  }
+
   function injectGearItems() {
     const player = getYouTubePlayer();
     const menu = player?.querySelector(".ytp-settings-menu") as HTMLElement | null;
@@ -5054,12 +4331,13 @@ declare global {
     // Main panel = the one without a sub-menu header.
     // While a sub-menu (Legendas, Qualidade, Timer…) is open, leave YouTube's
     // sizes alone: forcing the main list height there left a big empty gap.
-    if (gearSubmenu || menu.querySelector(".ytp-panel .ytp-panel-header")) return;
+    if (menu.querySelector(".ytp-panel .ytp-panel-header")) return;
     const panels = Array.from(menu.querySelectorAll<HTMLElement>(".ytp-panel"));
     const panel = panels[panels.length - 1];
     const list = panel?.querySelector(".ytp-panel-menu") as HTMLElement | null;
     if (!panel || !list) return;
     if (list.querySelector(`[${GEAR_ITEM_ATTR}]`)) {
+      placeGearRows(list);
       refreshGearItems();
       if (!hidden) fitGearMenu(player, menu, panel, list);
       return;
@@ -5236,11 +4514,15 @@ declare global {
     adState.liveRateApplied = rate;
   }
 
+  // Back to the speed the viewer had before catch-up started. Unconditional:
+  // YouTube may round the live rate, so "still equal to what we applied"
+  // was not a reliable test and left lives stuck at e.g. 1.18x.
   function restoreLiveRate() {
     if (!adState.liveRateApplied || adState.liveRateApplied === 1) return;
-    const video = getActiveVideo();
-    if (video && Math.abs(video.playbackRate - adState.liveRateApplied) < 0.02) setLiveRate(1);
+    const previous = Number(adState.livePreRate) > 0 ? Number(adState.livePreRate) : 1;
+    setLiveRate(previous);
     adState.liveRateApplied = 1;
+    adState.livePreRate = 0;
     adState.liveEngaged = false;
   }
 
@@ -5263,8 +4545,10 @@ declare global {
     if (video.paused || adState.liveUserOverrideKey === key) return;
 
     const applied = adState.liveRateApplied || 1;
-    // The user picked a speed themselves: stop managing this live.
-    if (Math.abs(video.playbackRate - applied) > 0.02 && Math.abs(video.playbackRate - 1) > 0.02) {
+    // The user picked a speed themselves: stop managing this live. A change
+    // only counts as theirs right after a click/key (YouTube rounding the
+    // rate we applied used to look like a user choice and froze it).
+    if (Math.abs(video.playbackRate - applied) > 0.06 && Math.abs(video.playbackRate - 1) > 0.02 && hasRecentPlaybackIntent(3000)) {
       adState.liveUserOverrideKey = key;
       adState.liveRateApplied = 1;
       return;
@@ -5292,7 +4576,12 @@ declare global {
       postMainWorldMessage({ source: MAIN_PLAYER_COMMAND, command: "seekToLiveHead" });
       recordPlaybackEvent("live-jump", "live-catch-up", Number(video.currentTime || 0));
     }
-    if (Math.abs(decision.rate - applied) > 0.005) setLiveRate(decision.rate);
+    if (Math.abs(decision.rate - applied) > 0.005) {
+      // Remember the viewer's speed the first time we speed up.
+      if (applied === 1 && decision.rate > 1) adState.livePreRate = video.playbackRate || 1;
+      setLiveRate(decision.rate);
+      if (decision.rate === 1) adState.livePreRate = 0;
+    }
   }
 
   function jumpToLiveEdge() {
@@ -5440,11 +4729,7 @@ declare global {
     if (direction !== "none" && previous) {
       // Same feel as YouTube's sub-menus: the box resizes while the new
       // view slides in from the side.
-      const after = panel.getBoundingClientRect();
-      panel.animate(
-        [{ width: before.width + "px", height: before.height + "px" }, { width: after.width + "px", height: after.height + "px" }],
-        { duration: SUBMENU_ANIM_MS, easing: "cubic-bezier(0.4, 0, 0.2, 1)" },
-      );
+      morphPanelFrom(panel, before.width, before.height);
       slidePanels(null, panelEl, direction);
     }
     syncLivePanel();
@@ -5501,100 +4786,61 @@ declare global {
 
   function runPlayerUiTick() {
     runLiveCatchUp();
+    runHealthCheck();
     if (!shouldShowPlayerControls()) return;
     updateEndTimeLabel();
     refreshPlayerControlStates();
   }
 
-  // ── Continuar de onde parou ───────────────────────────
+  // ── Saúde da extensão ─────────────────────────────────
+  // Every ~10s on a watch page, check that each YouTube hook we rely on is
+  // still found, and store the result for the Control Center. When YouTube
+  // changes its layout the panel shows exactly which feature lost its hook.
+  const HEALTH_INTERVAL_MS = 10000;
+  let lastHealthCheckAt = 0;
+  let lastHealthSignature = "";
+  let lastHealthWriteAt = 0;
 
-  let resumeStore: ResumeStore | null = null;
-  let resumeLoading = false;
-  let resumeLastSaveAt = 0;
-
-  function withResumeStore(callback: (store: ResumeStore) => void) {
-    if (resumeStore) {
-      callback(resumeStore);
-      return;
-    }
-    if (resumeLoading || !chrome?.storage?.local) return;
-    resumeLoading = true;
-    chrome.storage.local.get({ [RESUME_STORAGE_KEY]: {} }, (data) => {
-      resumeLoading = false;
-      const stored = data[RESUME_STORAGE_KEY];
-      resumeStore = stored && typeof stored === "object" ? (stored as ResumeStore) : {};
-      callback(resumeStore);
-    });
+  function runHealthCheck() {
+    if (!config.enabled || document.hidden || !isWatchPage()) return;
+    const now = Date.now();
+    if (now - lastHealthCheckAt < HEALTH_INTERVAL_MS) return;
+    lastHealthCheckAt = now;
+    // Ping the page bridge, then evaluate once its reply had time to arrive.
+    queryMainWorldQuality();
+    window.setTimeout(evaluateHealth, 1500);
   }
 
-  function hasExplicitStartTime() {
+  function evaluateHealth() {
+    const now = Date.now();
+    const player = getYouTubePlayer();
+    const checks: Array<{ id: string; label: string; ok: boolean; detail?: string }> = [
+      { id: "player", label: "Player do YouTube", ok: !!player },
+      { id: "video", label: "Vídeo principal", ok: !!getMainVideo() },
+      { id: "controls", label: "Barra de controles", ok: !!player?.querySelector(".ytp-right-controls") },
+      { id: "time", label: "Tempo do vídeo", ok: !!player?.querySelector(".ytp-time-display") },
+      { id: "bridge", label: "Comunicação com a página", ok: now - (adState.lastBridgeReplyAt || 0) < 3000, detail: "qualidade, volume e velocidade passam por ela" },
+    ];
+    if (config.playerControlsEnabled !== false) {
+      checks.push({ id: "buttons", label: "Botões da extensão no player", ok: !!document.getElementById(PLAYER_CONTROLS_ID) });
+    }
+    if (config.settingsMenuItemsEnabled !== false) {
+      const menu = player?.querySelector(".ytp-settings-menu");
+      checks.push({ id: "gear", label: "Itens na engrenagem", ok: !!menu?.querySelector(`[${GEAR_ITEM_ATTR}]`), detail: menu ? "" : "abra a engrenagem uma vez" });
+    }
+    if (isLiveStream()) {
+      const stats = getLiveStats();
+      checks.push({ id: "live", label: "Estatísticas da live", ok: !!stats && Number.isFinite(stats.latency), detail: "atraso e buffer do player" });
+    }
+
+    const signature = checks.map((c) => c.id + (c.ok ? "1" : "0")).join(",");
+    // Write only when something changed (or once a minute for the timestamp).
+    if (signature === lastHealthSignature && now - lastHealthWriteAt < 60000) return;
+    lastHealthSignature = signature;
+    lastHealthWriteAt = now;
     try {
-      const url = new URL(location.href);
-      return url.searchParams.has("t") || url.searchParams.has("start") || /(^|[#&])t=/.test(url.hash.slice(1));
-    } catch (err) {
-      return false;
-    }
-  }
-
-  // During SPA navigation the URL can change before the <video> swaps
-  // sources. The player's own title link tells which video it really holds.
-  function playerHoldsCurrentVideo(videoId: string) {
-    const link = getYouTubePlayer()?.querySelector(".ytp-title-link") as HTMLAnchorElement | null;
-    const href = link?.href || "";
-    if (!href) return true;
-    return getYouTubeVideoIdFromUrl(href) === videoId;
-  }
-
-  function runResumePlayback() {
-    if (!config.enabled || !config.resumePlaybackEnabled || !isWatchPage() || isPopupWindow()) return;
-    if (adState.active || getAdPlaying()) return;
-    const video = getMainVideo();
-    const videoId = getCurrentVideoId();
-    const key = getCurrentVideoKey();
-    if (!video || !videoId || !key || video.readyState < 1) return;
-    if (!playerHoldsCurrentVideo(videoId)) return;
-    const duration = Number(video.duration);
-
-    if (adState.resumeCheckedKey !== key) {
-      if (adState.resumeCheckStartedKey !== key) {
-        adState.resumeCheckStartedKey = key;
-        adState.resumeCheckStartedAt = Date.now();
-      }
-      withResumeStore((store) => {
-        if (adState.resumeCheckedKey === key) return;
-        const entry = store[videoId];
-        const target = getResumeTarget(entry, duration, hasExplicitStartTime());
-        if (target === null) {
-          const durationMismatch = !!entry && Math.abs(entry.d - duration) > 3;
-          if (!durationMismatch || Date.now() - adState.resumeCheckStartedAt > 15000) adState.resumeCheckedKey = key;
-          return;
-        }
-        adState.resumeCheckedKey = key;
-        if (video.currentTime >= target - 5) return;
-        try {
-          video.currentTime = target;
-          showPlayerFeedback("resume", formatClock(target), "Continuando de onde parou");
-          recordPlaybackEvent("resume-seek", "resume-playback", target);
-        } catch (err) {}
-      });
-      return;
-    }
-
-    if (video.paused || Date.now() - resumeLastSaveAt < 5000) return;
-    resumeLastSaveAt = Date.now();
-    const action = getResumeSaveAction(Number(video.currentTime), duration);
-    if (action === "skip") return;
-
-    withResumeStore((store) => {
-      if (action === "delete") {
-        if (!store[videoId]) return;
-        delete store[videoId];
-      } else {
-        store[videoId] = { t: Math.floor(video.currentTime), d: Math.round(duration), at: Date.now() };
-      }
-      resumeStore = pruneResumeStore(store);
-      chrome.storage.local.set({ [RESUME_STORAGE_KEY]: resumeStore });
-    });
+      chrome.storage.local.set({ extensionHealth: { at: now, video: getCurrentVideoId() || "", version: chrome.runtime.getManifest().version, checks } });
+    } catch (err) {}
   }
 
   // ── Main loop ─────────────────────────────────────────
@@ -5633,15 +4879,17 @@ declare global {
       if (adState.active || adState.overlayEl) cleanupRuntimeState();
       enforceAutoplayGuards();
       applyPlayerPreferences();
-      runResumePlayback();
       runPlayerUiTick();
       return;
     }
 
     bindAdSkipperWatchdog();
 
-    // Sempre tentar fechar popup anti-adblock
-    dismissAdblockWarning();
+    // Safety net only (the observer removes the warning live): every 2s.
+    if (Date.now() - (adState.lastAdblockScanAt || 0) > 2000) {
+      adState.lastAdblockScanAt = Date.now();
+      dismissAdblockWarning();
+    }
 
     const adPlaying = getAdPlaying();
     if (!adPlaying) enforceAutoplayGuards();
@@ -5707,7 +4955,6 @@ declare global {
       cleanupRuntimeState();
     } else if (!adPlaying && !adState.active) {
       applyPlayerPreferences();
-      runResumePlayback();
       runPlayerUiTick();
       const orphans = document.querySelectorAll("#" + OVERLAY_ID);
       if (orphans.length > 0) orphans.forEach(el => el.remove());
@@ -5735,7 +4982,6 @@ declare global {
       { combo: config.shortcutSpeedUp, action: "speed-up" },
       { combo: config.shortcutVolumeDown, action: "volume-down" },
       { combo: config.shortcutVolumeUp, action: "volume-up" },
-      { combo: config.shortcutCinema, action: "cinema" },
       { combo: config.shortcutScreenshot, action: "screenshot" },
       { combo: config.shortcutPopup, action: "popup" },
       { combo: config.shortcutLoop, action: "loop" },
@@ -5759,14 +5005,6 @@ declare global {
       const next = setUserVolume(current + direction * normalizeVolumeStep(config.playerVolumeStep), true, video);
       if (shouldUseVolumeBoost()) applyVolumeBoost(video);
       showPlayerFeedback("volume", next + "%", shouldUseVolumeBoost() ? "Boost " + normalizeVolumeBoostLevel(config.volumeBoostLevel) + "x" : "");
-      return;
-    }
-
-    if (matched.action === "cinema") {
-      toggleCinemaMode();
-      showPlayerFeedback("settings", adState.cinemaActive ? "Cinema ligado" : "Cinema desligado");
-      refreshPlayerControlStates();
-      refreshGearItems();
       return;
     }
 
@@ -5827,117 +5065,9 @@ declare global {
   window.addEventListener("scroll", scheduleMiniplayerUpdate, { passive: true });
   window.addEventListener("resize", scheduleMiniplayerUpdate);
 
+  // Cleanup ids of the retired floating PiP button.
   const PIP_BTN_ID = 'ytp-pip-float-btn';
   const PIP_STYLE_ID = 'ytp-pip-style';
-
-  function injectPipStyles() {
-    if (document.getElementById(PIP_STYLE_ID)) return;
-    const style = document.createElement('style');
-    style.id = PIP_STYLE_ID;
-    style.textContent = `
-      #${PIP_BTN_ID} {
-        position: absolute;
-        bottom: 60px;
-        right: 16px;
-        z-index: 99998;
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
-        background: rgba(0, 0, 0, 0.7);
-        border: 1.5px solid rgba(255, 255, 255, 0.2);
-        color: #fff;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        opacity: 0;
-        transition: opacity 0.3s ease, transform 0.2s ease, background 0.2s ease;
-        pointer-events: auto;
-        backdrop-filter: blur(8px);
-        -webkit-backdrop-filter: blur(8px);
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
-      }
-      .html5-video-player:hover #${PIP_BTN_ID},
-      #${PIP_BTN_ID}:focus {
-        opacity: 1;
-      }
-      #${PIP_BTN_ID}:hover {
-        background: rgba(200, 60, 60, 0.85);
-        border-color: rgba(255, 255, 255, 0.35);
-        transform: scale(1.1);
-      }
-      #${PIP_BTN_ID}:active {
-        transform: scale(0.95);
-      }
-      #${PIP_BTN_ID} svg {
-        width: 20px;
-        height: 20px;
-        pointer-events: none;
-      }
-      #${PIP_BTN_ID}.pip-active {
-        background: rgba(200, 60, 60, 0.9);
-        border-color: rgba(200, 60, 60, 0.6);
-        box-shadow: 0 0 12px rgba(200, 60, 60, 0.4);
-      }
-      .html5-video-player:hover #${PIP_BTN_ID}.pip-active {
-        opacity: 1;
-      }
-    `;
-    (document.head || document.documentElement).appendChild(style);
-  }
-
-  function createPipButton() {
-    if (document.getElementById(PIP_BTN_ID)) return;
-    injectPipStyles();
-
-    const player = document.querySelector('#movie_player') || document.querySelector('.html5-video-player');
-    if (!player) return;
-
-    const btn = document.createElement('button');
-    btn.id = PIP_BTN_ID;
-    btn.title = 'Player Flutuante (PiP)';
-    btn.innerHTML = `
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
-        <rect x="12" y="10" width="8" height="6" rx="1" ry="1" fill="currentColor" opacity="0.4"/>
-      </svg>
-    `;
-
-    btn.addEventListener('click', async (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-
-      const video = getMainVideo();
-      if (!video) return;
-
-      try {
-        if (document.pictureInPictureElement) {
-          await document.exitPictureInPicture();
-          btn.classList.remove('pip-active');
-        } else {
-          await video.requestPictureInPicture();
-          btn.classList.add('pip-active');
-        }
-      } catch (err) {
-        console.warn('[YouTube Extension] PiP error:', err);
-      }
-    });
-
-    player.appendChild(btn);
-
-    // Listen for PiP state changes to update button
-    const video = getMainVideo();
-    if (video) {
-      video.addEventListener('enterpictureinpicture', () => {
-        const b = document.getElementById(PIP_BTN_ID);
-        if (b) b.classList.add('pip-active');
-      });
-      video.addEventListener('leavepictureinpicture', () => {
-        const b = document.getElementById(PIP_BTN_ID);
-        if (b) b.classList.remove('pip-active');
-      });
-    }
-  }
 
   function removePipButton() {
     const btn = document.getElementById(PIP_BTN_ID);

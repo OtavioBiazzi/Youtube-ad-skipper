@@ -29,7 +29,7 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17"/></svg>
           </button>
         </div>
-        <span class="header-version" id="version-tag">v5.2.7</span>
+        <span class="header-version" id="version-tag">v5.3.0</span>
         <button id="theme-toggle" class="theme-toggle" title="Alternar tema" aria-label="Alternar tema claro ou escuro">
           <svg class="sun-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
           <svg class="moon-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
@@ -91,7 +91,7 @@
             <button class="preset-button" type="button" data-preset="safe"><strong>Seguro</strong><span>Apenas botão nativo, espera de 5s</span></button>
             <button class="preset-button is-recommended" type="button" data-preset="balanced"><strong>Equilibrado</strong><span>Botão nativo e fallback seguro em 3x</span></button>
             <button class="preset-button" type="button" data-preset="turbo"><strong>Turbo</strong><span>Fallback adaptativo até 8x</span><small>Experimental</small></button>
-            <button class="preset-button" type="button" data-preset="focus"><strong>Foco</strong><span>Remove distrações e ativa cinema</span></button>
+            <button class="preset-button" type="button" data-preset="focus"><strong>Foco</strong><span>Esconde Shorts, relacionados e telas finais</span></button>
           </div>
           <p class="preset-feedback" id="preset-feedback" role="status" aria-live="polite"></p>
         </div>
@@ -318,7 +318,6 @@
                 <label><span>Velocidade +</span><input class="control-input" data-setting="shortcutSpeedUp" type="text" value="Alt+Shift+."></label>
                 <label><span>Volume -</span><input class="control-input" data-setting="shortcutVolumeDown" type="text" value="Alt+Shift+ArrowDown"></label>
                 <label><span>Volume +</span><input class="control-input" data-setting="shortcutVolumeUp" type="text" value="Alt+Shift+ArrowUp"></label>
-                <label><span>Cinema</span><input class="control-input" data-setting="shortcutCinema" type="text" value="Alt+Shift+C"></label>
                 <label><span>Screenshot</span><input class="control-input" data-setting="shortcutScreenshot" type="text" value="Alt+Shift+P"></label>
                 <label><span>Pop-up</span><input class="control-input" data-setting="shortcutPopup" type="text" value="Alt+Shift+O"></label>
                 <label><span>Loop</span><input class="control-input" data-setting="shortcutLoop" type="text" value="Alt+Shift+L"></label>
@@ -366,7 +365,6 @@
           <article class="card card--module">
             <div class="card-header"><span>Pop-up, PiP e Miniplayer</span><span class="tag tag--safe">ATIVO</span></div>
             <div class="card-body control-stack">
-              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Continuar de onde parou</span><span class="opt-desc">Lembra a posição de vídeos com mais de 3 minutos e retoma ao abrir de novo. Links com tempo (?t=) têm prioridade.</span></div><label class="switch"><input type="checkbox" data-setting="resumePlaybackEnabled"><span class="switch-track"></span></label></div>
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Miniplayer ao rolar</span><span class="opt-desc">Quando você desce para comentários, o player fica flutuante.</span></div><label class="switch"><input type="checkbox" id="opt-miniplayer-enabled" checked><span class="switch-track"></span></label></div>
               <label class="field-row"><span>Tamanho do miniplayer</span><select class="control-input" id="opt-miniplayer-size"><option value="360x203">360x203</option><option value="480x270" selected>480x270</option><option value="640x360">640x360</option></select></label>
               <label class="field-row"><span>Posição</span><select class="control-input" id="opt-miniplayer-position"><option value="top-left">Canto superior esquerdo</option><option value="top-right">Canto superior direito</option><option value="bottom-left">Canto inferior esquerdo</option><option value="bottom-right">Canto inferior direito</option></select></label>
@@ -381,7 +379,7 @@
         <div class="section-heading section-heading--row">
           <div>
             <span class="section-kicker">Personalização visual</span>
-            <h2>Aparência, tema, cinema e ultrawide</h2>
+            <h2>Aparência, tema e ultrawide</h2>
             <p>Esconda o que distrai, troque o tema e ajuste a imagem do vídeo.</p>
           </div>
           <span class="module-state module-state--live">Funcional</span>
@@ -448,19 +446,10 @@
         </article>
         <article class="card card--module">
           <div class="card-header"><span>Ultrawide</span><span class="tag tag--on">FUNCIONAL</span></div>
-          <div class="card-body cinema-layout">
+          <div class="card-body">
             <div class="control-stack">
-              <label class="field-row"><span>Cor de fundo</span><input class="control-input" data-setting="cinemaColor" type="color" value="#000000"></label>
-              <label class="field-row"><span>Opacidade</span><input class="control-input" data-setting="cinemaOpacity" type="number" value="85" min="0" max="100" step="1"></label>
-              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Usar cinema por padrão</span></div><label class="switch"><input type="checkbox" data-setting="cinemaDefault"><span class="switch-track"></span></label></div>
-              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Expandir/diminuir automaticamente</span><span class="opt-desc">Sincroniza o player ao ligar ou desligar o cinema.</span></div><label class="switch"><input type="checkbox" data-setting="cinemaAutoResize"><span class="switch-track"></span></label></div>
-              <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Integrar com Modo Teatro</span><span class="opt-desc">Usa o modo teatro nativo como base quando possível.</span></div><label class="switch"><input type="checkbox" data-setting="cinemaUseYouTubeTheater"><span class="switch-track"></span></label></div>
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Modo ultrawide 21:9 / 32:9</span></div><label class="switch"><input type="checkbox" data-setting="ultrawideEnabled"><span class="switch-track"></span></label></div>
               <label class="field-row"><span>Ajuste de encaixe</span><select class="control-input" data-setting="ultrawideFit"><option value="smart-crop" selected>Crop inteligente</option><option value="contain">Contain</option><option value="stretch">Stretch</option></select></label>
-            </div>
-            <div class="cinema-preview-shell">
-              <div class="preview-label"><strong>Prévia</strong><span>vídeo player</span></div>
-              <div class="cinema-preview"><div class="preview-player"><span></span></div><div class="preview-side"></div></div>
             </div>
           </div>
         </article>
@@ -519,6 +508,14 @@
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Forçar FPS padrão 24/25/30</span><span class="opt-desc">Filtra formatos acima de 30 FPS quando o player recebe as opções.</span></div><label class="switch"><input type="checkbox" data-setting="codecForceStandardFps"><span class="switch-track"></span></label></div>
               <div class="opt-row opt-row--tight"><div class="opt-info"><span class="opt-title">Forçar MP4 + AVC (H.264)</span><span class="opt-desc">Filtra WebM/VP9/AV1 quando houver MP4 AVC disponível.</span></div><label class="switch"><input type="checkbox" data-setting="codecForceAvc"><span class="switch-track"></span></label></div>
               <div class="module-note">Recarregue o vídeo depois de mudar codecs para o YouTube pedir uma nova lista de formatos.</div>
+            </div>
+          </article>
+          <article class="card card--module">
+            <div class="card-header"><span>Saúde da extensão</span></div>
+            <div class="card-body control-stack">
+              <p class="opt-desc">Confere, com um vídeo aberto, se a extensão encontra cada parte do YouTube de que precisa. Se o YouTube mudar algo, o item afetado aparece com ✗.</p>
+              <ul class="health-list" id="health-list"></ul>
+              <p class="opt-desc" id="health-meta"></p>
             </div>
           </article>
           <article class="card card--module">
