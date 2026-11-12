@@ -1431,6 +1431,9 @@ const PLAYBACK_REASON_LABELS: Record<string, string> = {
   "autoplay-disable-all": "Autoplay desativado (todos)",
   "background-tab-playback-signal": "Outra aba começou a tocar",
   "skip-fallback": "Anúncio avançado até o fim",
+  "skip-click": "Anúncio contado: botão Pular",
+  "ad-sequence": "Anúncio contado: próximo anúncio em sequência",
+  "ad-end": "Anúncio contado: anúncio terminou",
   "resume-playback": "Retomado de onde você parou",
   "adblock-warning-removed": "Vídeo retomado após aviso de bloqueador",
 };

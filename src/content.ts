@@ -3146,7 +3146,7 @@ declare global {
     adState.skipTargetTime = Date.now() + 1000;
     removeOverlay();
     queuePlaybackRateRestoreAfterSkip();
-    if (incrementAdCounter()) showToastNotification();
+    if (incrementAdCounter("skip-click")) showToastNotification();
   }
 
   function attemptScheduledSkip() {
@@ -3683,9 +3683,20 @@ declare global {
 
   // ── Contador de anúncios ──────────────────────────────
 
-  function incrementAdCounter() {
+  // One ad = one count. Guards against the double counts seen in practice:
+  // when an ad ends, the video jumps back to 0 while YouTube still marks the
+  // player as "ad-showing" for a moment, which looked like a second ad.
+  const AD_COUNT_MIN_GAP_MS = 1200;
+  const AD_MIN_DURATION_MS = 800;
+
+  function incrementAdCounter(reason = "ad-end") {
     if (adState.alreadyCounted) return false;
     adState.alreadyCounted = true;
+    const nowMs = Date.now();
+    if (nowMs - (adState.lastAdCountedAt || 0) < AD_COUNT_MIN_GAP_MS) return false;
+    if (reason !== "skip-click" && adState.startTime && nowMs - adState.startTime < AD_MIN_DURATION_MS) return false;
+    adState.lastAdCountedAt = nowMs;
+    recordPlaybackEvent("ad-counted", reason, Number(getMainVideo()?.currentTime || 0));
 
     const now = new Date();
     const today = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
@@ -5461,7 +5472,7 @@ declare global {
         const ct = video.currentTime;
         if (adState.lastVideoTime > 2 && ct < adState.lastVideoTime - 2) {
           // Contar o anúncio anterior como pulado
-          if (incrementAdCounter()) showToastNotification();
+          if (incrementAdCounter("ad-sequence")) showToastNotification();
           // Resetar para o novo anúncio
           adState.startTime = Date.now();
           adState.alreadyCounted = false;
@@ -5485,7 +5496,7 @@ declare global {
 
       // Contar como pulado se não estava assistindo
       if (!adState.watching) {
-        if (incrementAdCounter()) showToastNotification();
+        if (incrementAdCounter("ad-end")) showToastNotification();
       }
 
       cleanupRuntimeState();

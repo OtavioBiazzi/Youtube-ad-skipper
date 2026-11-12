@@ -3388,7 +3388,7 @@
       adState.skipTargetTime = Date.now() + 1e3;
       removeOverlay();
       queuePlaybackRateRestoreAfterSkip();
-      if (incrementAdCounter()) showToastNotification();
+      if (incrementAdCounter("skip-click")) showToastNotification();
     }
     function attemptScheduledSkip() {
       if (!isAdSkipperActive() || !adState.active || adState.watching) return false;
@@ -3839,9 +3839,16 @@
         setTimeout(() => toast.remove(), 300);
       }, 2e3);
     }
-    function incrementAdCounter() {
+    const AD_COUNT_MIN_GAP_MS = 1200;
+    const AD_MIN_DURATION_MS = 800;
+    function incrementAdCounter(reason = "ad-end") {
       if (adState.alreadyCounted) return false;
       adState.alreadyCounted = true;
+      const nowMs = Date.now();
+      if (nowMs - (adState.lastAdCountedAt || 0) < AD_COUNT_MIN_GAP_MS) return false;
+      if (reason !== "skip-click" && adState.startTime && nowMs - adState.startTime < AD_MIN_DURATION_MS) return false;
+      adState.lastAdCountedAt = nowMs;
+      recordPlaybackEvent("ad-counted", reason, Number(getMainVideo()?.currentTime || 0));
       const now = /* @__PURE__ */ new Date();
       const today = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0");
       if (adState.todayDate !== today) {
@@ -5407,7 +5414,7 @@
         if (video) {
           const ct = video.currentTime;
           if (adState.lastVideoTime > 2 && ct < adState.lastVideoTime - 2) {
-            if (incrementAdCounter()) showToastNotification();
+            if (incrementAdCounter("ad-sequence")) showToastNotification();
             adState.startTime = Date.now();
             adState.alreadyCounted = false;
             adState.lastVideoTime = ct;
@@ -5424,7 +5431,7 @@
         }
       } else if (!adPlaying && adState.active) {
         if (!adState.watching) {
-          if (incrementAdCounter()) showToastNotification();
+          if (incrementAdCounter("ad-end")) showToastNotification();
         }
         cleanupRuntimeState();
       } else if (!adPlaying && !adState.active) {
