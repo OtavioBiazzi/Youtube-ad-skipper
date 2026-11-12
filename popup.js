@@ -36,7 +36,6 @@
     shortcutSpeedUp: "Alt+Shift+.",
     shortcutVolumeDown: "Alt+Shift+ArrowDown",
     shortcutVolumeUp: "Alt+Shift+ArrowUp",
-    shortcutCinema: "Alt+Shift+C",
     shortcutScreenshot: "Alt+Shift+P",
     shortcutPopup: "Alt+Shift+O",
     shortcutLoop: "Alt+Shift+L"
@@ -122,7 +121,6 @@
     shortcutSpeedUp: "Alt+Shift+.",
     shortcutVolumeDown: "Alt+Shift+ArrowDown",
     shortcutVolumeUp: "Alt+Shift+ArrowUp",
-    shortcutCinema: "Alt+Shift+C",
     shortcutScreenshot: "Alt+Shift+P",
     shortcutPopup: "Alt+Shift+O",
     shortcutLoop: "Alt+Shift+L",
