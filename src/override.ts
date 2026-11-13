@@ -518,50 +518,54 @@ import { pickBestQualityLevel } from "./shared/quality";
 
   // Tell YouTube's player its new size so controls/progress bar are laid out
   // for the floating box; on exit a resize makes ytd-player recompute it.
-  function resizePlayerForMiniplayer(floating: boolean, width: number, height: number) {
+  const isFloating = () => document.documentElement.classList.contains("tube-shield-miniplayer-active");
+
+  // Make YouTube's internal size match the real (docked) player box. Never
+  // while floating: that is what left the video miniplayer-sized in a big
+  // black player after scrolling back up.
+  function syncInternalSize() {
+    if (isFloating()) return false;
     const player: any = getPlayer();
-    if (!player) return;
-    // Never shrink YouTube's internal player size: on some layouts YouTube
-    // did not grow it back after docking and the video stayed miniplayer-sized.
-    // Floating is pure CSS; when docking, re-sync the internal size with the
-    // real slot so any earlier shrink is undone.
-    void width; void height;
-    const notify = () => {
-      window.dispatchEvent(new Event("resize"));
-      if (floating) return;
-      try {
-        const host = player.parentElement as HTMLElement | null;
-        const rect = host?.getBoundingClientRect();
-        if (rect && rect.width > 0 && rect.height > 0 && typeof player.setInternalSize === "function") {
-          player.setInternalSize(Math.round(rect.width), Math.round(rect.height));
-          internalSizePinned = true;
-        }
-      } catch (err) {}
-    };
-    requestAnimationFrame(notify);
-    window.setTimeout(notify, 220);
+    if (!player || typeof player.setInternalSize !== "function") return false;
+    try {
+      const rect = (player as HTMLElement).getBoundingClientRect();
+      if (rect.width < 200 || rect.height < 100) return false;
+      player.setInternalSize(Math.round(rect.width), Math.round(rect.height));
+      return true;
+    } catch (err) {
+      return false;
+    }
   }
 
-  // Once we set the internal size, YouTube stops following the window by
-  // itself (e.g. dragging the browser to another monitor left the player at
-  // the old size, cutting menus). Keep it in sync with the real slot.
-  let internalSizePinned = false;
-  let internalSizeTimer = 0;
-  const followPlayerSlot = () => {
-    if (!internalSizePinned) return;
-    window.clearTimeout(internalSizeTimer);
-    internalSizeTimer = window.setTimeout(() => {
-      const player: any = getPlayer();
-      if (!player || typeof player.setInternalSize !== "function") return;
-      if (document.documentElement.classList.contains("tube-shield-miniplayer-active")) return;
-      try {
-        const rect = (player.parentElement as HTMLElement | null)?.getBoundingClientRect();
-        if (rect && rect.width > 0 && rect.height > 0) player.setInternalSize(Math.round(rect.width), Math.round(rect.height));
-      } catch (err) {}
-    }, 150);
-  };
-  window.addEventListener("resize", followPlayerSlot);
-  document.addEventListener("fullscreenchange", followPlayerSlot);
+  let miniplayerUsed = false;
+
+  function resizePlayerForMiniplayer(floating: boolean, width: number, height: number) {
+    void width; void height;
+    miniplayerUsed = true;
+    // Floating is pure CSS. When docking, re-sync a few times while the
+    // layout settles (each check runs only if still docked).
+    window.dispatchEvent(new Event("resize"));
+    if (floating) return;
+    requestAnimationFrame(syncInternalSize);
+    for (const delay of [220, 600, 1500]) window.setTimeout(syncInternalSize, delay);
+  }
+
+  // Self-heal: if the video ends up smaller than the docked player (YouTube
+  // kept a miniplayer size, or the window moved to another monitor), fix it.
+  window.setInterval(() => {
+    if (!miniplayerUsed || document.hidden || isFloating()) return;
+    const player = getPlayer() as HTMLElement | null;
+    const video = player?.querySelector("video") as HTMLVideoElement | null;
+    if (!player || !video) return;
+    const p = player.getBoundingClientRect();
+    const v = video.getBoundingClientRect();
+    if (p.width < 200) return;
+    // Letterboxing keeps one side full; both sides short means a stale size.
+    const short = v.width < p.width - 8 && v.height < p.height - 8;
+    const overflow = v.width > p.width + 8 || v.height > p.height + 8;
+    if (short || overflow) syncInternalSize();
+  }, 1000);
+  window.addEventListener("resize", () => { if (miniplayerUsed) window.setTimeout(syncInternalSize, 150); });
 
   function isAuthorizedBridgeMessage(data) {
     return isBridgeMessage(data) && !!bridgeSessionToken && data.token === bridgeSessionToken;

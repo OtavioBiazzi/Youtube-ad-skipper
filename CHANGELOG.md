@@ -2,6 +2,13 @@
 
 Todas as mudancas relevantes deste projeto serao registradas aqui.
 
+## 5.3.5 — Player e transições
+
+### Corrigido
+- **Vídeo pequeno num player preto depois de subir dos comentários:** o tamanho interno do player era ajustado também enquanto o miniplayer estava flutuando. Agora só é ajustado com o player encaixado, várias vezes enquanto a página assenta. Se mesmo assim o vídeo ficar menor ou maior que o player (teatro, outra tela, janela redimensionada), a extensão corrige sozinha.
+- **Transição engrenagem → filtros:** terminava 2% menor e depois pulava para o tamanho certo. O tamanho final era medido durante a animação de abrir; agora é medido no tamanho real.
+- **Ícone do Boost desligado:** era cerca de 1 pixel maior que o ligado. Agora tem exatamente o mesmo contorno, só vazado por dentro.
+
 ## 5.3.4 — Live, hover e monitores
 
 ### Corrigido
