@@ -3462,7 +3462,9 @@ declare global {
   const PLAYER_ICON_STATES: Record<string, { on: string; off: string }> = {
     boost: {
       on: `<path d="${BOOST_SPEAKER}"/><path d="${BOOST_BOLT}"/>`,
-      off: `<path d="${BOOST_SPEAKER}"/><path d="${BOOST_BOLT}" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>`,
+      // Same outer bolt, only the inside emptied: the stroke is clipped to
+      // the bolt shape, so "off" is exactly the size of "on".
+      off: `<defs><clipPath id="yte-bolt-clip"><path d="${BOOST_BOLT}"/></clipPath></defs><path d="${BOOST_SPEAKER}"/><path d="${BOOST_BOLT}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" clip-path="url(#yte-bolt-clip)"/>`,
     },
   };
 
@@ -4179,9 +4181,12 @@ declare global {
     if (!panel || !gearSnapshot) return;
     const incoming = panel.querySelector(".ytp-popup-content > .ytp-panel") as HTMLElement | null;
     if (!incoming) return;
-    const to = panel.getBoundingClientRect();
     panel.classList.add("yte-from-gear");
-    crossPanels(panel, gearSnapshot.view.cloneNode(true) as HTMLElement, incoming, gearSnapshot, { width: to.width, height: to.height }, "forward");
+    // Layout size, not the on-screen rect: the generic pop-in (scale .98)
+    // may still be applied this frame, which made the morph end 2% short
+    // and then jump.
+    const to = { width: panel.offsetWidth, height: panel.offsetHeight };
+    crossPanels(panel, gearSnapshot.view.cloneNode(true) as HTMLElement, incoming, gearSnapshot, to, "forward");
   }
 
   function backToGearMenu(panel: HTMLElement) {
@@ -4202,7 +4207,7 @@ declare global {
       window.setTimeout(() => gear?.click(), 0);
       return;
     }
-    const from = panel.getBoundingClientRect();
+    const from = { width: panel.offsetWidth, height: panel.offsetHeight };
     const target = { width: gearSnapshot.width, height: gearSnapshot.height };
     panel.style.width = target.width + "px";
     panel.style.height = target.height + "px";

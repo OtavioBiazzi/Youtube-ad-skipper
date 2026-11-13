@@ -478,43 +478,43 @@
       }
       return attempted;
     }
-    function resizePlayerForMiniplayer(floating, width, height) {
+    const isFloating = () => document.documentElement.classList.contains("tube-shield-miniplayer-active");
+    function syncInternalSize() {
+      if (isFloating()) return false;
       const player = getPlayer();
-      if (!player) return;
-      const notify = () => {
-        window.dispatchEvent(new Event("resize"));
-        if (floating) return;
-        try {
-          const host = player.parentElement;
-          const rect = host?.getBoundingClientRect();
-          if (rect && rect.width > 0 && rect.height > 0 && typeof player.setInternalSize === "function") {
-            player.setInternalSize(Math.round(rect.width), Math.round(rect.height));
-            internalSizePinned = true;
-          }
-        } catch (err) {
-        }
-      };
-      requestAnimationFrame(notify);
-      window.setTimeout(notify, 220);
+      if (!player || typeof player.setInternalSize !== "function") return false;
+      try {
+        const rect = player.getBoundingClientRect();
+        if (rect.width < 200 || rect.height < 100) return false;
+        player.setInternalSize(Math.round(rect.width), Math.round(rect.height));
+        return true;
+      } catch (err) {
+        return false;
+      }
     }
-    let internalSizePinned = false;
-    let internalSizeTimer = 0;
-    const followPlayerSlot = () => {
-      if (!internalSizePinned) return;
-      window.clearTimeout(internalSizeTimer);
-      internalSizeTimer = window.setTimeout(() => {
-        const player = getPlayer();
-        if (!player || typeof player.setInternalSize !== "function") return;
-        if (document.documentElement.classList.contains("tube-shield-miniplayer-active")) return;
-        try {
-          const rect = player.parentElement?.getBoundingClientRect();
-          if (rect && rect.width > 0 && rect.height > 0) player.setInternalSize(Math.round(rect.width), Math.round(rect.height));
-        } catch (err) {
-        }
-      }, 150);
-    };
-    window.addEventListener("resize", followPlayerSlot);
-    document.addEventListener("fullscreenchange", followPlayerSlot);
+    let miniplayerUsed = false;
+    function resizePlayerForMiniplayer(floating, width, height) {
+      miniplayerUsed = true;
+      window.dispatchEvent(new Event("resize"));
+      if (floating) return;
+      requestAnimationFrame(syncInternalSize);
+      for (const delay of [220, 600, 1500]) window.setTimeout(syncInternalSize, delay);
+    }
+    window.setInterval(() => {
+      if (!miniplayerUsed || document.hidden || isFloating()) return;
+      const player = getPlayer();
+      const video = player?.querySelector("video");
+      if (!player || !video) return;
+      const p = player.getBoundingClientRect();
+      const v = video.getBoundingClientRect();
+      if (p.width < 200) return;
+      const short = v.width < p.width - 8 && v.height < p.height - 8;
+      const overflow = v.width > p.width + 8 || v.height > p.height + 8;
+      if (short || overflow) syncInternalSize();
+    }, 1e3);
+    window.addEventListener("resize", () => {
+      if (miniplayerUsed) window.setTimeout(syncInternalSize, 150);
+    });
     function isAuthorizedBridgeMessage(data) {
       return isBridgeMessage(data) && !!bridgeSessionToken && data.token === bridgeSessionToken;
     }

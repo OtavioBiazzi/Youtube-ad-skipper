@@ -4197,7 +4197,9 @@ ${customCss}
     const PLAYER_ICON_STATES = {
       boost: {
         on: `<path d="${BOOST_SPEAKER}"/><path d="${BOOST_BOLT}"/>`,
-        off: `<path d="${BOOST_SPEAKER}"/><path d="${BOOST_BOLT}" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>`
+        // Same outer bolt, only the inside emptied: the stroke is clipped to
+        // the bolt shape, so "off" is exactly the size of "on".
+        off: `<defs><clipPath id="yte-bolt-clip"><path d="${BOOST_BOLT}"/></clipPath></defs><path d="${BOOST_SPEAKER}"/><path d="${BOOST_BOLT}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" clip-path="url(#yte-bolt-clip)"/>`
       }
     };
     function playerIcon(name, active = false) {
@@ -4806,9 +4808,9 @@ ${customCss}
       if (!panel || !gearSnapshot) return;
       const incoming = panel.querySelector(".ytp-popup-content > .ytp-panel");
       if (!incoming) return;
-      const to = panel.getBoundingClientRect();
       panel.classList.add("yte-from-gear");
-      crossPanels(panel, gearSnapshot.view.cloneNode(true), incoming, gearSnapshot, { width: to.width, height: to.height }, "forward");
+      const to = { width: panel.offsetWidth, height: panel.offsetHeight };
+      crossPanels(panel, gearSnapshot.view.cloneNode(true), incoming, gearSnapshot, to, "forward");
     }
     function backToGearMenu(panel) {
       const player = getYouTubePlayer();
@@ -4827,7 +4829,7 @@ ${customCss}
         window.setTimeout(() => gear?.click(), 0);
         return;
       }
-      const from = panel.getBoundingClientRect();
+      const from = { width: panel.offsetWidth, height: panel.offsetHeight };
       const target = { width: gearSnapshot.width, height: gearSnapshot.height };
       panel.style.width = target.width + "px";
       panel.style.height = target.height + "px";
