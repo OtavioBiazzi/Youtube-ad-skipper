@@ -3395,17 +3395,62 @@ ${customCss}
       if (!video || adState.autoplayVideo === video) return;
       if (adState.autoplayVideo) {
         try {
+          adState.autoplayVideo.removeEventListener("pause", handleVideoPauseEvent, true);
           adState.autoplayVideo.removeEventListener("play", handleVideoPlayEvent, true);
           adState.autoplayVideo.removeEventListener("playing", handleVideoPlayEvent, true);
         } catch (err) {
         }
       }
       adState.autoplayVideo = video;
+      video.addEventListener("pause", handleVideoPauseEvent, true);
       video.addEventListener("play", handleVideoPlayEvent, true);
       video.addEventListener("playing", handleVideoPlayEvent, true);
       const initialBlockReason = getAutoplayBlockReason$1(video);
       if (!video.paused && initialBlockReason) {
         blockAutoplay(video, initialBlockReason);
+      }
+    }
+    const UNEXPECTED_PAUSE_WINDOW_MS = 1e4;
+    function handleVideoPauseEvent(event) {
+      const video = event.target;
+      if (!video || video !== getActiveVideo()) return;
+      const now = Date.now();
+      adState.lastPauseEventAt = now;
+      adState.lastPauseByViewer = hasRecentPlaybackIntent(1500);
+      adState.lastPauseByUs = now - (adState.lastPlaybackPauseAt || 0) < 400;
+    }
+    function isYouTubeAskingToContinue() {
+      const dialog = document.querySelector("ytd-popup-container yt-confirm-dialog-renderer, ytd-popup-container tp-yt-paper-dialog");
+      return !!dialog && dialog.offsetParent !== null && getComputedStyle(dialog).display !== "none";
+    }
+    function recoverUnexpectedPause() {
+      const video = getActiveVideo();
+      if (!video || !config.enabled) return;
+      const key = getCurrentVideoKey();
+      const now = Date.now();
+      if (key !== adState.pauseGuardKey) {
+        adState.pauseGuardKey = key;
+        adState.pauseGuardKeyAt = now;
+        adState.pauseGuardResumes = 0;
+      }
+      if (!video.paused || video.ended) return;
+      if (!adState.lastPauseEventAt || adState.lastPauseByViewer || adState.lastPauseByUs) return;
+      if (now - adState.lastPauseEventAt < 600) return;
+      if ((adState.pauseGuardResumes || 0) >= 2) return;
+      if (key && adState.autoplayBlockedKey === key) return;
+      if (hasRecentPlaybackIntent(3e3) || isYouTubeAskingToContinue()) return;
+      const adNow = !!adState.active || getAdPlaying();
+      const afterAd = adState.lastAdEndedAt ? now - adState.lastAdEndedAt < UNEXPECTED_PAUSE_WINDOW_MS : false;
+      const newVideo = now - (adState.pauseGuardKeyAt || 0) < UNEXPECTED_PAUSE_WINDOW_MS && Number(video.currentTime || 0) < 10;
+      const afterWarning = adState.lastAdblockWarningAt ? now - adState.lastAdblockWarningAt < UNEXPECTED_PAUSE_WINDOW_MS : false;
+      if (!adNow && !afterAd && !newVideo && !afterWarning) return;
+      adState.pauseGuardResumes = (adState.pauseGuardResumes || 0) + 1;
+      adState.lastPauseEventAt = 0;
+      recordPlaybackEvent("auto-resume", afterWarning ? "resume-after-warning" : adNow ? "resume-during-ad" : afterAd ? "resume-after-ad" : "resume-next-video", Number(video.currentTime || 0));
+      try {
+        video.play().catch(() => {
+        });
+      } catch (err) {
       }
     }
     function enforceAutoplayGuards() {
@@ -3784,6 +3829,7 @@ ${customCss}
       const target = el.closest?.("tp-yt-paper-dialog") || el;
       const shouldCount = target.isConnected !== false;
       target.remove();
+      adState.lastAdblockWarningAt = Date.now();
       removeOrphanedAdblockBackdrops();
       resumeAfterAdblockWarning();
       if (!shouldCount) return;
@@ -5538,6 +5584,7 @@ ${customCss}
     }
     function mainLoopBody() {
       bindPersistentVideoState();
+      recoverUnexpectedPause();
       syncLoopState();
       runVisualMaintenanceTasks();
       if (!config.enabled) {
@@ -5674,7 +5721,7 @@ ${customCss}
       }
     }, true);
     document.addEventListener("keydown", (event) => {
-      const playbackKeys = [" ", "Enter", "k", "K", "MediaPlayPause", "MediaPlay"];
+      const playbackKeys = [" ", "Enter", "k", "K", "MediaPlayPause", "MediaPlay", "MediaPause", "MediaStop"];
       if (playbackKeys.includes(event.key)) markUserPlaybackIntent("keyboard");
       resumeSuspendedBoost();
     }, true);

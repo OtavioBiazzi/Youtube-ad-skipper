@@ -2507,12 +2507,14 @@ declare global {
 
     if (adState.autoplayVideo) {
       try {
+        adState.autoplayVideo.removeEventListener("pause", handleVideoPauseEvent, true);
         adState.autoplayVideo.removeEventListener("play", handleVideoPlayEvent, true);
         adState.autoplayVideo.removeEventListener("playing", handleVideoPlayEvent, true);
       } catch (err) {}
     }
 
     adState.autoplayVideo = video;
+    video.addEventListener("pause", handleVideoPauseEvent, true);
     video.addEventListener("play", handleVideoPlayEvent, true);
     video.addEventListener("playing", handleVideoPlayEvent, true);
 
@@ -2520,6 +2522,59 @@ declare global {
     if (!video.paused && initialBlockReason) {
       blockAutoplay(video, initialBlockReason);
     }
+  }
+
+  // ── Pausas inesperadas ──
+  // YouTube sometimes leaves the video paused right at a transition: when a
+  // skipped ad hands over to the video, or when autoplay/playlist moves to
+  // the next one (and, rarely, in the middle of an ad). Those pauses come
+  // with no click or key from the viewer, so we press play again, at most
+  // twice per video, and only in those transition windows.
+  const UNEXPECTED_PAUSE_WINDOW_MS = 10000;
+
+  function handleVideoPauseEvent(event: Event) {
+    const video = event.target as HTMLVideoElement;
+    if (!video || video !== getActiveVideo()) return;
+    const now = Date.now();
+    adState.lastPauseEventAt = now;
+    adState.lastPauseByViewer = hasRecentPlaybackIntent(1500);
+    adState.lastPauseByUs = now - (adState.lastPlaybackPauseAt || 0) < 400;
+  }
+
+  function isYouTubeAskingToContinue() {
+    const dialog = document.querySelector("ytd-popup-container yt-confirm-dialog-renderer, ytd-popup-container tp-yt-paper-dialog") as HTMLElement | null;
+    return !!dialog && dialog.offsetParent !== null && getComputedStyle(dialog).display !== "none";
+  }
+
+  function recoverUnexpectedPause() {
+    const video = getActiveVideo();
+    if (!video || !config.enabled) return;
+    const key = getCurrentVideoKey();
+    const now = Date.now();
+    if (key !== adState.pauseGuardKey) {
+      adState.pauseGuardKey = key;
+      adState.pauseGuardKeyAt = now;
+      adState.pauseGuardResumes = 0;
+    }
+    if (!video.paused || video.ended) return;
+    if (!adState.lastPauseEventAt || adState.lastPauseByViewer || adState.lastPauseByUs) return;
+    if (now - adState.lastPauseEventAt < 600) return; // let YouTube settle first
+    if ((adState.pauseGuardResumes || 0) >= 2) return;
+    if (key && adState.autoplayBlockedKey === key) return; // our own autoplay block
+    if (hasRecentPlaybackIntent(3000) || isYouTubeAskingToContinue()) return;
+
+    const adNow = !!adState.active || getAdPlaying();
+    const afterAd = adState.lastAdEndedAt ? now - adState.lastAdEndedAt < UNEXPECTED_PAUSE_WINDOW_MS : false;
+    const newVideo = now - (adState.pauseGuardKeyAt || 0) < UNEXPECTED_PAUSE_WINDOW_MS && Number(video.currentTime || 0) < 10;
+    // The ad-block warning pauses the video, sometimes a moment after we
+    // already removed it: that pause is covered too.
+    const afterWarning = adState.lastAdblockWarningAt ? now - adState.lastAdblockWarningAt < UNEXPECTED_PAUSE_WINDOW_MS : false;
+    if (!adNow && !afterAd && !newVideo && !afterWarning) return;
+
+    adState.pauseGuardResumes = (adState.pauseGuardResumes || 0) + 1;
+    adState.lastPauseEventAt = 0;
+    recordPlaybackEvent("auto-resume", afterWarning ? "resume-after-warning" : adNow ? "resume-during-ad" : afterAd ? "resume-after-ad" : "resume-next-video", Number(video.currentTime || 0));
+    try { video.play().catch(() => {}); } catch (err) {}
   }
 
   function enforceAutoplayGuards() {
@@ -2967,6 +3022,7 @@ declare global {
     const target = el.closest?.("tp-yt-paper-dialog") || el;
     const shouldCount = target.isConnected !== false;
     target.remove();
+    adState.lastAdblockWarningAt = Date.now();
     removeOrphanedAdblockBackdrops();
     resumeAfterAdblockWarning();
 
@@ -5044,6 +5100,7 @@ declare global {
 
   function mainLoopBody() {
     bindPersistentVideoState();
+    recoverUnexpectedPause();
     syncLoopState();
     runVisualMaintenanceTasks();
 
@@ -5229,7 +5286,7 @@ declare global {
   }, true);
 
   document.addEventListener("keydown", (event) => {
-    const playbackKeys = [" ", "Enter", "k", "K", "MediaPlayPause", "MediaPlay"];
+    const playbackKeys = [" ", "Enter", "k", "K", "MediaPlayPause", "MediaPlay", "MediaPause", "MediaStop"];
     if (playbackKeys.includes(event.key)) markUserPlaybackIntent("keyboard");
     resumeSuspendedBoost();
   }, true);
