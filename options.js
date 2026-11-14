@@ -1556,6 +1556,7 @@
     "skip-click": "Anúncio contado: botão Pular",
     "ad-sequence": "Anúncio contado: próximo anúncio em sequência",
     "ad-end": "Anúncio contado: anúncio terminou",
+    "resume-after-warning": "Voltou a tocar: o aviso de bloqueador pausou o vídeo",
     "resume-during-ad": "Voltou a tocar: o YouTube pausou durante o anúncio",
     "resume-after-ad": "Voltou a tocar: o YouTube pausou ao sair do anúncio",
     "resume-next-video": "Voltou a tocar: o YouTube pausou no início do próximo vídeo",

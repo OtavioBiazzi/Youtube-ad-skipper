@@ -2566,11 +2566,14 @@ declare global {
     const adNow = !!adState.active || getAdPlaying();
     const afterAd = adState.lastAdEndedAt ? now - adState.lastAdEndedAt < UNEXPECTED_PAUSE_WINDOW_MS : false;
     const newVideo = now - (adState.pauseGuardKeyAt || 0) < UNEXPECTED_PAUSE_WINDOW_MS && Number(video.currentTime || 0) < 10;
-    if (!adNow && !afterAd && !newVideo) return;
+    // The ad-block warning pauses the video, sometimes a moment after we
+    // already removed it: that pause is covered too.
+    const afterWarning = adState.lastAdblockWarningAt ? now - adState.lastAdblockWarningAt < UNEXPECTED_PAUSE_WINDOW_MS : false;
+    if (!adNow && !afterAd && !newVideo && !afterWarning) return;
 
     adState.pauseGuardResumes = (adState.pauseGuardResumes || 0) + 1;
     adState.lastPauseEventAt = 0;
-    recordPlaybackEvent("auto-resume", adNow ? "resume-during-ad" : afterAd ? "resume-after-ad" : "resume-next-video", Number(video.currentTime || 0));
+    recordPlaybackEvent("auto-resume", afterWarning ? "resume-after-warning" : adNow ? "resume-during-ad" : afterAd ? "resume-after-ad" : "resume-next-video", Number(video.currentTime || 0));
     try { video.play().catch(() => {}); } catch (err) {}
   }
 
@@ -3019,6 +3022,7 @@ declare global {
     const target = el.closest?.("tp-yt-paper-dialog") || el;
     const shouldCount = target.isConnected !== false;
     target.remove();
+    adState.lastAdblockWarningAt = Date.now();
     removeOrphanedAdblockBackdrops();
     resumeAfterAdblockWarning();
 

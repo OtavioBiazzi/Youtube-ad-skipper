@@ -6,6 +6,7 @@ Todas as mudancas relevantes deste projeto serao registradas aqui.
 
 ### Corrigido
 - **Vídeo pausando sozinho na troca:** o YouTube às vezes deixa o vídeo parado quando sai de um anúncio, quando passa para o próximo vídeo (autoplay ou playlist) e, raramente, no meio de um anúncio. Agora, se o vídeo pausa nesses momentos sem clique ou tecla sua, a extensão dá play de novo (no máximo duas vezes por vídeo, e nunca contra uma pausa sua ou contra o aviso "Continuar assistindo?" do YouTube).
+- **Aviso de bloqueador:** quando o YouTube pausava o vídeo um instante depois de a extensão já ter removido o aviso, o vídeo ficava parado. Agora esse caso também volta a tocar.
 - Cada vez que isso acontece fica registrado no Diagnóstico de reprodução do Control Center, com o motivo.
 
 ## 5.3.5 — Player e transições
